@@ -1,0 +1,4 @@
+/var/lib/squeezecenter/Firmware /usr/share/squeezecenter/Firmware
+/usr/share/fonts/truetype/ttf-dejavu/DejaVuSans.ttf /usr/share/squeezecenter/Graphics/DejaVuSans.ttf
+/usr/share/fonts/truetype/ttf-bitstream-vera/Vera.ttf /usr/share/squeezecenter/Graphics/Vera.ttf
+/usr/share/fonts/truetype/freefont/FreeSans.ttf /usr/share/squeezecenter/Graphics/FreeSans.ttf

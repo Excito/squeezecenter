@@ -1,0 +1,95 @@
+Source: squeezecenter
+Section: sound
+Priority: optional
+Maintainer: Carl Fürstenberg <carl@excito.com>
+Build-Depends: debhelper (>= 4.0.0), html2text, cdbs, dpatch
+Standards-Version: 3.8.0
+
+Package: squeezecenter
+Architecture: all
+Conflicts: slimp3, slimserver
+Replaces: slimp3, slimserver
+Depends: ${perl:Depends},
+ dbconfig-common,
+ ttf-dejavu | ttf-bitstream-vera,
+ ttf-freefont,
+ mysql-server-5.0,
+ flac, 
+ sox, 
+ adduser,
+ wavpack,
+ musepack-tools,
+ libcache-cache-perl (>= 1.04),
+ libcgi-pm-perl (>= 3.40),
+ libclass-accessor-perl (>= 0.31),
+ libclass-data-accessor-perl (>= 0.03),
+ libclass-data-inheritable-perl (>= 0.04),
+ libclass-inspector-perl (>= 1.16),
+ libcompress-zlib-perl (>= 1.41),
+ libdata-dump-perl,
+ libdata-uriencode-perl (>= 0.11),
+ libdbd-mysql-perl (>= 3.0002),
+ libdbi-perl (>= 1.604),
+ libdbix-class-perl (>= 0.07001),
+ libencode-detect-perl,
+ libfile-bom-perl (>= 0.13),
+ libfile-next-perl (>= 1.02),
+ libfile-slurp-perl,
+ libfile-temp-perl (>= 0.17),
+ libfile-which-perl (>= 0.05),
+ libgd-gd2-perl (>= 2.35),
+ libhtml-parser-perl (>= 3.48),
+ libio-string-perl (>= 1.07),
+ libjson-xs-perl (>= 1.5),
+ libjson-xs-versiononeandtwo-perl (>= 0.31),
+ liblog-log4perl-perl (>= 1.07),
+ libmath-vecstat-perl (>= 0.08),
+ libnet-dns-perl (>= 0.58),
+ libnet-ip-perl (>= 1.24),
+ libnet-upnp-perl (>= 1.2.1),
+ libpar-perl (>= 0.970),
+ libpoe-perl (>= 0.35),
+ libpath-class-perl (>= 0.13),
+ libproc-background-perl (>= 1.08),
+ libsql-abstract-perl (>= 1.20),
+ libtemplate-perl (>= 2.15),
+ libtext-unidecode-perl (>= 0.04),
+ libtimedate-perl (>= 1.1600),
+ libtie-cache-lru-perl (>= 0.21),
+ libtie-cache-lru-expires-perl,
+ libtie-llhash-perl (>= 1.003),
+ libtie-regexphash-perl (>= 0.13),
+ liburi-perl (>= 1.35),
+ liburi-find-perl (>= 0.16),
+ libwww-perl (>= 5.805),
+ libxml-parser-perl (>= 2.34),
+ libxml-simple-perl (>= 2.15),
+ libyaml-syck-perl (>= 0.64),
+ libclass-xsaccessor-array-perl (>= 0.05),
+ libpoe-xs-queue-array-perl (>= 0.005)
+Description: Streaming Audio Server
+ SlimServer is a cross-platform streaming server that supports a wide range
+ of formats, including AAC, AIFF, FLAC, Ogg Vorbis, MP3, WAV, and
+ WMA.
+
+Package: squeezecenter-skins
+Architecture: all
+Depends: ${perl:Depends}, squeezecenter (>= 7.0)
+Description: Streaming Audio Server - skins
+ SlimServer is a cross-platform streaming server that supports a wide range
+ of formats, including AAC, AIFF, FLAC, Ogg Vorbis, MP3, WAV, and
+ WMA.
+ .
+ This package supplies with various non-essential skins
+
+Package: squeezecenter-softsqueeze
+Architecture: all
+Depends: ${perl:Depends}, squeezecenter (>= 7.0)
+Description: Streaming Audio Server - skins
+ SlimServer is a cross-platform streaming server that supports a wide range
+ of formats, including AAC, AIFF, FLAC, Ogg Vorbis, MP3, WAV, and
+ WMA.
+ .
+ This package supplies with softsqueeze
+
+

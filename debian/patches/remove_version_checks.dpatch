@@ -1,0 +1,58 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## remove_version_checks.dpatch by Carl Fürstenberg <azatoth@gmail.com>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: as we know that we use correct versions, we don't need to check it
+
+@DPATCH@
+diff -urNad squeezecenter~/Slim/bootstrap.pm squeezecenter/Slim/bootstrap.pm
+--- squeezecenter~/Slim/bootstrap.pm	2008-09-24 23:48:19.000000000 +0200
++++ squeezecenter/Slim/bootstrap.pm	2008-10-02 18:36:11.000000000 +0200
+@@ -324,45 +324,8 @@
+ }
+ 
+ sub check_valid_versions {
+-	my $modules;
+-	my $failed = {};
+-	
+-	my ($dir) = Slim::Utils::OSDetect::dirsFor('types');
+-	
+-	open my $fh, '<', catfile( $dir, 'modules.conf' ) or die 'modules.conf not found';
+-	do { local $/ = undef; $modules = <$fh> };
+-	close $fh;
+-
+-	for my $line ( split /\n/, $modules ) {
+-		next unless $line =~ /^\w+/;
+-		chomp $line;
+-		
+-		my ($mod, $ver) = split /\s+/, $line;
+-		
+-		# Could parse the module file here using code from Module::Build,
+-		# but we will be loading these later anyway, so this is easier.
+-		eval "use $mod ()";
+-		if ( !$@ ) {
+-			eval { $mod->VERSION( $ver || 0 ); 1; };
+-		}
+-		if ( $@ ) {
+-			# If the object file is missing we'll get an error but the versions will match
+-			if ( $@ =~ /Can't locate loadable object/ ) {
+-				$failed->{$mod} = {
+-					loaded => $mod->VERSION . ' but missing object file',
+-					need   => $ver,
+-				};
+-			}
+-			else {
+-				$failed->{$mod} = {
+-					loaded => $mod->VERSION || '<not found>',
+-					need   => $ver,
+-				};
+-			}
+-		}
+-	}		
+-	
+-	return $failed;
++	# Made stub as we don't need to check the versions
++	return {};
+ }
+ 
+ sub sigint {

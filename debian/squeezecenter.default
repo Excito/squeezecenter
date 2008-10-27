@@ -1,0 +1,18 @@
+# Defaults for Squeezecenter initscript
+# sourced by /etc/init.d/squeezecenter
+# installed at /etc/default/squeezecenter by the maintainer scripts
+
+#
+# This is a POSIX shell fragment
+#
+
+# User to run SqueezeCenter as
+SLIMUSER=squeezecenter
+
+#Locations of preferences, cache and logs
+PREFSDIR=/var/lib/$SLIMUSER/prefs
+LOGDIR=/var/log/$SLIMUSER/
+CACHEDIR=/var/lib/$SLIMUSER/cache
+
+# Additional options that are passed to the daemon.
+SLIMOPTIONS=""

@@ -1,0 +1,150 @@
+squeezecenter (7.2.1.dfsg-1) testing; urgency=low
+
+  * New upstream release
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 27 Oct 2008 18:44:08 +0100
+
+squeezecenter (7.2.0-9) hardy; urgency=low
+
+  * Change fontusage to alternatives (DejaVu, Vera and freefonts), remove
+    freefont from package.
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 06 Oct 2008 10:55:26 +0200
+
+squeezecenter (7.2.0-8) hardy; urgency=low
+
+  * force it to not install rc.d on install 
+
+ -- Carl Fürstenberg <carl@excito.com>  Fri, 03 Oct 2008 15:27:53 +0200
+
+squeezecenter (7.2.0-7) hardy; urgency=low
+
+  * Add libclass-xsaccessor-array-perl libpoe-xs-queue-array-perl as
+    dependices.
+  * Modify init and default to make if lsb compilant and to force it to not
+    start per default 
+
+ -- Carl Fürstenberg <carl@excito.com>  Fri, 03 Oct 2008 14:13:28 +0200
+
+squeezecenter (7.2.0-6) hardy; urgency=low
+
+  * preseed the database 
+  * remove dependices of DBIx::Migration
+  * remerge all the plugins into the main package, as they are not the major
+    memory hog, and they the support queue might increase many times.
+
+ -- Carl Fürstenberg <carl@excito.com>  Thu, 02 Oct 2008 19:24:39 +0200
+
+squeezecenter (7.2.0-5) hardy; urgency=low
+
+  * embarrant tyop 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 01 Oct 2008 16:19:05 +0200
+
+squeezecenter (7.2.0-4) hardy; urgency=low
+
+  * move firmware-dir to /var, as it needs to be writeable by the server 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 01 Oct 2008 16:14:02 +0200
+
+squeezecenter (7.2.0-3) hardy; urgency=low
+
+  * Readd the version-files for the firmwares, as they are needed 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 01 Oct 2008 15:54:20 +0200
+
+squeezecenter (7.2.0-2) hardy; urgency=high
+
+  * removing firmwares as needed 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 01 Oct 2008 14:02:53 +0200
+
+squeezecenter (7.2.0-1) hardy; urgency=low
+
+  * New upstream release
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 22 Sep 2008 17:24:04 +0200
+
+squeezecenter (7.1.0-12) hardy; urgency=low
+
+  * remove dbconfig
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 08 Sep 2008 09:42:47 +0200
+
+squeezecenter (7.1.0-11) unstable; urgency=low
+
+  * rebuild for orig 
+
+ -- Carl Fürstenberg <azatoth@gmail.com>  Sun, 07 Sep 2008 22:52:09 +0200
+
+squeezecenter (7.1.0-10) hardy; urgency=low
+
+  * Add back the firmwares for more tests 
+
+ -- Carl Fürstenberg <carl@excito.com>  Fri, 05 Sep 2008 15:37:24 +0200
+
+squeezecenter (7.1.0-9) unstable; urgency=low
+
+  * The TT plugin is essential as well 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 27 Aug 2008 19:47:16 +0200
+
+squeezecenter (7.1.0-8) hardy; urgency=low
+
+  * a "k" too much in MusicMagic 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 27 Aug 2008 18:11:25 +0200
+
+squeezecenter (7.1.0-7) hardy; urgency=low
+
+  * iTunes and MusicMagick plugins seems to be required (upstream bug) 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 27 Aug 2008 18:06:43 +0200
+
+squeezecenter (7.1.0-6) hardy; urgency=low
+
+  * missing plugin files 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 27 Aug 2008 17:23:43 +0200
+
+squeezecenter (7.1.0-5) unstable; urgency=low
+
+  * split the packages and fix some dependices 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 27 Aug 2008 17:11:00 +0200
+
+squeezecenter (7.1.0-4) hardy; urgency=low
+
+  * adding even more depends 
+
+ -- Carl Fürstenberg <carl@excito.com>  Tue, 26 Aug 2008 16:43:32 +0200
+
+squeezecenter (7.1.0-3) hardy; urgency=low
+
+  * adding Encode::Detect 
+
+ -- Carl Fürstenberg <carl@excito.com>  Tue, 26 Aug 2008 16:17:08 +0200
+
+squeezecenter (7.1.0-2) hardy; urgency=low
+
+  * adding File::Slurp dependices 
+
+ -- Carl Fürstenberg <carl@excito.com>  Tue, 26 Aug 2008 16:06:25 +0200
+
+squeezecenter (7.1.0-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Carl Fürstenberg <carl@excito.com>  Tue, 26 Aug 2008 14:37:36 +0200
+
+squeezecenter (7.0.1-2) unstable; urgency=low
+
+  * update the dependicies
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 25 Aug 2008 17:08:10 +0200
+
+squeezecenter (7.0.1-1) unstable; urgency=low
+
+  * Initial release.
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 07 Jul 2008 20:51:32 +0200

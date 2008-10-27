@@ -1,0 +1,7 @@
+As the upstream source included non-free stuff, they have been removed, 
+these includes the CODE2000 fonts and the upstream firmware.
+
+As the source package had to repackaged as well, aditionally the CPAN
+and Bin directory has been removed, as they only takes space.
+
+the get-orig-source will refetch the source, and makes the modifications.

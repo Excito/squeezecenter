@@ -1,0 +1,19 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## fonts.dpatch by Carl Fürstenberg <carl@excito.com>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Use known fonts instead, hopefully DejaVu exists.
+
+@DPATCH@
+diff -urNad squeezecenter~/Slim/Display/Lib/Fonts.pm squeezecenter/Slim/Display/Lib/Fonts.pm
+--- squeezecenter~/Slim/Display/Lib/Fonts.pm	2008-09-23 14:41:19.000000000 +0200
++++ squeezecenter/Slim/Display/Lib/Fonts.pm	2008-10-06 10:44:41.000000000 +0200
+@@ -197,7 +197,7 @@
+ 		for my $fontFolder (graphicsDirs()) {
+ 
+ 			# Try a few different fonts..
+-			for my $fontFile (qw(arialuni.ttf ARIALUNI.TTF CODE2000.TTF Cyberbit.ttf CYBERBIT.TTF)) {
++			for my $fontFile (qw(DejaVuSans.ttf Vera.ttf FreeSans.ttf)) {
+ 		
+ 				$TTFFontFile = catdir($fontFolder, $fontFile);
+ 

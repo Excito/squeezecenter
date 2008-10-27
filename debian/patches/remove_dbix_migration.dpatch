@@ -1,0 +1,89 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## remove_dbix_migration.dpatch by Carl Fürstenberg <azatoth@gmail.com>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: As we allways know that we will have a functional database on 
+## DP: installation, and that all database installation/upgrading is handled 
+## DP: by dbconfig-common, we won't need DBIx::Migration.
+
+@DPATCH@
+diff -urNad squeezecenter~/Slim/Schema.pm squeezecenter/Slim/Schema.pm
+--- squeezecenter~/Slim/Schema.pm	2008-09-24 23:48:19.000000000 +0200
++++ squeezecenter/Slim/Schema.pm	2008-10-02 17:58:23.000000000 +0200
+@@ -28,7 +28,6 @@
+ 
+ use base qw(DBIx::Class::Schema);
+ 
+-use DBIx::Migration;
+ use File::Basename qw(dirname);
+ use File::Spec::Functions qw(:ALL);
+ use List::Util qw(max);
+@@ -400,67 +399,7 @@
+ =cut
+ 
+ sub migrateDB {
+-	my $class = shift;
+-	
+-	if ( main::SLIM_SERVICE ) {
+-		return;
+-	}
+-
+-	my ($driver, $source, $username, $password) = $class->sourceInformation;
+-
+-	# Migrate to the latest schema version - see SQL/$driver/schema_\d+_up.sql
+-	my $dbix = DBIx::Migration->new({
+-		'dsn'      => $source,
+-		'username' => $username,
+-		'password' => $password,
+-		'dir'      => catdir(Slim::Utils::OSDetect::dirsFor('SQL'), $driver),
+-	});
+-
+-	my $old = $dbix->version || 0;
+-
+-	if ($dbix->migrate) {
+-
+-		my $new = $dbix->version || 0;
+-
+-		if ( $log->is_info ) {
+-			$log->info(sprintf("Connected to database $source - schema version: [%d]", $new));
+-		}
+-
+-		if ($old != $new) {
+-
+-			if ( $log->is_warn ) {
+-				$log->warn(sprintf("Migrated database from schema version: %d to version: %d", $old, $new));
+-			}
+-
+-			return 1;
+-
+-		}
+-
+-	} else {
+-
+-		# this occurs if a user downgrades SqueezeCenter to a version with an older schema and which does not include
+-		# the required downgrade sql scripts - attempt to drop and create the database at current schema version
+-
+-		if ( $log->is_warn ) {
+-			$log->warn(sprintf("Unable to downgrade database from schema version: %d - Attempting to recreate database", $old));
+-		}
+-
+-		eval { $class->storage->dbh->do('DROP TABLE IF EXISTS dbix_migration') };
+-
+-		if ($dbix->migrate) {
+-
+-			if ( $log->is_warn ) {
+-				$log->warn(sprintf("Successfully created database at schema version: %d", $dbix->version));
+-			}
+-
+-			return 1;
+-
+-		}
+-
+-		logError(sprintf("Unable to create database - **** You may need to manually delete the database ****", $old));
+-
+-	}
+-
++	# Stubbed as we don't want to try migrate the DB
+ 	return 0;
+ }
+ 
