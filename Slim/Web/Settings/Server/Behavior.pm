@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Behavior;
 
-# $Id: Behavior.pm 21385 2008-07-01 20:15:38Z andy $
+# $Id: Behavior.pm 21388 2008-07-01 20:28:32Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

@@ -1,6 +1,6 @@
 package Slim::Networking::Async::Socket::HTTP;
 
-# $Id: HTTP.pm 18665 2008-04-10 21:22:11Z andy $
+# $Id: HTTP.pm 18667 2008-04-10 21:22:36Z andy $
 
 # SqueezeCenter Copyright 2003-2007 Logitech.
 # This program is free software; you can redistribute it and/or

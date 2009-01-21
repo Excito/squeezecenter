@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists::Base;
 
-# $Id: Base.pm 19475 2008-05-06 16:21:41Z andy $
+# $Id: Base.pm 19477 2008-05-06 16:23:38Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 #

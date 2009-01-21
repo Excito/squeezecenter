@@ -1,28 +1,40 @@
 package Slim::Plugin::Base;
 
-# $Id: Base.pm 21788 2008-07-15 20:01:58Z andy $
+# $Id: Base.pm 23921 2008-11-13 18:39:10Z andy $
 
 # Base class for plugins. Implement some basics.
 
 use strict;
-use Slim::Buttons::Home;
 use Slim::Utils::Log;
 
+if ( !main::SCANNER ) {
+	require Slim::Buttons::Home;
+}
+
 use constant PLUGINMENU => 'PLUGINS';
+
+my $WEIGHTS = {};
 
 sub initPlugin {
 	my $class = shift;
 	my $args  = shift;
 
-	my $name  = $class->displayName;
+	my $name  = $class->getDisplayName;
 	my $menu  = $class->playerMenu;
 	my $mode  = $class->modeName;
+	
+	# If a plugin does not define a playerMenu, ignore it
+	return unless $menu;
+	
+	if ( $class->can('weight') ) {
+		$WEIGHTS->{ $name } = $class->weight;
+	}
 
 	# This is a bit of a hack, but since Slim::Buttons::Common is such a
 	# disaster, and has no concept of OO, we need to wrap 'setMode' (an
 	# ambiguous function name if there ever was) in a closure so that it
 	# can be called as class method.
-	if ($class->can('setMode')) {
+	if ($class->can('setMode') && !main::SCANNER) {
 
 		my $exitMode = $class->can('exitMode') ? sub { $class->exitMode(@_) } : undef;
 
@@ -54,8 +66,8 @@ sub initPlugin {
 		}
 	}
 
-	if ( !main::SLIM_SERVICE ) {
-		if ($class->can('webPages')) {
+	if ( !main::SLIM_SERVICE  && !main::SCANNER ) {
+		if ($class->can('webPages') && !$::noweb) {
 
 			$class->webPages;
 		}
@@ -65,13 +77,13 @@ sub initPlugin {
 		}
 	}
 
-	if ($class->can('defaultMap')) {
+	if ($class->can('defaultMap') && !main::SCANNER) {
 
 		Slim::Hardware::IR::addModeDefaultMapping($mode, $class->defaultMap);
 	}
 }
 
-sub displayName {
+sub getDisplayName {
 	my $class = shift;
 
 	return $class->_pluginDataFor('name') || $class;
@@ -118,6 +130,8 @@ sub getFunctions {
 
 	return {};
 }
+
+sub getWeights { $WEIGHTS }
 
 1;
 

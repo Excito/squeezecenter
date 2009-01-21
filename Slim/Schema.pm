@@ -1,6 +1,6 @@
 package Slim::Schema;
 
-# $Id: Schema.pm 23260 2008-09-23 18:08:35Z andy $
+# $Id: Schema.pm 24400 2008-12-23 02:12:46Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -28,6 +28,7 @@ use warnings;
 
 use base qw(DBIx::Class::Schema);
 
+use Data::Dump;
 use DBIx::Migration;
 use File::Basename qw(dirname);
 use File::Spec::Functions qw(:ALL);
@@ -117,11 +118,11 @@ sub init {
 	$class->storage_type('Slim::Schema::Storage');
 
 	$class->connection($source, $username, $password, { 
-		RaiseError => 1,
-		AutoCommit => 1,
-		PrintError => 0,
-		Taint      => 1,
-
+		RaiseError    => 1,
+		AutoCommit    => 1,
+		PrintError    => 0,
+		Taint         => 1,
+		on_connect_do => [ 'SET NAMES UTF8' ],
 	}) or do {
 
 		logBacktrace("Couldn't connect to database! Fatal error: [$!] Exiting!");
@@ -134,14 +135,6 @@ sub init {
 		logBacktrace("Couldn't connect to database! Fatal error: [$!] Exiting!");
 		exit;
 	};
-
-	# Tell the DB that we're handing it UTF-8
-	# MySQL < 4.1 doesn't support this - which really shouldn't matter to
-	# us. But some users *ahem*kdf*ahem* are stuck running 4.0.x
-	if ( main::SLIM_SERVICE || Slim::Utils::MySQLHelper->mysqlVersion($dbh) > 4.0 ) {
-
-		eval { $dbh->do('SET NAMES UTF8;') };
-	}
 
 	# Bug: 4076
 	# If a user was using MySQL with 6.3.x (unsupported), their
@@ -305,7 +298,7 @@ sub sourceInformation {
 	if ( !main::SLIM_SERVICE ) {
 		# Bug 3443 - append a socket if needed
 		# Windows doesn't use named sockets (it uses TCP instead)
-		if (Slim::Utils::OSDetect::OS() ne 'win' && $source =~ /mysql/i && $source !~ /mysql_socket/i) {
+		if (!Slim::Utils::OSDetect::isWindows() && $source =~ /mysql/i && $source !~ /mysql_socket/i) {
 
 			if (Slim::Utils::MySQLHelper->socketFile) {
 				$source .= sprintf(':mysql_socket=%s', Slim::Utils::MySQLHelper->socketFile);
@@ -1453,7 +1446,9 @@ sub wipeCaches {
 	$self->lastTrack({});
 	
 	# Wipe cached data used for Jive, i.e. albums query data
-	Slim::Control::Queries::wipeCaches();
+	if (!main::SCANNER) {	
+		Slim::Control::Queries::wipeCaches();
+	}
 
 	logger('scan.import')->info("Wiped all in-memory caches.");
 }
@@ -1750,7 +1745,7 @@ sub _hasChanged {
 		# it's likely removable storage and shouldn't be deleted
 		my $offline;
 			
-		if ( Slim::Utils::OSDetect::OS() eq 'win' ) {
+		if ( Slim::Utils::OSDetect::isWindows() ) {
 			# win32, check the drive letter
 			my $parent = Path::Class::File->new($filepath)->dir;
 			if ( my $vol = $parent->volume ) {
@@ -2625,7 +2620,7 @@ sub _mergeAndCreateContributors {
 			'sortBy'   => $attributes->{$tag.'SORT'},
 		});
 
-		$log->debug(sprintf("-- Track has contributor '$contributor' of role '$tag'"));
+		$log->is_debug && $log->debug(sprintf("-- Track has contributor '$contributor' of role '$tag'"));
 	}
 
 	return \%contributors;

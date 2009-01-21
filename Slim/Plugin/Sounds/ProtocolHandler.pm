@@ -1,6 +1,6 @@
 package Slim::Plugin::Sounds::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: ProtocolHandler.pm 22939 2008-08-28 16:42:33Z andy $
 
 # Handler for forcing loop mode
 

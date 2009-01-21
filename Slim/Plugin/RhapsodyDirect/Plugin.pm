@@ -9,7 +9,6 @@ use base 'Slim::Plugin::OPMLBased';
 
 use Slim::Networking::SqueezeNetwork;
 use Slim::Plugin::RhapsodyDirect::ProtocolHandler;
-use Slim::Plugin::RhapsodyDirect::RPDS ();
 
 use URI::Escape qw(uri_escape_utf8);
 
@@ -20,6 +19,8 @@ my $log = Slim::Utils::Log->addLogCategory({
 	'defaultLevel' => $ENV{RHAPSODY_DEV} ? 'DEBUG' : 'ERROR',
 	'description'  => 'PLUGIN_RHAPSODY_DIRECT_MODULE_NAME',
 });
+
+our $SECURE_IP;
 
 sub initPlugin {
 	my $class = shift;
@@ -34,7 +35,7 @@ sub initPlugin {
 	);
 	
 	Slim::Networking::Slimproto::addHandler( 
-		RPDS => \&Slim::Plugin::RhapsodyDirect::RPDS::rpds_handler
+		RPDS => \&rpds_handler
 	);
 	
 	# Track Info item
@@ -71,7 +72,7 @@ sub initPlugin {
 		
 		# Setup additional CLI methods for this menu
 		$class->initCLI(
-			feed         => Slim::Networking::SqueezeNetwork->url('/api/mp3tunes/v1/opml/library/getLastDateLibraryUpdated'),
+			feed         => Slim::Networking::SqueezeNetwork->url('/api/rhapsody/v1/opml/library/getLastDateLibraryUpdated'),
 			tag          => 'rhapsody_library',
 			menu         => 'my_music',
 			display_name => 'PLUGIN_RHAPSODY_DIRECT_MY_RHAPSODY_LIBRARY',
@@ -114,6 +115,25 @@ sub initPlugin {
 			},
 		);
 	}
+	
+	# Lookup secure-direct.rhapsody.com.  In case it ever changes from the hardcoded
+	# value in the firmware (207.188.0.25), we need to inform the player.
+	my $dns = Slim::Networking::Async->new;
+	$dns->open( {
+		Host    => 'secure-direct.rhapsody.com',
+		onDNS   => sub {
+			my $ip = shift;
+			
+			$log->debug( "secure-direct.rhapsody.com is $ip" );
+			
+			if ( $ip ne '207.188.0.25' ) {
+				$SECURE_IP = $ip;
+			}
+		},
+		onError => sub {
+			$log->error('Unable to resolve address for secure-direct.rhapsody.com');
+		},
+	} );
 	
 	# CLI-only command to create a Rhapsody playlist given a set of trackIds
 	Slim::Control::Request::addDispatch(
@@ -165,9 +185,6 @@ sub handleError {
 	
 	# Strip long number string from front of error
 	$error =~ s/\d+( : )?//;
-	
-	# Allow status updates again
-	$client->suppressStatus(0);
 	
 	# XXX: Need to give error feedback for web requests
 
@@ -257,12 +274,11 @@ sub gotCreatePlaylistError {
 sub trackInfoMenu {
 	my ( $client, $url, $track, $remoteMeta ) = @_;
 	
-	# can't access rhapsody without a player
 	return unless $client;
 	
-	if ( !Slim::Networking::SqueezeNetwork->hasAccount( $client, 'rhapsody' ) ) {
-		return;
-	}
+	return unless Slim::Networking::SqueezeNetwork->isServiceEnabled( $client, 'RhapsodyDirect' );
+	
+	return unless Slim::Networking::SqueezeNetwork->hasAccount( $client, 'rhapsody' );
 	
 	my $artist = $track->remote ? $remoteMeta->{artist} : ( $track->artist ? $track->artist->name : undef );
 	my $album  = $track->remote ? $remoteMeta->{album}  : ( $track->album ? $track->album->name : undef );
@@ -287,4 +303,69 @@ sub trackInfoMenu {
 	}
 }
 
+sub rpds_handler {
+	my ( $client, $data_ref ) = @_;
+	
+	if ( $log->is_warn ) {
+		$log->warn( $client->id . " Got RPDS packet: " . Data::Dump::dump($data_ref) );
+	}
+	
+	my $got_cmd = unpack 'C', $$data_ref;
+	
+	# Check for specific decoding error codes
+	if ( $got_cmd >= 100 && $got_cmd < 200 ) {
+		if ( main::SLIM_SERVICE && SN_DEBUG ) {
+			logError( $client, "decoding failure: code $got_cmd" );
+		}
+		$log->error( $client->id . " Rhapsody decoding failure: code $got_cmd" );
+		
+		# bug 10612 - tell StreamingController so that play can restart
+		$client->controller()->playerStreamingFailed($client, 'PLUGIN_RHAPSODY_DIRECT_STREAM_FAILED');
+		
+		return;
+	}
+	
+	# Check for errors sent by the player
+	if ( $got_cmd == 255 ) {
+		# SOAP Fault
+		my (undef, $faultCode, $faultString ) = unpack 'cn/a*n/a*', $$data_ref;
+		
+		if ( $log->is_warn ) {
+			$log->warn( $client->id . " Received RPDS fault: $faultCode - $faultString");
+		}
+		
+		if ( main::SLIM_SERVICE && SN_DEBUG ) {
+			logError( $client, 'RPDS_FAULT', $faultString );
+		}
+		
+		my $error = $faultString;
+		
+		# If a user's session becomes invalid, the firmware will keep retrying getEA
+		# and report a fault of 'Playback Session id $foo is not a valid session id'
+		# and so we need to stop the player and report the error
+		
+		# The player will send multiple getEA failure codes before we can send a stop command
+		# so ignore if we get one of these when our sessionId is empty
+		
+		if ( $client->streamingSong()->pluginData('playbackSessionId') ) {
+			if ( $faultCode =~ /InvalidPlaybackSessionException/ ) {
+				$error = $client->string('PLUGIN_RHAPSODY_DIRECT_INVALID_SESSION');
+			
+				# Clear playback session
+				$client->streamingSong()->pluginData( playbackSessionId => 0 );
+			}
+		
+			Slim::Player::Source::playmode( $client, 'stop' );
+		
+			handleError( $error, $client );
+		}
+	}
+	elsif ( $got_cmd == 251 ) {
+		# Error making an EA request
+		if ( $log->is_warn ) {
+			$log->warn( $client->id . " Received RPDS 251: failed to get EA block, player will retry");
+		}
+	}
+}
+	
 1;

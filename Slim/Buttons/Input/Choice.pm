@@ -1,6 +1,6 @@
 package Slim::Buttons::Input::Choice;
 
-# $Id: Choice.pm 22997 2008-09-01 15:59:20Z andy $
+# $Id: Choice.pm 22998 2008-09-01 16:01:57Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

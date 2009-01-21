@@ -8,6 +8,11 @@ use strict;
 use base 'Slim::Plugin::Base';
 
 use Slim::Utils::Prefs;
+use Slim::Control::XMLBrowser;
+
+if ( !main::SLIM_SERVICE ) {
+ 	require Slim::Web::XMLBrowser;
+}
 
 my $prefs = preferences('server');
 
@@ -18,14 +23,18 @@ sub initPlugin {
 	
 	{
 		no strict 'refs';
-		*{$class.'::'.'feed'} = sub { $args{feed} } if $args{feed};
-		*{$class.'::'.'tag'}  = sub { $args{tag} };
-		*{$class.'::'.'menu'} = sub { $args{menu} };
+		*{$class.'::'.'feed'}   = sub { $args{feed} } if $args{feed};
+		*{$class.'::'.'tag'}    = sub { $args{tag} };
+		*{$class.'::'.'menu'}   = sub { $args{menu} };
+		*{$class.'::'.'weight'} = sub { $args{weight} || 1000 };
+		*{$class.'::'.'type'}   = sub { $args{type} || 'link' };
 	}
 
-	if (!$class->_pluginDataFor('icon')) {
+	if ( !main::SLIM_SERVICE ) {
+		if (!$class->_pluginDataFor('icon')) {
 
-		Slim::Web::Pages->addPageLinks("icons", { $class->getDisplayName => 'html/images/radio.png' });
+			Slim::Web::Pages->addPageLinks("icons", { $class->getDisplayName => 'html/images/radio.png' });
+		}
 	}
 	
 	$class->initCLI( %args );
@@ -41,10 +50,12 @@ sub initPlugin {
 sub initJive {
 	my ( $class, %args ) = @_;
 
-	my $icon   = $class->_pluginDataFor('icon') ? $class->_pluginDataFor('icon') : 'html/images/radio.png';
+	my $icon = $class->_pluginDataFor('icon') ? $class->_pluginDataFor('icon') : 'html/images/radio.png';
 	my $name = $class->getDisplayName();
-        my @jiveMenu = ({
-		stringToken    => $name,
+	
+	my @jiveMenu = ( {
+		stringToken    => (uc($name) eq $name) ? $name : undef, # Only use string() if it is uppercase
+		text           => $name,
 		id             => 'opml' . $args{tag},
 		node           => $args{menu},
 		displayWhenOff => 0,
@@ -61,7 +72,7 @@ sub initJive {
 				},
 			},
 		},
-	});
+	} );
 
 	Slim::Control::Jive::registerPluginMenu(\@jiveMenu);
 }
@@ -71,7 +82,7 @@ sub initCLI {
 	
 	my $cliQuery = sub {
 	 	my $request = shift;
-		Slim::Buttons::XMLBrowser::cliQuery( $args{tag}, $class->feed( $request->client ), $request );
+		Slim::Control::XMLBrowser::cliQuery( $args{tag}, $class->feed( $request->client ), $request );
 	};
 	
 	# CLI support
@@ -102,21 +113,41 @@ sub setMode {
 		return;
 	}
 
-	# use INPUT.Choice to display the list of feeds
 	my $name = $class->getDisplayName();
 	
-	my %params = (
-		header   => $name,
-		modeName => $name,
-		url      => $class->feed( $client ),
-		title    => $client->string( $name ),
-		timeout  => 35,
-	);
+	my $type = $class->type;
+	
+	my $title = (uc($name) eq $name) ? $client->string( $name ) : $name;
+	
+	if ( $type eq 'link' ) {
+		my %params = (
+			header   => $name,
+			modeName => $name,
+			url      => $class->feed( $client ),
+			title    => $title,
+			timeout  => 35,
+		);
 
-	Slim::Buttons::Common::pushMode( $client, 'xmlbrowser', \%params );
-
-	# we'll handle the push in a callback
-	$client->modeParam( handledTransition => 1 );
+		Slim::Buttons::Common::pushMode( $client, 'xmlbrowser', \%params );
+		
+		# we'll handle the push in a callback
+		$client->modeParam( handledTransition => 1 );
+	}
+	elsif ( $type eq 'search' ) {
+		my %params = (
+			header          => $title,
+			cursorPos       => 0,
+			charsRef        => 'UPPER',
+			numberLetterRef => 'UPPER',
+			callback        => \&Slim::Buttons::XMLBrowser::handleSearch,
+			item            => {
+				url     => $class->feed( $client ),
+				timeout => 35,
+			},
+		);
+		
+		Slim::Buttons::Common::pushModeLeft( $client, 'INPUT.Text', \%params );
+	}
 }
 
 sub cliRadiosQuery {
@@ -124,7 +155,7 @@ sub cliRadiosQuery {
 	my $tag  = $args->{tag};
 
 	my $icon   = $class->_pluginDataFor('icon') ? $class->_pluginDataFor('icon') : 'html/images/radio.png';
-	my $weight = $args->{weight} || 100;
+	my $weight = $args->{weight} || 1000;
 
 	return sub {
 		my $request = shift;
@@ -133,25 +164,59 @@ sub cliRadiosQuery {
 
 		$request->addParam('sort','weight');
 
+		my $name  = $args->{display_name} || $class->getDisplayName();
+		my $title = (uc($name) eq $name) ? $request->string( $name ) : $name;
+
 		my $data;
 		# what we want the query to report about ourself
 		if (defined $menu) {
-			$data = {
-				text         => $request->string( $args->{display_name} || $class->getDisplayName() ),  # nice name
-				weight       => $weight,
-				'icon-id'    => $icon,
-				actions      => {
+			my $type = $class->type;
+			
+			if ( $type eq 'link' ) {
+				$data = {
+					text         => $title,
+					weight       => $weight,
+					'icon-id'    => $icon,
+					actions      => {
+							go => {
+								cmd => [ $tag, 'items' ],
+								params => {
+									menu => $tag,
+								},
+							},
+					},
+					window        => {
+						titleStyle => 'album',
+					},
+				};
+			}
+			elsif ( $type eq 'search' ) {
+				$data = {
+					text         => $title,
+					weight       => $weight,
+					'icon-id'    => $icon,
+					actions      => {
 						go => {
-							cmd => [ $tag, 'items' ],
+							cmd    => [ $tag, 'items' ],
 							params => {
-								menu => $tag,
+								menu    => $tag,
+								search  => '__TAGGEDINPUT__',
 							},
 						},
-				},
-				window        => {
-					titleStyle => 'album',
-				},
-			};
+					},
+					input        => {
+						len  => 3,
+						help => {
+							text => $request->string('JIVE_SEARCHFOR_HELP')
+						},
+						softbutton1 => $request->string('INSERT'),
+						softbutton2 => $request->string('DELETE'),
+					},
+					window        => {
+						titleStyle => 'album',
+					},
+				};
+			}
 			
 			if ( main::SLIM_SERVICE ) {
 				# Bug 7110, icons are full URLs so we must use icon not icon-id
@@ -162,10 +227,20 @@ sub cliRadiosQuery {
 			}
 		}
 		else {
+			my $type = $class->type;
+			if ( $type eq 'link' ) {
+				$type = 'xmlbrowser';
+			}
+			elsif ( $type eq 'search' ) {
+				$type = 'xmlbrowser_search';
+			}
+			
 			$data = {
-				cmd  => $tag,
-				name => $request->string( $class->getDisplayName() ),
-				type => 'xmlbrowser',
+				cmd    => $tag,
+				name   => $title,
+				type   => $type,
+				icon   => $icon,
+				weight => $weight,
 			};
 		}
 		
@@ -177,7 +252,7 @@ sub cliRadiosQuery {
 			$disabled  = [ keys %{ $client->playerData->userid->allowedServices->{disabled} } ];
 			
 			# Hide plugins if necessary (private, beta, etc)
-			if ( !$client->playerData->userid->canSeePlugin($tag) ) {
+			if ( !$client->canSeePlugin($tag) ) {
 				$data = {};
 			}
 		}
@@ -188,6 +263,13 @@ sub cliRadiosQuery {
 					$data = {};
 					last;
 				}
+			}
+		}
+		
+		# Filter out items which don't match condition
+		if ( $class->can('condition') && $request->client ) {
+			if ( !$class->condition( $request->client ) ) {
+				$data = {};
 			}
 		}
 		
@@ -202,7 +284,11 @@ sub webPages {
 	my $title = $class->getDisplayName();
 	my $url   = 'plugins/' . $class->tag() . '/index.html';
 	
-	Slim::Web::Pages->addPageLinks( $class->menu(), { $title => $url });
+	Slim::Web::Pages->addPageLinks( $class->menu(), { $title => $url } );
+	
+	if ( $class->can('condition') ) {
+		Slim::Web::Pages->addPageCondition( $title, sub { $class->condition(shift); } );
+	}
 
 	Slim::Web::HTTP::addPageFunction( $url, sub {
 		my $client = $_[0];
@@ -210,6 +296,7 @@ sub webPages {
 		Slim::Web::XMLBrowser->handleWebIndex( {
 			client  => $client,
 			feed    => $class->feed( $client ),
+			type    => $class->type( $client ),
 			title   => $title,
 			timeout => 35,
 			args    => \@_

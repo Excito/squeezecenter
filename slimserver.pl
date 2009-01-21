@@ -16,6 +16,7 @@ use strict;
 use warnings;
 
 use constant SLIM_SERVICE => 0;
+use constant SCANNER => 0;
 
 # This package section is used for the windows service version of the application, 
 # as built with ActiveState's PerlSvc
@@ -25,15 +26,13 @@ our %Config = (
 	DisplayName => 'SqueezeCenter',
 	Description => "SqueezeCenter Music Server",
 	ServiceName => "squeezesvc",
+	StartNow    => 0,
 );
 
 sub Startup {
 	# Tell PerlSvc to bundle these modules
 	if (0) {
-		require Encode::CN;
-		require Encode::JP;
-		require Encode::KR;
-		require Encode::TW;
+		require 'auto/Compress/Zlib/autosplit.ix';
 	}
 
 	# added to workaround a problem with 5.8 and perlsvc.
@@ -110,13 +109,6 @@ BEGIN {
 	use Slim::Utils::OSDetect;
 
 	Slim::bootstrap->loadModules();
-
-	# Bug 2659 - maybe. Remove old versions of modules that are now in the $Bin/lib/ tree.
-	if (!Slim::Utils::OSDetect::isDebian()) {
-
-		unlink("$Bin/CPAN/MP3/Info.pm");
-		unlink("$Bin/CPAN/DBIx/ContextualFetch.pm");
-	}
 };
 
 use File::Slurp;
@@ -165,6 +157,7 @@ use Slim::Display::Lib::Fonts;
 use Slim::Web::HTTP;
 use Slim::Hardware::IR;
 use Slim::Menu::TrackInfo;
+use Slim::Menu::SystemInfo;
 use Slim::Music::Info;
 use Slim::Music::Import;
 use Slim::Music::MusicFolderScan;
@@ -189,6 +182,7 @@ use Slim::Networking::Slimproto;
 use Slim::Networking::SimpleAsyncHTTP;
 use Slim::Utils::Firmware;
 use Slim::Control::Jive;
+use Slim::Formats::RemoteMetadata;
 
 our @AUTHORS = (
 	'Sean Adams',
@@ -218,7 +212,7 @@ our @AUTHORS = (
 
 my $prefs        = preferences('server');
 
-our $VERSION     = '7.2.1';
+our $VERSION     = '7.3.2';
 our $REVISION    = undef;
 our $BUILDDATE   = undef;
 our $audiodir    = undef;
@@ -253,6 +247,7 @@ our (
 	$nosetup,
 	$noserver,
 	$noupnp,
+	$noweb,     # used in scanner to prevent loading of Slim::Web::Pages etc.
 	$stdio,
 	$stop,
 	$perfmon,
@@ -298,7 +293,7 @@ sub init {
 
 	$log->info("SqueezeCenter OS Specific init...");
 
-	if (Slim::Utils::OSDetect::OS() ne 'win') {
+	unless (Slim::Utils::OSDetect::isWindows()) {
 		$SIG{'HUP'} = \&initSettings;
 	}		
 
@@ -328,7 +323,7 @@ sub init {
 	}
 
 	# background if requested
-	if (Slim::Utils::OSDetect::OS() ne 'win' && $daemon) {
+	if (!Slim::Utils::OSDetect::isWindows() && $daemon) {
 
 		$log->info("SqueezeCenter daemonizing...");
 		daemonize();
@@ -339,8 +334,10 @@ sub init {
 	}
 
 	# Change UID/GID after the pid & logfiles have been opened.
-	$log->info("SqueezeCenter settings effective user and group if requested...");
-	changeEffectiveUserAndGroup();
+	unless (Slim::Utils::OSDetect::getOS->dontSetUserAndGroup()) {
+		$log->info("SqueezeCenter settings effective user and group if requested...");
+		changeEffectiveUserAndGroup();		
+	}
 
 	# Set priority, command line overrides pref
 	if (defined $priority) {
@@ -350,7 +347,7 @@ sub init {
 	}
 
 	$log->info("SqueezeCenter binary search path init...");
-	Slim::Utils::OSDetect::initSearchPath();
+	Slim::Utils::OSDetect::getOS->initSearchPath();
 
 	$log->info("SqueezeCenter strings init...");
 	Slim::Utils::Strings::init();
@@ -360,6 +357,10 @@ sub init {
 	
 	$log->info("Async DNS init...");
 	Slim::Networking::Async::DNS->init;
+	
+	$log->info("Async HTTP init...");
+	Slim::Networking::Async::HTTP->init;
+	Slim::Networking::SimpleAsyncHTTP->init;
 	
 	$log->info("Firmware init...");
 	Slim::Utils::Firmware->init;
@@ -396,10 +397,8 @@ sub init {
 	$log->info("Cache init...");
 	Slim::Utils::Cache->init();
 	
-	if ( $prefs->get('sn_email') && $prefs->get('sn_sync') ) {
-		$log->info("SqueezeNetwork Sync Init...");
-		Slim::Networking::SqueezeNetwork->init();
-	}
+	$log->info("SqueezeNetwork Init...");
+	Slim::Networking::SqueezeNetwork->init();
 
 	unless ( $noupnp || $prefs->get('noupnp') ) {
 		$log->info("UPnP init...");
@@ -421,16 +420,20 @@ sub init {
 	
 	$log->info('Menu init...');
 	Slim::Menu::TrackInfo->init();
+	Slim::Menu::SystemInfo->init();
 
 	$log->info('SqueezeCenter Alarms init...');
 	Slim::Utils::Alarm->init();
 
-	# load plugins before Jive init so MusicMagic hooks to cached artist/genre queries from Jive->init() will take root
+	# load plugins before Jive init so MusicIP hooks to cached artist/genre queries from Jive->init() will take root
 	$log->info("SqueezeCenter Plugins init...");
 	Slim::Utils::PluginManager->init();
 
 	$log->info("SqueezeCenter Jive init...");
 	Slim::Control::Jive->init();
+	
+	$log->info("Remote Metadata init...");
+	Slim::Formats::RemoteMetadata->init();
 
 	# Reinitialize logging, as plugins may have been added.
 	if (Slim::Utils::Log->needsReInit) {
@@ -451,7 +454,11 @@ sub init {
 		);
 	}
 
-	checkVersion();
+	Slim::Utils::Timers::setTimer(
+		undef,
+		time() + 30,
+		\&checkVersion,
+	);
 
 	$log->info("SqueezeCenter HTTP enable...");
 	Slim::Web::HTTP::init2();
@@ -492,11 +499,16 @@ sub idle {
 	my $now = Time::HiRes::time();
 
 	# check for time travel (i.e. If time skips backwards for DST or clock drift adjustments)
-	if ($now < $lastlooptime) {
+	if ( $now < $lastlooptime || ( $now - $lastlooptime > 300 ) ) {
 
 		Slim::Utils::Timers::adjustAllTimers($now - $lastlooptime);
-
-		logger('server.timers')->debug("Finished adjustAllTimers: " . Time::HiRes::time());
+		
+		# For all clients that support RTC, we need to adjust their clocks
+		for my $client ( Slim::Player::Client::clients() ) {
+			if ( $client->hasRTCAlarm ) {
+				$client->setRTCTime;
+			}
+		}
 	} 
 
 	$lastlooptime = $now;
@@ -784,11 +796,6 @@ sub daemonize {
 
 sub changeEffectiveUserAndGroup {
 
-	# Windows doesn't have getpwnam, and the uid is always 0.
-	if ($^O eq 'MSWin32') {
-		return;
-	}
-
 	# If we're not root and need to change user and group then die with a
 	# suitable message, else there's nothing more to do, so return.
 	if ($> != 0) {
@@ -941,7 +948,7 @@ sub checkVersion {
 	my $url  = "http://"
 		. Slim::Networking::SqueezeNetwork->get_server("update")
 		. "/update/?version=$VERSION&lang=" . Slim::Utils::Strings::getLanguage();
-	my $http = Slim::Networking::SimpleAsyncHTTP->new(\&checkVersionCB, \&checkVersionError);
+	my $http = Slim::Networking::SqueezeNetwork->new(\&checkVersionCB, \&checkVersionError);
 
 	# will call checkVersionCB when complete
 	$http->get($url);
@@ -956,7 +963,7 @@ sub checkVersionCB {
 
 	# store result in global variable, to be displayed by browser
 	if ($http->{code} =~ /^2\d\d/) {
-		$::newVersion = $http->content();
+		$::newVersion = Slim::Utils::Unicode::utf8decode( $http->content() );
 		chomp($::newVersion);
 	}
 	else {

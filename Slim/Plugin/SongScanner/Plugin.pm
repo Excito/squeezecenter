@@ -54,22 +54,18 @@ my %modeParams = (
 			my $client = shift;
 			my $val = shift;
 
-			if (! $client->pluginData('lastUpdateTime')) {
+			if (! $client->master->pluginData('lastUpdateTime')) {
 				# No new position has been selected, set offset to track the current song position and clear the cursor
 				$val = Slim::Player::Source::songTime($client);
-				$client->pluginData(offset => $val);
+				$client->master->pluginData(offset => $val);
 				$client->modeParam('cursor', undef);
 			} else {
 				# A selection is being made - set the cursor to track the current song position
 				$client->modeParam('cursor', Slim::Player::Source::songTime($client));
 			}
 
-			# Work out ffwd/rew state e.g. >> 2X 
-			my $rate = Slim::Player::Source::rate($client);
 			my $rateText = '';
-			if ($rate < 0 || $rate > 1) {
-				$rateText = ($rate < 0 ? ' <<' : ' >>') . abs($rate) . 'X:';
-			} elsif (Slim::Player::Source::playmode($client) =~ /pause/) {
+			if (Slim::Player::Source::playmode($client) =~ /pause/) {
 				$rateText = ' (' . $client->string('PAUSED') . ')';
 			}
 			return " $rateText ";
@@ -84,16 +80,16 @@ my %modeParams = (
 			}
 
 			# Display song position e.g. 1:32
-			my $pos = int($val);
-			my $dur = int(Slim::Player::Source::playingSongDuration($client));
-		    return sprintf("%01d:%02d / %01d:%02d", $pos / 60, $pos % 60, $dur / 60, $dur % 60);
+		    return _formatTime( $val ) . ' / -' . _formatTime( Slim::Player::Source::playingSongDuration($client) - $val );
+		    	
 		}
 	,'overlayRefArgs' => 'CV'
 	,'max' => undef
 	,'increment' => undef
 	,'onChange' => sub { 
 			my $client = shift;
-			$client->pluginData(lastUpdateTime => Time::HiRes::time());
+			$client->master->pluginData(lastUpdateTime => Time::HiRes::time());
+			$client->master->pluginData(exitModeTime => Time::HiRes::time() + $EXITMODE_INTERVAL);
 		}
 	,'onChangeArgs' => 'C'
 	,'callback' => \&_scannerExitHandler
@@ -102,6 +98,21 @@ my %modeParams = (
 	# Override defaults to allow acceleration
 	,'knobFlags' => Slim::Player::Client::KNOB_NOWRAP()
 );
+
+sub _formatTime {
+	my $seconds = shift;
+	
+	my $hrs  = int($seconds / 3600);
+	my $mins = int(($seconds % 3600) / 60);
+	my $secs = $seconds % 60;
+	
+	if ($hrs) {
+	    return sprintf("%d:%02d:%02d", $hrs, $mins, $secs);
+	} 
+	else {
+	    return sprintf("%02d:%02d", $mins, $secs);
+	}
+}
 
 sub _timerHandler {
 	my $client = shift;
@@ -112,33 +123,29 @@ sub _timerHandler {
 	}
 	
 	# Exit if the playing song has changed since the scanner was started
-	if ($client->pluginData('playingSong') ne Slim::Player::Playlist::url($client)) {
-		Slim::Player::Source::rate($client, 1);
+	if ($client->master->pluginData('playingSong') != $client->playingSong()) {
 		Slim::Buttons::Common::popModeRight($client);
 		return;
 	}
 
 	# If there's a change to be applied and sufficient time has elapsed since the last change in the scanner position, apply it 
-	my $lastUpdateTime = $client->pluginData('lastUpdateTime'); 
-	if ($lastUpdateTime && Time::HiRes::time() - $lastUpdateTime >= $client->pluginData('updateInterval')) {
+	my $lastUpdateTime = $client->master->pluginData('lastUpdateTime'); 
+	if ($lastUpdateTime && Time::HiRes::time() - $lastUpdateTime >= $client->master->pluginData('updateInterval')) {
 		$client->suppressStatus('all');
-		Slim::Player::Source::gototime($client, $client->pluginData('offset'), 1);
+		Slim::Player::Source::gototime($client, $client->master->pluginData('offset'));
 		$client->suppressStatus(undef);
-		$client->pluginData(lastUpdateTime => 0);
-		$client->pluginData(exitModeTime => Time::HiRes::time() + $EXITMODE_INTERVAL);
+		$client->master->pluginData(lastUpdateTime => 0);
 	}
 
 	# Pop the mode if nothing has happend for EXITMODE_TIME
-	if (my $exitTime = $client->pluginData('exitModeTime')) {
-		if (Time::HiRes::time() > $exitTime) {
-			Slim::Buttons::Common::popModeRight($client);
-			return;
-		}
+	if (Time::HiRes::time() > $client->master->pluginData('exitModeTime')) {
+		Slim::Buttons::Common::popModeRight($client);
+		return;
 	}
 
 	$client->update;
 	
-	$client->pluginData->{'activeFfwRew'}++;
+	$client->master->pluginData->{'activeFfwRew'}++;
 	
 	Slim::Utils::Timers::setTimer($client, Time::HiRes::time()+0.1, \&_timerHandler);
 }
@@ -155,17 +162,10 @@ sub _scannerExitHandler {
 		
 		$log->debug('Exiting...');
 
-		# Cancel any fast-forward or rewind
-		my $originalRate = Slim::Player::Source::rate($client);
-		if ($originalRate != 1 && $originalRate != 0) {
-			$log->debug("Changing rate from $originalRate to 1");
-			Slim::Player::Source::rate($client, 1);
-		}
-
 		# Apply any pending change in song position
-		if ($client->pluginData('lastUpdateTime')) {
+		if ($client->master->pluginData('lastUpdateTime')) {
 			$log->debug('Applying pending update');
-			Slim::Player::Source::gototime($client, $client->pluginData('offset'), 1);
+			Slim::Player::Source::gototime($client, $client->master->pluginData('offset'));
 
 			#my $lines = $client->currentSongLines();
 			#$lines->{'jive'} = undef;
@@ -176,84 +176,31 @@ sub _scannerExitHandler {
 				Slim::Player::Source::playmode($client, 'resume');
 		}
 
-		# Don't exit if play was used to cancel a fast-forward/rewind 
-		if ($client->pluginData('jumpToMode')
-			&& ($originalRate == 1 || $client->pluginData('lastUpdateTime'))) {
+		if ($client->master->pluginData('jumpToMode')) {
 			Slim::Buttons::Common::popMode($client);
-			$client->pluginData(jumpToMode => 0);
+			$client->master->pluginData(jumpToMode => 0);
 		}
 
-		$client->pluginData(lastUpdateTime => 0);
+		$client->master->pluginData(lastUpdateTime => 0);
 		$client->update;
 	}
 }
 
 
-my $SCAN_RATE_MULTIPLIER = 2;
-my $SCAN_RATE_MAX_MULTIPLIER = 128;
-
-# Change ffwd/rew state (2x, 4x, -2x etc)
-sub _scan {
-	my ($client, $direction) = @_;
-
-	my $playmode = Slim::Player::Source::playmode($client);
-	my $url      = Slim::Player::Playlist::url($client);
-	my $rate     = Slim::Player::Source::rate($client);
-
-	$log->debug("Scan requested - requested direction : $direction, current rate : $rate");
-
-	# Do not allow rate change on remote streams
-	if ( Slim::Music::Info::isRemoteURL($url) ) {
-		$log->debug('Not allowing scan for remote stream');
-		return;
-	}
-
-	# If a change in direction is requested, go straight to the slowest scan for that direction
-	if ($direction > 0 && $rate < 0) {
-		$rate = 1;
-	} elsif ($direction < 0 && $rate > 0) {
-		$rate = -1;
-	}
-
-	$rate *= $SCAN_RATE_MULTIPLIER;
-
-	if (abs($rate) > $SCAN_RATE_MAX_MULTIPLIER) {
-		$log->debug('Max scan rate reached');
-		$client->showBriefly(
-			{line => [ $client->string($direction > 0 ? 'PLUGIN_SONGSCANNER_MAX_RATE_FWD' : 'PLUGIN_SONGSCANNER_MAX_RATE_REW'), '' ],
-				'jive' => undef},
-			{duration => 1.5, scroll => 1}
-		);
-		return;
-	}
-
-	$log->debug("Setting scan rate to $rate");
-	Slim::Player::Source::rate($client, $rate);
-	
-	if ($playmode =~ /pause/) {
-		$log->debug('Resuming playback');
-		Slim::Player::Source::playmode($client, 'resume');
-	}
-	
-	# Abandon any pending scanner changes
-	$client->pluginData(lastUpdateTime => 0);
-	$client->update();
-}
-
 sub _jump {
 	my $client = shift;
 	my $interval = shift;
 	
-	my $offset = $client->pluginData('offset');
-	
+	my $offset = $client->master->pluginData('offset');
+
 	if ($interval > 0 && $offset + (2 * $interval) < $client->modeParam('max')) {
-		$client->pluginData(offset => $offset + $interval);
+		$client->master->pluginData(offset => $offset + $interval);
 	} elsif ($interval < 0) {
-		$client->pluginData(offset => $offset > -$interval ? $offset + $interval : 0);
+		$client->master->pluginData(offset => $offset > -$interval ? $offset + $interval : 0);
 	} else {
 		return;
 	}
-	$client->pluginData(lastUpdateTime => Time::HiRes::time());
+	$client->master->pluginData(lastUpdateTime => Time::HiRes::time());
 	$client->update;
 }
 
@@ -273,47 +220,43 @@ my %functions = (
 	'pause' => sub {
 		my $client = shift;
 		my $playmode = Slim::Player::Source::playmode($client);
-		my $rate = Slim::Player::Source::rate($client);
 		# Apply any pending update 
-		if ($client->pluginData('lastUpdateTime')) {
-			Slim::Player::Source::gototime($client, $client->pluginData('offset'), 1);
-			$client->pluginData(lastUpdateTime => 0);
+		if ($client->master->pluginData('lastUpdateTime')) {
+			Slim::Player::Source::gototime($client, $client->master->pluginData('offset'));
+			$client->master->pluginData(lastUpdateTime => 0);
 		}
 		if ($playmode =~ /pause/) {
 			Slim::Player::Source::playmode($client, 'resume');
 		} else {
-			# Cancel any ffwd/rew (it's confusing to come out of pause and find ffwd/rew still active)
-			if ($rate != 1 && $rate != 0) {
-				Slim::Player::Source::rate($client, 1);
-			}
 			Slim::Player::Source::playmode($client, 'pause');
 		}
+		$client->master->pluginData(exitModeTime => Time::HiRes::time() + $EXITMODE_INTERVAL);
 		$client->update;
 	},
 	'jump_fwd' => sub {
 		my $client = shift;
 		_jump($client, $JUMP_INTERVAL);
-#		_scan($client, 1);
+		$client->master->pluginData(exitModeTime => Time::HiRes::time() + $EXITMODE_INTERVAL);
 	},
 	'jump_rew' => sub {
 		my $client = shift;
 		_jump($client, -$JUMP_INTERVAL);
-#		_scan($client, -1);
+		$client->master->pluginData(exitModeTime => Time::HiRes::time() + $EXITMODE_INTERVAL);
 	},
 	'song_scanner_fwd' => sub {
 		my $client = shift;
-		Slim::Buttons::Input::Bar::changePos($client, 1, 'up') if $client->pluginData('activeFfwRew') > 1;
+		Slim::Buttons::Input::Bar::changePos($client, 1, 'up') if $client->master->pluginData('activeFfwRew') > 1;
 	},
 	'song_scanner_rew' => sub {
 		my $client = shift;
-		Slim::Buttons::Input::Bar::changePos($client, -1, 'down') if $client->pluginData('activeFfwRew') > 1; 
+		Slim::Buttons::Input::Bar::changePos($client, -1, 'down') if $client->master->pluginData('activeFfwRew') > 1;
 	},
 );
 
 sub _jumptoscanner {
 	my $client = shift;
 	Slim::Buttons::Common::pushModeLeft($client, $modeName);
-	$client->pluginData(jumpToMode => 1);
+	$client->master->pluginData(jumpToMode => 1);
 }
 
 sub getFunctions {
@@ -333,40 +276,32 @@ sub setScanMode {
 
 	if ($method eq 'pop') {
 		Slim::Buttons::Common::popModeRight($client);
+		$client->master->pluginData(playingSong => undef);		# allow old song to be released
 		return;
 	}
 	
 	my @errorString;
 	my $duration;
 
-	my $playingSong = Slim::Player::Playlist::url($client);
+	my $playingSong = $client->playingSong();
 
 	# The currently selected position in the scanner bar
-	$client->pluginData(offset => 0);
+	$client->master->pluginData(offset => 0);
 	# The time (seconds since epoch) at which the user last moved the scanner bar
-	$client->pluginData(lastUpdateTime => 0);
+	$client->master->pluginData(lastUpdateTime => 0);
 	# The number of seconds since the scanner mode was entered 
-	$client->pluginData(activeFfwRew => 0);
+	$client->master->pluginData(activeFfwRew => 0);
 	# Whether the scanner was entered directly (e.g. by mapped button press) or via the Extras menu
-	$client->pluginData(jumpToMode => 0);
-	# URL of the playing song when the scanner was started
-	$client->pluginData(playingSong => $playingSong);
-	# How quickly to apply updates
-	$client->pluginData(updateInterval => 
-		Slim::Music::Info::isRemoteURL($playingSong) ? $REMOTE_UPDATE_INTERVAL : $LOCAL_UPDATE_INTERVAL);
+	$client->master->pluginData(jumpToMode => 0);
 
 	if ( $playingSong ) {
-		$duration = Slim::Player::Source::playingSongDuration($client);
-		
-		if ( !$duration ) {
-			# Try to get duration from the track object
-			$duration = Slim::Music::Info::getDuration($playingSong);
-			if ( !$duration && Slim::Music::Info::isPlaylist($playingSong) ) {
-				if ( my $entry = $client->remotePlaylistCurrentEntry ) {
-					$duration = Slim::Music::Info::getDuration($entry->url);
-				}
-			}	
-		}
+		# URL of the playing song when the scanner was started
+		$client->master->pluginData(playingSong => $playingSong);
+		# How quickly to apply updates
+		$client->master->pluginData(updateInterval => 
+		$playingSong->isRemote() ? $REMOTE_UPDATE_INTERVAL : $LOCAL_UPDATE_INTERVAL);
+
+		$duration = $playingSong->duration();
 		
 		if ( !$duration ) {
 			@errorString = ('PLUGIN_SONGSCANNER_ERR_UNKNOWNSIZE');
@@ -387,13 +322,13 @@ sub setScanMode {
 			}
 		);
 		# Make sure the jumpToMode flag isn't left over for next the mode is entered
-		$client->pluginData( jumpToMode => 0 );
+		$client->master->pluginData( jumpToMode => 0 );
 		return;		
 	}
 	$client->update;
 	my %params = %modeParams;
 
-	$params{'valueRef'} = \$client->pluginData->{'offset'};
+	$params{'valueRef'} = \$client->master->pluginData->{'offset'};
 
 	$params{'max'} = $duration;
 	
@@ -401,8 +336,8 @@ sub setScanMode {
 	if ($increment < 1) {$increment = 1;} elsif ($increment > 5) {$increment = 5;}
 	$params{'increment'} = $increment;
 
-	$client->pluginData(offset => Slim::Player::Source::songTime($client));
-	$client->pluginData(exitModeTime => 0);
+	$client->master->pluginData(offset => Slim::Player::Source::songTime($client));
+	$client->master->pluginData(exitModeTime => Time::HiRes::time() + $EXITMODE_INTERVAL);
 	
 	Slim::Buttons::Common::pushMode($client,'INPUT.Bar',\%params);
 	

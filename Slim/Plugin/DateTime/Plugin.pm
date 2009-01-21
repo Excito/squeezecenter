@@ -18,7 +18,7 @@ if ( main::SLIM_SERVICE ) {
 	require DateTime;
 }
 
-my $prefs = preferences('plugin.datetime');
+my $prefs = preferences(main::SLIM_SERVICE ? 'server' : 'plugin.datetime');
 
 sub getDisplayName {
 	return 'PLUGIN_SCREENSAVER_DATETIME';
@@ -132,7 +132,7 @@ sub screensaverDateTimelines {
 # BUG 3964: comment out until Dean has a final word on the UI for this.	
 # 	if ($client->display->hasScreen2) {
 # 		if ($client->display->linesPerScreen == 1) {
-# 			$display->{'screen2'}->{'center'} = [undef,Slim::Utils::DateTime::longDateF(undef,$prefs->get('dateformat'))];
+# 			$display->{'screen2'}->{'center'} = [undef,Slim::Utils::DateTime::longDateF(undef,$prefs->get('dateFormat'))];
 # 		} else {
 # 			$display->{'screen2'} = {};
 # 		}
@@ -167,7 +167,7 @@ sub dateTimeLines {
 			# Include the next alarm time in the overlay if there's room
 			if (!$narrow && !defined $currentAlarm) {
 				# Remove seconds from alarm time
-				my $timeStr = Slim::Utils::DateTime::timeF($nextAlarm->time % 86400, $prefs->client($client)->timeformat, 1);
+				my $timeStr = Slim::Utils::DateTime::timeF($nextAlarm->time % 86400, $prefs->client($client)->get('timeFormat'), 1);
 				$timeStr =~ s/(\d?\d\D\d\d)\D\d\d/$1/;
 				$overlay .=  " $timeStr";
 			}
@@ -196,13 +196,19 @@ sub showTimeOrAlarm {
 
 	my $nextAlarm = Slim::Utils::Alarm->getNextAlarm($client);
 	my $showAlarm = defined $nextAlarm && ($nextAlarm->nextDue - time < 86400);
+	
+	# Display message with power on brightness or 4, whichever is higher
+	my $powerOnBrightness = preferences('server')->client($client)->get('powerOnBrightness');
+	if ( $powerOnBrightness < 4 ) {
+		$powerOnBrightness = 4;
+	}
 
 	# Show time if it isn't already being displayed or it is but there's no next alarm
-	if (($currentMode !~ '\.datetime$' || $client->display->currBrightness() == 0)
+	if (($currentMode !~ '\.datetime$' || $client->display->currBrightness() < 4)
 		&& ($currentSbName ne $sbName || ! $showAlarm)) {
 
 		$client->showBriefly( dateTimeLines($client), {
-			'brightness' => 'powerOn',
+			'brightness' => $powerOnBrightness,
 			'duration' => 3,
 			'name' => $sbName,
 		});
@@ -213,7 +219,7 @@ sub showTimeOrAlarm {
 		my $line = $client->symbols('bell');
 
 		# Remove seconds from alarm time
-		my $timeStr = Slim::Utils::DateTime::timeF($nextAlarm->time % 86400, $prefs->client($client)->timeformat, 1);
+		my $timeStr = Slim::Utils::DateTime::timeF($nextAlarm->time % 86400, $prefs->client($client)->get('timeFormat'), 1);
 		$timeStr =~ s/(\d?\d\D\d\d)\D\d\d/$1/;
 		$line .=  " $timeStr";
 
@@ -225,7 +231,7 @@ sub showTimeOrAlarm {
 					$line,
 				]
 			},
-			{ 'duration' => 3, 'brightness' => 'powerOn'},
+			{ 'duration' => 3, 'brightness' => $powerOnBrightness },
 		);
 	}
 }

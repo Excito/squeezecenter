@@ -1,6 +1,6 @@
 package Slim::Player::ReplayGain;
 
-# $Id: ReplayGain.pm 20701 2008-06-12 20:25:09Z andy $
+# $Id: ReplayGain.pm 24330 2008-12-17 14:42:03Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -23,30 +23,20 @@ my $prefs = preferences('server');
 sub fetchGainMode {
 	my $class  = shift;
 	my $client = shift;
+	my $song   = shift;
 	my $rgmode = $prefs->client($client)->get('replayGainMode');
 
-	my $url = Slim::Player::Playlist::url($client, Slim::Player::Source::streamingSongIndex($client));
+	my $track  = $song->currentTrack();
+	my $url    = $track->url;
 	
 	# Allow plugins to override replaygain (i.e. Pandora should always use track gain)
-	my $handler = Slim::Player::ProtocolHandlers->handlerForURL( $url );
-	if ( $handler && $handler->can('trackGain') ) {
+	my $handler = $song->currentTrackHandler();
+	if ( $handler->can('trackGain') ) {
 		return $handler->trackGain( $client, $url );
 	}
 	
 	# Mode 0 is ignore replay gain
 	return undef if !$rgmode;
-
-	if (!$url) {
-
-		logError("Invalid URL for client song!: [$url]");
-		return 0;
-	}
-
-	my $track = Slim::Schema->rs('Track')->objectForUrl({
-		'url'      => $url,
-		'create'   => 1,
-		'readTags' => 1,
-	});
 
 	if (!blessed($track) || !$track->can('replay_gain')) {
 
@@ -55,7 +45,7 @@ sub fetchGainMode {
 
 	# Mode 1 is use track gain
 	if ($rgmode == 1) {
-		return $track->replay_gain();
+		return preventClipping( $track->replay_gain(), $track->replay_peak() );
 	}
 
 	my $album = $track->album();
@@ -67,16 +57,16 @@ sub fetchGainMode {
 
 	# Mode 2 is use album gain
 	if ($rgmode == 2) {
-		return $album->replay_gain();
+		return preventClipping( $album->replay_gain(), $album->replay_peak() );
 	}
 
 	# Mode 3 is determine dynamically whether to use album or track
 	if (defined $album->replay_gain() && ($class->trackAlbumMatch($client, -1) || $class->trackAlbumMatch($client, 1))) {
 
-		return $album->replay_gain();
+		return preventClipping( $album->replay_gain(), $album->replay_peak() );
 	}
 
-	return $track->replay_gain();
+	return preventClipping( $track->replay_gain(), $track->replay_peak() );
 }
 
 # Based on code from James Sutula's Dynamic Transition Updater plugin,
@@ -180,6 +170,21 @@ sub trackAlbumMatch {
 	}
 
 	return 0;
+}
+
+# Bug 5119
+# Reduce the gain value if necessary to avoid clipping
+sub preventClipping {
+	my ( $gain, $peak ) = @_;
+	
+	if ( $peak > 0 ) {
+		my $noclip = -20 * ( log($peak) / log(10) );
+		if ( $noclip < $gain ) {
+			return $noclip;
+		}
+	}
+	
+	return $gain;
 }
 
 1;

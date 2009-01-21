@@ -548,7 +548,8 @@ sub sound {
 		}
 
 		# Set up volume
-		my $currentVolume = $client->volume;
+		my $currentVolume = $prefs->client($client)->get('volume');
+		$self->{_originalVolume} = $currentVolume;
 		$log->debug("Current vol: $currentVolume Alarm vol: " . $self->volume);
 
 		if ($currentVolume != $self->volume) {
@@ -817,6 +818,20 @@ sub stop {
 		});
 	}
 
+	# Restore original volume if the music is stopped at the end of the alarm and
+	# the volume hasn't been changed from the alarm volume level.  Do this after a pause
+	# to allow any volume fades to complete.
+	Slim::Utils::Timers::setTimer($self, Time::HiRes::time() + 1, sub {
+		# Get volume level directly via the pref as we don't care about temporary
+		# volume levels (vol is reported as 0 after a mute)
+		my $vol = $prefs->client($client)->get('volume');
+		if (! $client->isPlaying && $vol == $self->volume) {
+			$log->debug('Restoring pre-alarm volume level: ' . $self->{_originalVolume});
+			$client->volume($self->{_originalVolume});
+		}
+	});
+	
+
 	my $class = ref $self;
 	$class->popAlarmScreensaver($client);
 
@@ -1031,7 +1046,7 @@ sub _checkPlaying {
 	
 	$log->is_debug && $log->debug( 'Current playmode: ' . Slim::Player::Source::playmode($client) );
 
-	if (! (Slim::Player::Source::playmode($client) =~ /play/)) {
+	if (!$client->isPlaying) {
 		$log->debug('Alarm active but client not playing');
 		$self->_playFallback();
 	}
@@ -1070,7 +1085,7 @@ sub _playFallback {
 sub _timeout {
 	my $self = shift;
 
-	my $client = $self->client;
+	my $client = $self->client || return;
 
 	$log->debug('Alarm ' . $self->id . ' ending automatically due to timeout');
 
@@ -1358,7 +1373,7 @@ sub setRTCAlarm {
 	if (defined $nextAlarm) {
 		my $nextDue = $nextAlarm->nextDue;
 
-		my $secsToAlarm = $now - $nextDue;
+		my $secsToAlarm = $nextDue - $now;
 		if ($secsToAlarm && $secsToAlarm < 86400) {
 			# Alarm due in next 24 hours
 
@@ -1628,14 +1643,14 @@ sub getPlaylists {
 	# Stringify keys for given client if they have been enclosed in curly braces 
 	foreach my $type (@playlists) {
 		if ( $type->{type} eq uc( $type->{type} ) ) {
-			$type->{type} = $client->string( $type->{type} );
+			$type->{type} = Slim::Utils::Strings::cstring($client, $type->{type} );
 		}
 		
 		foreach my $playlist (@{$type->{items}}) {
 			# Stringify keys that are enclosed in curly braces
 			my ($stringTitle) = $playlist->{title} =~ /^{(.*)}$/; 
 			if (defined $stringTitle) {
-				$stringTitle = $client->string($stringTitle);
+				$stringTitle = Slim::Utils::Strings::cstring($client, $stringTitle);
 			} else {
 				$stringTitle = $playlist->{title};
 			}

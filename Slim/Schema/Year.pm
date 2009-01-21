@@ -1,6 +1,6 @@
 package Slim::Schema::Year;
 
-# $Id: Year.pm 18635 2008-04-10 02:11:30Z andy $
+# $Id: Year.pm 18637 2008-04-10 02:11:54Z andy $
 
 use strict;
 use base 'Slim::Schema::DBI';

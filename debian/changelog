@@ -1,4 +1,95 @@
-squeezecenter (7.2.1.dfsg-1) testing; urgency=low
+squeezecenter (7.3.2.dfsg-2) jaunty; urgency=low
+
+  * fix semicolon in require 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 21 Jan 2009 14:49:58 +0100
+
+squeezecenter (7.3.2.dfsg-1) claire; urgency=low
+
+  * New upstream release
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 21 Jan 2009 13:54:41 +0100
+
+squeezecenter (7.3.1.dfsg-9) intrepid; urgency=low
+
+  * gonna kill that cat :(
+
+ -- Carl Fürstenberg <carl@excito.com>  Fri, 02 Jan 2009 15:18:58 +0100
+
+squeezecenter (7.3.1.dfsg-8) intrepid; urgency=low
+
+  * more postrm and add dir
+
+ -- Carl Fürstenberg <carl@excito.com>  Fri, 02 Jan 2009 15:11:56 +0100
+
+squeezecenter (7.3.1.dfsg-7) intrepid; urgency=low
+
+  * remake the dir on removal ir link
+
+ -- Carl Fürstenberg <carl@excito.com>  Fri, 02 Jan 2009 14:59:14 +0100
+
+squeezecenter (7.3.1.dfsg-6) intrepid; urgency=low
+
+  * should probably only work on files that has been "manually" added.
+
+ -- Carl Fürstenberg <carl@excito.com>  Fri, 02 Jan 2009 14:32:35 +0100
+
+squeezecenter (7.3.1.dfsg-5) intrepid; urgency=low
+
+  * really final fix (hopefully) 
+
+ -- Carl Fürstenberg <carl@excito.com>  Fri, 02 Jan 2009 14:20:43 +0100
+
+squeezecenter (7.3.1.dfsg-4) intrepid; urgency=low
+
+  * final fix of the restart problem
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 29 Dec 2008 18:03:21 +0100
+
+squeezecenter (7.3.1.dfsg-3) intrepid; urgency=low
+
+  * try to fix the firmware problem again, also this might help restarting
+    fully.
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 29 Dec 2008 17:45:51 +0100
+
+squeezecenter (7.3.1.dfsg-2) intrepid; urgency=low
+
+  * Add fixes for the firmware update location 
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 29 Dec 2008 17:18:13 +0100
+
+squeezecenter (7.3.1.dfsg-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 29 Dec 2008 16:14:03 +0100
+
+squeezecenter (7.2.99+7.3r25104.dfsg-4) unstable; urgency=low
+
+  * working out the dbconfig import
+
+ -- Carl Fürstenberg <carl@excito.com>  Thu, 27 Nov 2008 18:06:58 +0100
+
+squeezecenter (7.2.99+7.3r25104.dfsg-3) intrepid; urgency=low
+
+  * unset wizardDone setting 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 26 Nov 2008 16:43:53 +0100
+
+squeezecenter (7.2.99+7.3r25104.dfsg-2) intrepid; urgency=low
+
+  * bump dependices versions 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 26 Nov 2008 16:21:40 +0100
+
+squeezecenter (7.2.99+7.3r25104.dfsg-1) intrepid; urgency=low
+
+  * New upstream release
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 26 Nov 2008 15:56:32 +0100
+
+squeezecenter (7.2.1.dfsg-1) intrepid; urgency=low
 
   * New upstream release
 

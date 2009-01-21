@@ -1,6 +1,6 @@
 package Slim::Networking::Select;
 
-# $Id: Select.pm 21788 2008-07-15 20:01:58Z andy $
+# $Id: Select.pm 21790 2008-07-15 20:18:07Z andy $
 
 # SqueezeCenter Copyright 2003-2007 Logitech.
 # This program is free software; you can redistribute it and/or

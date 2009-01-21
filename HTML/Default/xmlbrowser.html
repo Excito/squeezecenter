@@ -22,17 +22,19 @@ IF hasArtwork;
 END %]
 
 [%- extJsScripts = BLOCK -%]
-	<script type="text/javascript" src="[% webroot %]html/Browse.js?r=[% revision %]"></script>
-
-	[% IF hasArtwork %]
 	<script type="text/javascript">
-		[% PROCESS jsString id='SWITCH_TO_LIST' jsId='switch_to_list' %]
-		[% PROCESS jsString id='SWITCH_TO_EXTENDED_LIST' jsId='switch_to_extended_list' %]
-		[% PROCESS jsString id='SWITCH_TO_GALLERY' jsId='switch_to_gallery' %]
-		[% PROCESS jsString id='ALBUM_DISPLAY_OPTIONS' jsId='display_options' %]
-		var orderByList;
+		[% IF hasArtwork %]
+			[% PROCESS jsString id='SWITCH_TO_LIST' jsId='switch_to_list' %]
+			[% PROCESS jsString id='SWITCH_TO_EXTENDED_LIST' jsId='switch_to_extended_list' %]
+			[% PROCESS jsString id='SWITCH_TO_GALLERY' jsId='switch_to_gallery' %]
+			[% PROCESS jsString id='ALBUM_DISPLAY_OPTIONS' jsId='display_options' %]
+			var orderByList;
+		[% END %]
+
+		Ext.onReady(function(){
+			Browse.init();
+		});
 	</script>
-	[% END %]
 [% END %]
 
 [% IF query %]
@@ -50,7 +52,7 @@ END %]
 	[% END %]
 [% END # filter -%]
 
-[% IF NOT ajaxUpdate %][% PROCESS pageheader.html dontscroll = (streaminfo ? 0 : 1) %][% IF !streaminfo %]<div id="mainbody">[% END %][% END %]
+[% IF NOT ajaxUpdate %][% PROCESS pageheader.html dontscroll = (streaminfo ? 0 : 1) useSpecialExt="-browse" %][% IF !streaminfo %]<div id="mainbody">[% END %][% END %]
 
 [% IF msg %][% WRAPPER contentcontainer %]
 	<div class="message">[% msg %]</div>
@@ -66,21 +68,6 @@ END %]
 
 	[% PROCESS xmlbrowser_details.html %]
 [% END %]
-
-[% IF search;
-	WRAPPER contentitem controls = xmlSearchControls;
-		"SEARCH" | string %]
-		<span class="browsedbControls">
-			<form id="searchForm" name="searchForm" method="GET">
-				<input type="hidden" value="[% player %]" name="player" />
-				<input type="hidden" value="[% sess %]" name="sess" />
-				<input type="hidden" name="submit" class="stdclick" value="[% "SEARCH" | string %]"/>
-				<input type="text" class="x-form-focus searchInput" name="query" value="[% query %]"/>
-				<input type="image" src="[% webroot %]html/images/b_search.gif" width="17px" height="17px" alt="[% "SEARCH" | string %]">
-			</form>
-		</span>					
-	[% END;
-END %]
 
 [%- IF items.size -%]
 	 [%- # Maintain correct index values 	
@@ -194,7 +181,7 @@ END %]
 			[% ELSE %]
 				[%- WRAPPER $contentwrapper controls = 'gencontrol' addClasses = item.type=='text' ? 'defaultCursor' : '' %]
 					[% IF artwork == 1 || path == 'trackinfo.html';
-						item.size = 100;
+						item.size = thumbSize || 100;
 						itemobj.id = loop.count;
 					END %]
 

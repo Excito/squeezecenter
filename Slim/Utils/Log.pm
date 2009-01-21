@@ -1,6 +1,6 @@
 package Slim::Utils::Log;
 
-# $Id: Log.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Log.pm 23709 2008-10-28 06:35:06Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Dan Sully, Logitech.
 # This program is free software; you can redistribute it and/or
@@ -40,6 +40,8 @@ use Exporter::Lite;
 use File::Path;
 use File::Spec;
 use Log::Log4perl;
+use Log::Log4perl::Appender::Screen;
+use Log::Log4perl::Appender::File;
 use Path::Class;
 use Scalar::Util qw(blessed);
 
@@ -87,6 +89,12 @@ sub init {
 	if ($args->{'logdir'} && -d $args->{'logdir'}) {
 
 		$logDir = $args->{'logdir'};
+	}
+
+	# call poor man's log rotation
+	if (!main::SCANNER && !main::SLIM_SERVICE) {
+		
+		Slim::Utils::OSDetect::getOS->logRotate($logDir);
 	}
 
 	# If the user has specified a log config, or there is a log config written
@@ -749,12 +757,34 @@ sub _readConfig {
 	return %config;
 }
 
-# log4perl.logger
-sub _defaultCategories {
-	my $class = shift;
+sub logGroups {
+	return {
+		DEBUG_SERVER_CHOOSE => {
+			'server'                 => 'DEBUG',
+			'server.plugins'         => 'DEBUG',
+		},
+		DEBUG_RADIO => {
+			'formats.audio'          => 'DEBUG',
+			'network.asyncdns'       => 'DEBUG',
+			'network.squeezenetwork' => 'DEBUG',
+		},
+		DEBUG_TRANSCODING => {
+			'player.source'          => 'DEBUG',
+			'player.streaming'       => 'DEBUG',
+		},
+		DEBUG_SCANNER_CHOOSE => {
+			'scan'                   => 'DEBUG',
+			'scan.scanner'           => 'DEBUG',
+			'scan.import'            => 'DEBUG',
+			'artwork'                => 'DEBUG',
+		},
+	};
+}
 
-	my %defaultCategories = (
-
+sub logLevels {
+	my $group = $_[1];
+	
+	my $categories = {
 		'server'                     => 'ERROR',
 		'server.memory'              => 'OFF',
 		'server.plugins'             => 'ERROR',
@@ -782,6 +812,7 @@ sub _defaultCategories {
 		'formats.audio'              => 'ERROR',
 		'formats.xml'                => 'ERROR',
 		'formats.playlists'          => 'ERROR',
+		'formats.metadata'           => 'ERROR',
 
 		'database.info'              => 'ERROR',
 		'database.mysql'             => 'ERROR',
@@ -815,13 +846,32 @@ sub _defaultCategories {
 		'scan.scanner'               => 'ERROR',
 		'scan.import'                => 'ERROR',
 
+		'wizard'                     => 'ERROR',
+
 		'perfmon'                    => 'WARN, screen-raw, perfmon', # perfmon assumes this is set to WARN
-	);
+	};
+	
+	return $categories unless $group;
+	
+	my $logGroups = logGroups();
+
+	foreach (keys %{ $logGroups->{$group} }) {
+		$categories->{$_} = $logGroups->{$group}->{$_};
+	}
+
+	return $categories;
+}
+
+# log4perl.logger
+sub _defaultCategories {
+	my $class = shift;
+
+	my $defaultCategories = logLevels();
 
 	# Map our shortened names to the ones l4p wants.
 	my %mappedCategories = ();
 
-	while (my ($category, $level) = each %defaultCategories) {
+	while (my ($category, $level) = each %$defaultCategories) {
 
 		$mappedCategories{"log4perl.logger.$category"} = $level;
 

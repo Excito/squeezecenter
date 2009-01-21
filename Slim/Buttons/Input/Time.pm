@@ -1,6 +1,6 @@
 package Slim::Buttons::Input::Time;
 
-# $Id: Time.pm 23305 2008-09-26 12:27:19Z mherger $
+# $Id: Time.pm 23311 2008-09-26 13:22:54Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

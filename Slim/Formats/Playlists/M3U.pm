@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists::M3U;
 
-# $Id: M3U.pm 20496 2008-06-08 14:20:51Z andy $
+# $Id: M3U.pm 20499 2008-06-08 14:21:54Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 #

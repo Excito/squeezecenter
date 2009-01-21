@@ -1,6 +1,6 @@
 package Slim::Schema::Album;
 
-# $Id: Album.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Album.pm 22939 2008-08-28 16:42:33Z andy $
 
 use strict;
 use base 'Slim::Schema::DBI';

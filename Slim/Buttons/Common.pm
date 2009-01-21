@@ -1,6 +1,6 @@
 package Slim::Buttons::Common;
 
-# $Id: Common.pm 23302 2008-09-26 08:29:23Z mherger $
+# $Id: Common.pm 24460 2009-01-01 12:10:56Z adrian $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -39,17 +39,16 @@ use warnings;
 
 use Scalar::Util qw(blessed);
 
+use Slim::Buttons::Alarm;
 use Slim::Buttons::SqueezeNetwork;
 use Slim::Buttons::Volume;
 use Slim::Buttons::XMLBrowser;
 use Slim::Player::Client;
 use Slim::Utils::DateTime;
+use Slim::Utils::Favorites;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Buttons::Block;
-use Slim::Buttons::SqueezeNetwork;
-use Slim::Buttons::XMLBrowser;
-use Slim::Buttons::Volume;
 use Slim::Utils::Prefs;
 
 if ( main::SLIM_SERVICE ) {
@@ -281,13 +280,8 @@ our %functions = (
 	'fwd' => sub  {
 		my $client = shift;
 
-		# ignore if we aren't playing anything or if we're scanning
-		my $playlistlen = Slim::Player::Playlist::count($client);
-		my $rate = Slim::Player::Source::rate($client);
-
-		if ($playlistlen == 0 || ($rate != 0 && $rate != 1)) {
-			return;
-		}
+		# ignore if we aren't playing anything 
+		return unless Slim::Player::Playlist::count($client);
 
 		$client->execute(["playlist", "jump", "+1"]);
 	},
@@ -295,13 +289,8 @@ our %functions = (
 	'rew' => sub  {
 		my $client = shift;
 
-		# ignore if we aren't playing anything or if we're scanning
-		my $playlistlen = Slim::Player::Playlist::count($client);
-		my $rate = Slim::Player::Source::rate($client);
-
-		if ($playlistlen == 0 || ($rate != 0 && $rate != 1)) {
-			return;
-		}
+		# ignore if we aren't playing anything
+		return unless Slim::Player::Playlist::count($client);
 
 		# either starts the same song over, or the previous one, depending on whether we jumped back.
 		if (Time::HiRes::time() - Slim::Hardware::IR::lastIRTime($client) < 1.0) {
@@ -321,33 +310,11 @@ our %functions = (
 		my $funct    = shift;
 		my $functarg = shift;
 
-		# ignore if we aren't playing anything or if we're scanning
-		my $playlistlen = Slim::Player::Playlist::count($client);
-		my $rate        = Slim::Player::Source::rate($client);
-
-		if ($playlistlen == 0) {
-			return;
-		}
+		# ignore if we aren't playing anything
+		return unless Slim::Player::Playlist::count($client);
 
 		if (!defined $functarg) {
 			$functarg = '';
-		}
-
-		# ignore if we're scanning that way already			
-		if ($rate > 1 && $functarg eq 'fwd') {
-			return;
-		}
-
-		if ($rate < 0 && $functarg eq 'rew') {
-			return;
-		}
-
-		# if we aren't scanning that way, then use it to stop scanning  and just play.
-		if ($rate != 0 && $rate != 1) {
-
-			$client->execute(["play"]);
-
-			return;	
 		}
 
 		# either starts the same song over, or the previous one, or
@@ -409,47 +376,6 @@ our %functions = (
 		}
 
 		$client->execute(['gototime', $dir]);
-	},
-
-	'scan' => sub {
-		my ($client, $funct, $functarg) = @_;
-
-		my $rate = Slim::Player::Source::rate($client);
-
-		if (!defined $functarg) {
-
-			return;
-
-		} elsif ($functarg eq 'fwd') {
-
-			Slim::Buttons::Common::pushMode($client, 'playlist');
-
-			if ($rate < 0) {
-				$rate = 1;
-			}
-
-			if (abs($rate) == $SCAN_RATE_MAX_MULTIPLIER) {
-				return;
-			}
-
-			$client->execute(['rate', $rate * $SCAN_RATE_MULTIPLIER]);
-
-		} elsif ($functarg eq 'rew') {
-
-			Slim::Buttons::Common::pushMode($client, 'playlist');
-
-			if ($rate > 0) {
-				$rate = 1;
-			}
-
-			if (abs($rate) == $SCAN_RATE_MAX_MULTIPLIER) {
-				return;
-			}
-
-			$client->execute(['rate', -abs($rate * $SCAN_RATE_MULTIPLIER)]);
-		}
-
-		$client->update();
 	},
 
 	'pause' => sub  {
@@ -833,6 +759,11 @@ our %functions = (
 					$type = 'audio';
 				}
 				
+				# There may be an alternate URL for playlist
+				if ( $type eq 'playlist' && $obj->{playlist} ) {
+					$url = $obj->{playlist};
+				}
+				
 				$parser = $obj->{'parser'};
 			}
 
@@ -1054,9 +985,9 @@ our %functions = (
 		# first make sure we're playing, and its a valid song.
 		my $remaining = 0;
 
-		if (Slim::Player::Source::playingSong($client) && $client->playmode =~ /play/) { 
+		if ($client->isPlaying()) { 
 
-			my $dur = Slim::Player::Source::playingSongDuration($client);
+			my $dur = $client->controller()->playingSongDuration();
 
 			# calculate the time based remaining, in seconds then into fractional minutes.
 			$remaining = $dur - Slim::Player::Source::songTime($client);
@@ -1288,9 +1219,27 @@ our %functions = (
 		} else {
 
 			$log->info("Switching to home menu.");
-			Slim::Buttons::Home::jump($client, 'NOW_PLAYING');
 			Slim::Buttons::Common::setMode($client, 'home');
 			$client->pushRight();
+		}
+	},
+
+	'zap' => sub {
+		my $client = shift;
+		
+		if (Slim::Player::Playlist::count($client) > 0) {
+
+			# we zap the displayed song in playlist mode and playing song in all others
+			my $index = mode($client) eq 'playlist' ? Slim::Buttons::Playlist::browseplaylistindex($client) : 
+				Slim::Player::Source::playingSongIndex($client);
+			
+			$client->showBriefly( {
+				'line' => [ $client->string('ZAPPING_FROM_PLAYLIST'), 
+							Slim::Music::Info::standardTitle($client, Slim::Player::Playlist::song($client, $index)) ]
+			   }, {'firstline' => 1, block => 1 }
+			); 
+			
+			$client->execute(["playlist", "zap", $index]);
 		}
 	},
 );
@@ -2357,7 +2306,11 @@ sub _periodicUpdate {
 	my $display = $client->display;
 
 	if ($update && !$display->updateMode) {
-		$display->update( $client->curLines({ periodic => 1 }) );
+
+		if (my $screen = $client->curLines({ periodic => 1 })) {
+
+			$display->update( $screen );
+		}
 	}
 
 	if ($update2 && (!$display->updateMode || $display->screen2updateOK) && (my $linefunc = $client->lines2periodic()) ) {

@@ -1,6 +1,6 @@
 package Slim::Networking::Async;
 
-# $Id: Async.pm 22297 2008-08-01 15:20:13Z andy $
+# $Id: Async.pm 22300 2008-08-01 15:22:29Z andy $
 
 # SqueezeCenter Copyright 2003-2007 Logitech.
 # This program is free software; you can redistribute it and/or

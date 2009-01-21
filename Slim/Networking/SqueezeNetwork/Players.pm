@@ -1,6 +1,6 @@
 package Slim::Networking::SqueezeNetwork::Players;
 
-# $Id: Players.pm 21632 2008-07-09 21:30:45Z andy $
+# $Id: Players.pm 21635 2008-07-09 21:32:34Z andy $
 
 # Keep track of players that are connected to SN
 

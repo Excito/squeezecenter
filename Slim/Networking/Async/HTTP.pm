@@ -1,6 +1,6 @@
 package Slim::Networking::Async::HTTP;
 
-# $Id: HTTP.pm 22848 2008-08-22 14:16:11Z andy $
+# $Id: HTTP.pm 24481 2009-01-04 12:54:21Z adrian $
 
 # SqueezeCenter Copyright 2003-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -51,7 +51,7 @@ use Slim::Utils::Timers;
 
 my $prefs = preferences('server');
 
-my $cookieJar = HTTP::Cookies->new(	file => catdir($prefs->get('cachedir'), 'cookies.dat'), autosave => 1 );
+my $cookieJar;
 
 my $log = logger('network.asynchttp');
 
@@ -64,6 +64,10 @@ __PACKAGE__->mk_classaccessor( bufsize => 16 * 1024 );
 
 # Max redirects to follow
 __PACKAGE__->mk_classaccessor( maxRedirect => 7 );
+
+sub init {
+	$cookieJar = HTTP::Cookies->new( file => catdir($prefs->get('cachedir'), 'cookies.dat'), autosave => 1 );
+}
 
 sub new_socket {
 	my $self = shift;
@@ -187,7 +191,10 @@ sub add_headers {
 	$headers->init_header( Accept          => '*/*' );
 	$headers->init_header( 'Cache-Control' => 'no-cache' );
 	$headers->init_header( Connection      => 'close' );
-	$headers->init_header( 'Icy-Metadata'  => 1 );
+	
+	if ( $headers->header('User-Agent') !~ /^NSPlayer/ ) {
+		$headers->init_header( 'Icy-Metadata' => 1 );
+	}
 
 	# Add cookies
 	if ( !main::SLIM_SERVICE ) {
@@ -323,7 +330,7 @@ sub _http_read {
 		}
 		
 		# Handle redirects
-		if ( $code =~ /^30\d/ ) {
+		if ( $code =~ /^30[123]$/ ) {
 
 			my $location = $self->response->header('Location');
 			
@@ -403,7 +410,7 @@ sub _http_read_body {
 	}
 	
 	# Are we saving directly to a file?
-	if ( $self->saveAs && !$self->fh ) {
+	if ( $result && $self->saveAs && !$self->fh ) {
 		open my $fh, '>', $self->saveAs;
 		binmode $fh;
 
@@ -418,7 +425,7 @@ sub _http_read_body {
 		$self->fh( $fh );
 	}
 	
-	if ( $self->saveAs ) {
+	if ( $result && $self->saveAs ) {
 		# Write directly to a file
 		$self->fh->write( $buf, length $buf );
 	}

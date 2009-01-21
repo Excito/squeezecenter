@@ -5,7 +5,7 @@ IR						/usr/share/squeezecenter
 SQL						/usr/share/squeezecenter
 strings.txt				/usr/share/squeezecenter
 MySQL					/usr/share/squeezecenter
-Firmware				/var/lib/squeezecenter
+Firmware				/usr/share/squeezecenter
 *.conf					/etc/squeezecenter
 
 #Essential skins

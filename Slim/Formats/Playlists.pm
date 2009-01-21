@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists;
 
-# $Id: Playlists.pm 23436 2008-10-06 18:07:38Z andy $
+# $Id: Playlists.pm 24506 2009-01-05 15:18:13Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 #
@@ -41,6 +41,13 @@ sub parseList {
 	# We want the real type from a internal playlist.
 	if ($type eq 'ssp') {
 		$type = Slim::Music::Info::typeFromSuffix($url);
+	}
+	
+	# Bug 9970, if a FLAC file has both an embedded cue sheet and an external
+	# cue sheet, scanner will try to scan the FLAC file as a cue sheet, resulting
+	# in reading the entire file into memory.
+	if ( $type eq 'fec' ) {
+		return wantarray ? () : undef;
 	}
 
 	$log->info("Type: $type for: $url");

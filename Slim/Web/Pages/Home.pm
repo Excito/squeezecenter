@@ -1,6 +1,6 @@
 package Slim::Web::Pages::Home;
 
-# $Id: Home.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Home.pm 23855 2008-11-08 16:09:44Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -133,11 +133,15 @@ sub home {
 		Slim::Plugin::DigitalInput::Plugin->webPages($client->hasDigitalIn);
 	}
 
-	# More leakage from the LineIn 'plugin'
+	# More leakage from the LineIn/Out 'plugins'
 	#
-	# If our current player has line in, show the menu.
+	# If our current player has line, show the menu.
 	if ($client && Slim::Utils::PluginManager->isEnabled('Slim::Plugin::LineIn::Plugin')) {
 		Slim::Plugin::LineIn::Plugin->webPages($client);
+	}
+
+	if ($client && Slim::Utils::PluginManager->isEnabled('Slim::Plugin::LineOut::Plugin')) {
+		Slim::Plugin::LineOut::Plugin->webPages($client);
 	}
 
 	if (my $favs = Slim::Utils::Favorites->new($client)) {
@@ -148,8 +152,20 @@ sub home {
 	# XXX: non-Default templates will need to be updated to use this sort order
 	$params->{additionalLinkOrder} = {};
 	
+	$params->{additionalLinks} = {};
+	
+	# Get sort order for plugins
+	my $pluginWeights = Slim::Plugin::Base->getWeights();
+	
+	my $conditions = \%Slim::Web::Pages::pageConditions;
+	
 	for my $menu ( keys %Slim::Web::Pages::additionalLinks ) {
 		my @sorted = sort {
+			(
+				( $pluginWeights->{$a} || 0 ) <=>
+				( $pluginWeights->{$b} || 0 )
+			)
+			||
 			( 
 				( $prefs->get("rank-$b") || 0 ) <=> 
 				( $prefs->get("rank-$a") || 0 )
@@ -159,13 +175,24 @@ sub home {
 				lc( Slim::Buttons::Home::cmpString($client, $a) ) cmp
 				lc( Slim::Buttons::Home::cmpString($client, $b) )
 			)
-		} 
+		}
 		keys %{ $Slim::Web::Pages::additionalLinks{ $menu } };
 
 		$params->{additionalLinkOrder}->{ $menu } = \@sorted;
+		
+		$params->{additionalLinks}->{ $menu } = {
+			map {
+				$_ => $Slim::Web::Pages::additionalLinks{ $menu }->{ $_ },
+			}
+			# Filter out items that don't match condition
+			grep {
+				!$conditions->{$_}
+				||
+				$conditions->{$_}->( $client )
+			}
+			keys %{ $Slim::Web::Pages::additionalLinks{ $menu } }
+		};
 	}
-	
-	$params->{additionalLinks} = \%Slim::Web::Pages::additionalLinks;
 
 	$class->addPlayerList($client, $params);
 	

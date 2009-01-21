@@ -16,7 +16,10 @@ use Slim::Player::Sync;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Utils::Prefs;
-use Slim::Control::Jive;
+
+if (!main::SCANNER) {
+	require Slim::Control::Jive;
+}
 
 my $prefs = preferences('server');
 
@@ -26,6 +29,7 @@ our %shuffleTypes = (
 	1 => 'track',
 	2 => 'album',
 );
+
 
 #
 # accessors for playlist information
@@ -48,8 +52,10 @@ sub shuffleType {
 }
 
 sub song {
-	my $client = shift;
-	my $index = shift;
+
+	my $client  = shift;
+	my $index   = shift;
+	my $refresh = shift || 0;
 
 	if (count($client) == 0) {
 		return;
@@ -70,13 +76,17 @@ sub song {
 		$objOrUrl = ${playList($client)}[$index];
 	}
 
-	if ($objOrUrl && !blessed($objOrUrl)) {
+	if ( $objOrUrl && ($refresh || !blessed($objOrUrl)) ) {
 
-		 $objOrUrl = Slim::Schema->rs('Track')->objectForUrl({
+		$objOrUrl = Slim::Schema->rs('Track')->objectForUrl({
 			'url'      => $objOrUrl,
 			'create'   => 1,
 			'readTags' => 1,
 		});
+		
+		if ($refresh) {
+			$objOrUrl = refreshTrack($client, $objOrUrl->url);
+		}
 	}
 
 	return $objOrUrl;
@@ -100,6 +110,8 @@ sub refreshTrack {
 		}
 		$i++;
 	}
+	
+	return $track;
 }
 
 sub url {
@@ -111,7 +123,7 @@ sub url {
 sub shuffleList {
 	my ($client) = shift;
 	
-	$client = Slim::Player::Sync::masterOrSelf($client);
+	$client = $client->master();
 	
 	return $client->shufflelist;
 }
@@ -119,7 +131,7 @@ sub shuffleList {
 sub playList {
 	my ($client) = shift;
 
-	$client = Slim::Player::Sync::masterOrSelf($client);
+	$client = $client->master();
 	
 	return $client->playlist;
 }
@@ -128,12 +140,10 @@ sub shuffle {
 	my $client = shift;
 	my $shuffle = shift;
 	
-	$client = Slim::Player::Sync::masterOrSelf($client);
+	$client = $client->master();
 
 	if (defined($shuffle)) {
 		$prefs->client($client)->set('shuffle', $shuffle);
-		# tell jive we've changed that setting
-		Slim::Control::Jive::shuffleSettings($client);
 	}
 	
 	# If Random Play mode is active, return 0
@@ -150,15 +160,44 @@ sub repeat {
 	my $client = shift;
 	my $repeat = shift;
 	
-	$client = Slim::Player::Sync::masterOrSelf($client);
+	$client = $client->master();
 
 	if (defined($repeat)) {
 		$prefs->client($client)->set('repeat', $repeat);
-		# tell jive we've changed that setting
-		Slim::Control::Jive::repeatSettings($client);
 	}
 	
 	return $prefs->client($client)->get('repeat');
+}
+
+sub playlistMode {
+	my $client  = shift;
+	my $mode    = shift;
+
+	$client     = $client->master();
+
+	my $currentSetting = $prefs->client($client)->get('playlistmode');
+
+	if ( defined($mode) && $mode ne $currentSetting ) {
+		$prefs->client($client)->set('playlistmode', $mode);
+
+		my %modeStrings = (
+			disabled => 'PLAYLIST_MODE_DISABLED',
+			on       => 'PLAYLIST_MODE_ON',
+			off      => 'PLAYLIST_MODE_OFF',
+			party    => 'PARTY_MODE_ON',
+		);
+		$client->showBriefly({
+			duration => 3,
+			line     => [ "\n", $client->string($modeStrings{$mode}) ],
+			jive     => {
+				'type'    => 'popupplay',
+				'text'    => [ $client->string($modeStrings{$mode}) ],
+			}
+		});
+	}
+
+	return $prefs->client($client)->get('playlistmode');
+
 }
 
 sub copyPlaylist {
@@ -175,7 +214,7 @@ sub copyPlaylist {
 }
 
 sub removeTrack {
-	my $client = shift->masterOrSelf();
+	my $client = shift->master();
 	my $tracknum = shift;
 	
 	my $playlistIndex = ${shuffleList($client)}[$tracknum];
@@ -240,15 +279,8 @@ sub removeTrack {
 		if ($tracknum >= $songcount) {
 			$tracknum = $songcount - 1;
 		}
-
-		if ($oldMode eq "play") {
-
-			Slim::Player::Source::jumpto($client, $tracknum);
-
-		} else {
-
-			Slim::Player::Source::streamingSongIndex($client, $tracknum, 1);
-		}
+		
+		$client->execute([ 'playlist', 'jump', $tracknum, $oldMode ne "play" ]);
 	}
 
 	# browseplaylistindex could return a non-sensical number if we are not in playlist mode
@@ -359,13 +391,13 @@ sub removeMultipleTracks {
 		$newTrack = 0;
 	}
 
-	$client = Slim::Player::Sync::masterOrSelf($client);
+	$client = $client->master();
 	
 	@{$client->shufflelist} = @reshuffled;
 
 	if ($stopped && ($oldMode eq "play")) {
 
-		Slim::Player::Source::jumpto($client,$newTrack);
+		$client->execute([ 'playlist', 'jump', $newTrack ]);
 
 	} else {
 
@@ -384,7 +416,7 @@ sub refreshPlaylist {
 	my $index = shift;
 
 	# make sure we're displaying the new current song in the playlist view.
-	for my $everybuddy ($client, Slim::Player::Sync::syncedWith($client)) {
+	for my $everybuddy ($client->syncGroupActiveMembers()) {
 		if ($everybuddy->isPlayer()) {
 			Slim::Buttons::Playlist::jump($everybuddy,$index);
 		}
@@ -398,7 +430,7 @@ sub moveSong {
 	my $size = shift;
 	my $listref;
 	
-	$client = Slim::Player::Sync::masterOrSelf($client);
+	$client = $client->master();
 	
 	if (!defined($size)) {
 		$size = 1;
@@ -478,7 +510,7 @@ sub fischer_yates_shuffle {
 #reshuffle - every time the playlist is modified, the shufflelist should be updated
 #		We also invalidate the htmlplaylist at this point
 sub reshuffle {
-	my $client = Slim::Player::Sync::masterOrSelf(shift);
+	my $client = shift->master();
 
 	my $dontpreservecurrsong = shift;
   
@@ -490,7 +522,6 @@ sub reshuffle {
 
 		@{$listRef} = ();
 
-		Slim::Player::Source::streamingSongIndex($client, 0, 1);
 		refreshPlaylist($client);
 
 		return;
@@ -663,11 +694,6 @@ sub reshuffle {
 
 		Slim::Player::Source::flushStreamingSong($client);
 	}
-	elsif ($client->playmode() eq 'playout-stop' &&
-		   Slim::Player::Source::playingSongIndex($client) != (count($client) - 1)) {
-
-		Slim::Player::Source::playmode($client, 'playout-play');
-	}
 
 	refreshPlaylist($client);
 }
@@ -804,7 +830,7 @@ sub modifyPlaylistCallback {
 
 	$log->info("saveCurrentSong is: [$saveCurrentSong]");
 
-	my @syncedclients = (Slim::Player::Sync::syncedWith($client), $client);
+	my @syncedclients = ($client->controller()->allPlayers());
 
 	my $playlist = Slim::Player::Playlist::playList($client);
 	my $currsong = (Slim::Player::Playlist::shuffleList($client))->[Slim::Player::Source::playingSongIndex($client)];

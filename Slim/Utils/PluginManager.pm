@@ -5,7 +5,7 @@ package Slim::Utils::PluginManager;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 #
-# $Id: PluginManager.pm 22977 2008-08-30 17:50:50Z andy $
+# $Id: PluginManager.pm 24481 2009-01-04 12:54:21Z adrian $
 
 # TODO:
 #
@@ -55,7 +55,6 @@ use constant OP_NEEDS_DISABLE   => "needs-disable";
 
 use constant CACHE_VERSION => 2;
 
-my @pluginDirs     = Slim::Utils::OSDetect::dirsFor('Plugins');
 my @pluginRootDirs = ();
 my $plugins        = {};
 my $cacheInfo      = {};
@@ -67,6 +66,7 @@ my $log   = logger('server.plugins');
 my %SKIP = ();
 if ( main::SLIM_SERVICE ) {
 	%SKIP = (
+		'Slim::Plugin::Extensions::Plugin'     => 1,
 		'Slim::Plugin::Health::Plugin'         => 1,
 		'Slim::Plugin::JiveExtras::Plugin'     => 1,
 		'Slim::Plugin::MusicMagic::Plugin'     => 1,
@@ -81,9 +81,17 @@ if ( main::SLIM_SERVICE ) {
 		'Slim::Plugin::iTunes::Plugin'         => 1,
 		'Slim::Plugin::xPL::Plugin'            => 1,
 	);
-	
-	# Load SN-only plugins
-	push @pluginDirs, catdir( $main::SN_PATH, 'lib', 'Slim', 'Plugin' );
+}
+
+# Skip obsolete plugins, they should be deleted by installers
+# but may still be left over in some cases
+for (
+	'Slim::Plugin::Picks::Plugin',
+	'Slim::Plugin::RadioIO::Plugin',
+	'Slim::Plugin::ShoutcastBrowser::Plugin',
+	'Slim::Plugin::Webcasters::Plugin',
+) {
+	$SKIP{$_} = 1;
 }
 
 sub init {
@@ -214,7 +222,7 @@ sub findInstallManifests {
 			return 0;
 		},
 
-	}, @pluginDirs);
+	}, Slim::Utils::OSDetect::dirsFor('Plugins'));
 
 	while ( my $file = $iter->() ) {
 
@@ -265,7 +273,7 @@ sub _parseInstallManifest {
 
 	$installManifest->{'basedir'} = dirname($file);
 
-	if (!defined $pluginName && $installManifest->{'jive'}) {
+	if (!defined $pluginName) {
 		
 		$installManifest->{'error'} = 'INSTALLERROR_NO_PLUGIN';
 
@@ -392,7 +400,12 @@ sub enablePlugins {
 	for my $name (sort keys %$plugins) {
 		
 		if ( exists $SKIP{$name} ) {
-			$log->debug("Skipping plugin: $name - disabled for SN");
+			$log->debug("Skipping plugin: $name");
+			next;
+		}
+		
+		if ( main::SLIM_SERVICE && $name =~ /^Plugins/ ) {
+			# Skip 3rd party plugins on SN
 			next;
 		}
 
@@ -743,7 +756,7 @@ sub pluginRootDirs {
 		return @pluginRootDirs;
 	}
 
-	for my $path (@pluginDirs) {
+	for my $path (Slim::Utils::OSDetect::dirsFor('Plugins')) {
 
 		opendir(DIR, $path) || next;
 

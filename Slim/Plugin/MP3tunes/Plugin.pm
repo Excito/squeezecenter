@@ -7,6 +7,7 @@ package Slim::Plugin::MP3tunes::Plugin;
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
 
+use Slim::Formats::RemoteMetadata;
 use Slim::Networking::SqueezeNetwork;
 
 sub initPlugin {
@@ -21,7 +22,12 @@ sub initPlugin {
 		feed           => Slim::Networking::SqueezeNetwork->url('/api/mp3tunes/v1/opml'),
 		tag            => 'mp3tunes',
 		menu           => 'music_services',
-		weight         => 40,
+		weight         => 50,
+	);
+	
+	Slim::Formats::RemoteMetadata->registerProvider(
+		match => qr{mp3tunes\.com|squeezenetwork\.com/mp3tunes},
+		func   => \&metaProvider,
 	);
 	
 	if ( main::SLIM_SERVICE ) {
@@ -71,7 +77,7 @@ sub setLockerInfo {
 			$cover    = "http://content.mp3tunes.com/storage/albumartget/$id";
 		}
 		
-		$client->pluginData( currentTrack => {
+		$client->master->pluginData( currentTrack => {
 			url      => $url,
 			artist   => $artist,
 			album    => $album,
@@ -85,13 +91,49 @@ sub setLockerInfo {
 sub getLockerInfo {
 	my ( $class, $client, $url ) = @_;
 	
-	my $meta = $client->pluginData('currentTrack');
+	my $meta = $client->master->pluginData('currentTrack');
 	
 	if ( $meta->{url} eq $url ) {
 		return $meta;
 	}
 	
 	return;
+}
+
+sub metaProvider {
+	my ( $client, $url ) = @_;
+	
+	my $icon = __PACKAGE__->_pluginDataFor('icon');
+	my $meta = __PACKAGE__->getLockerInfo( $client, $url );
+	
+	if ( $meta ) {
+		# Metadata for currently playing song
+		return {
+			artist   => $meta->{artist},
+			album    => $meta->{album},
+			tracknum => $meta->{tracknum},
+			title    => $meta->{title},
+			cover    => $meta->{cover} || $icon,
+			icon     => $icon,
+			type     => 'MP3tunes',
+		};
+	}
+	else {
+		# Metadata for items in the playlist that have not yet been played
+	
+		# We can still get cover art for items not yet played
+		my $cover;
+		if ( $url =~ /hasArt=1/ ) {
+			my ($id)  = $url =~ m/([0-9a-f]+\?sid=[0-9a-f]+)/;
+			$cover    = "http://content.mp3tunes.com/storage/albumartget/$id";
+		}
+	
+		return {
+			cover    => $cover || $icon,
+			icon     => $icon,
+			type     => 'MP3tunes',
+		};
+	}
 }
 
 1;

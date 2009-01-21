@@ -1,6 +1,6 @@
 package Slim::Networking::SqueezeNetwork::Stats;
 
-# $Id: Stats.pm 23199 2008-09-16 20:01:15Z andy $
+# $Id: Stats.pm 22943 2008-08-28 17:56:34Z andy $
 
 # Report radio stats to SN if enabled.
 
@@ -74,7 +74,7 @@ sub newsongCallback {
 	return if $prefs->get('sn_disable_stats');
 	
 	# If synced, only listen to the master
-	if ( Slim::Player::Sync::isSynced($client) ) {
+	if ( $client->isSynced() ) {
 		return unless Slim::Player::Sync::isMaster($client);
 	}
 	
@@ -119,7 +119,7 @@ sub logRadio {
 	my ( $client, $url ) = @_;
 	
 	# If player is stopped, stop logging
-	if ( !$client || $client->playmode !~ /play|pause/ ) {
+	if ( !$client || $client->isStopped() ) {
 		$log->debug( "Player no longer playing, finished logging for $url" );
 		return;
 	}

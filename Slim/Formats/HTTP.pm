@@ -1,6 +1,6 @@
 package Slim::Formats::HTTP;
 
-# $Id: HTTP.pm 23517 2008-10-10 16:21:15Z andy $
+# $Id: HTTP.pm 24414 2008-12-24 08:55:59Z awy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 #
@@ -67,7 +67,7 @@ sub getFormatForURL {
 	return DEFAULT_TYPE;
 }
 
-=head2 requestString( $client, $url, [ $post ] )
+=head2 requestString( $client, $url, [ $post, [ $seekdata ] ] )
 
 Generate a HTTP request string suitable for sending to a HTTP server.
 
@@ -78,6 +78,7 @@ sub requestString {
 	my $client = shift;
 	my $url    = shift;
 	my $post   = shift;
+	my $seekdata = shift;
 
 	my ($server, $port, $path, $user, $password) = Slim::Utils::Misc::crackURL($url);
  
@@ -127,15 +128,14 @@ sub requestString {
 	}
 	
 	# If seeking, add Range header
-	if ($client && (my $seekdata = $client->scanData->{seekdata} )) {
-		$request .= $CRLF . 'Range: bytes=' . int( $seekdata->{newoffset} ) . '-';
+	if ($client && $seekdata) {
+		$request .= $CRLF . 'Range: bytes=' . int( $seekdata->{sourceStreamOffset} ) . '-';
 		
-		# Fix progress bar
-		$client->masterOrSelf->currentsongqueue()->[-1]->{startOffset} = $seekdata->{newtime};
-		$client->masterOrSelf->remoteStreamStartTime( Time::HiRes::time() - $seekdata->{newtime} );
-
-		# Remove seek data
-		delete $client->scanData->{seekdata};
+		if (defined $seekdata->{timeOffset}) {
+			# Fix progress bar
+			$client->master()->currentsongqueue()->[-1]->{startOffset} = $seekdata->{timeOffset};
+			$client->master()->remoteStreamStartTime( Time::HiRes::time() - $seekdata->{timeOffset} );
+		}
 	}
 
 	# Send additional information if we're POSTing
@@ -155,7 +155,17 @@ sub requestString {
 		$request_object->uri($url);
 		Slim::Networking::Async::HTTP::cookie_jar->add_cookie_header( $request_object );
 		$request_object->uri($path);
-		$request = $request_object->as_string( $CRLF );
+			
+		# Bug 9709, strip long cookies from the request
+		$request_object->headers->scan( sub {
+			if ( $_[0] eq 'Cookie' ) {
+				if ( length($_[1]) > 512 ) {
+					$request_object->headers->remove_header('Cookie');
+				}
+			}
+		} );
+		
+		$request = $request_object->as_string( $CRLF );				
 	}
 
 	return $request;
@@ -263,7 +273,7 @@ sub parseHeaders {
 	
 	# Bitrate may have been set in Scanner by reading the mp3 stream
 	if ( !$self->bitrate ) {
-		${*$self}{'bitrate'} = Slim::Music::Info::getCurrentBitrate( $self->url );
+		${*$self}{'bitrate'} = Slim::Music::Info::getBitrate( $self->url );
 	}
 	
 	return unless $client;
@@ -291,16 +301,7 @@ sub parseHeaders {
 			} );
 		}
 	}
-	
-	if ( $self->contentLength && Slim::Music::Info::mimeToType( $self->contentType ) eq 'mp3' ) {
-		$log->debug("Stream supports seeking");
-		$client->scanData->{mp3_can_seek} = 1;
-	}
-	else {
-		$log->debug("Stream does not support seeking");
-		delete $client->scanData->{mp3_can_seek};
-	}
-	
+		
 	# Bug 6482, refresh the cached Track object in the client playlist from the database
 	# so it picks up any changed data such as title, bitrate, etc
 	Slim::Player::Playlist::refreshTrack( $client, $self->url );

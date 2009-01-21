@@ -1,6 +1,6 @@
 package Slim::Music::Info;
 
-# $Id: Info.pm 23322 2008-09-28 08:26:29Z adrian $
+# $Id: Info.pm 24623 2009-01-12 16:00:28Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -20,6 +20,7 @@ L<Slim::Music::Info>
 use strict;
 
 use File::Path;
+use File::Basename;
 use File::Spec::Functions qw(:ALL);
 use Path::Class;
 use Scalar::Util qw(blessed);
@@ -289,7 +290,7 @@ sub title {
 		'readTags' => isRemoteURL($url) ? 0 : 1,
 	});
 
-	return $track->title;
+	return blessed($track) ? $track->title : undef;
 }
 
 sub setTitle {
@@ -497,6 +498,7 @@ sub getCurrentTitle {
 	my $client = shift;
 	my $url    = shift || return undef;
 	my $web    = shift || 0;
+	my $meta   = shift;
 	
 	if ( blessed($client) ) {
 		# Let plugins control the current title if they want
@@ -508,24 +510,46 @@ sub getCurrentTitle {
 	    }
 	}
 	
-	if ( $currentTitles{$url} ) {
+	if ( !$meta && $currentTitles{$url} ) {
 		return $currentTitles{$url};
 	}
 	
 	# If the request came from the web, we don't want to format the title
 	# using the client formatting pref
 	if ( $web ) {
-		return standardTitle( undef, $url ); 
+		return standardTitle( undef, $url, $meta ); 
 	}
 
-	return standardTitle( $client, $url );
+	return standardTitle( $client, $url, $meta );
+}
+
+# Return the amount of seconds the current stream is behind real-time
+sub getStreamDelay {
+	my ( $client, $outputDelayOnly ) = @_;
+	
+	my $bitrate = $client->streamingSong()->streambitrate() || 128000;
+	my $delay   = 0;
+	
+	if ( $bitrate > 0 ) {
+		my $decodeBuffer = $client->bufferFullness() / ( int($bitrate / 8) );
+		my $outputBuffer = $client->outputBufferFullness() / (44100 * 8);
+	
+		if ( $outputDelayOnly ) {
+			$delay = $outputBuffer;
+		}
+		else {
+			$delay = $decodeBuffer + $outputBuffer;
+		}
+	}
+	
+	return $delay;
 }
 
 # Sets a new metadata title but delays the set
 # according to the amount of audio data in the
 # player's buffer.
 sub setDelayedTitle {
-	my ( $client, $url, $newTitle ) = @_;
+	my ( $client, $url, $newTitle, $outputDelayOnly ) = @_;
 	
 	my $log = logger('player.streaming.direct') || logger('player.streaming.remote');
 	
@@ -536,22 +560,14 @@ sub setDelayedTitle {
 		# Some mp3 stations can have 10-15 seconds in the buffer.
 		# This will delay metadata updates according to how much is in
 		# the buffer, so title updates are more in sync with the music
-		my $bitrate = Slim::Music::Info::getBitrate($url) || 128000;
-		my $delay   = 0;
-		
-		if ( $bitrate > 0 ) {
-			my $decodeBuffer = $client->bufferFullness() / ( int($bitrate / 8) );
-			my $outputBuffer = $client->outputBufferFullness() / (44100 * 8);
-		
-			$delay = $decodeBuffer + $outputBuffer;
-		}
+		my $delay = getStreamDelay($client, $outputDelayOnly);
 		
 		# No delay on the initial metadata
 		if ( !$metaTitle ) {
 			$delay = 0;
 		}
 		
-		$log->info("Delaying metadata title set by $delay secs");
+		$log->info("Delaying metadata title set by $delay secs ($newTitle)");
 		
 		$client->metaTitle( $newTitle );
 		
@@ -567,7 +583,7 @@ sub setDelayedTitle {
 
 				setCurrentTitle( $url, $newTitle );
 
-				for my $everybuddy ( $client, Slim::Player::Sync::syncedWith($client)) {
+				for my $everybuddy ( $client->syncGroupActiveMembers()) {
 					$everybuddy->update();
 				}
 
@@ -580,6 +596,21 @@ sub setDelayedTitle {
 	}
 	
 	return $metaTitle;
+}
+
+sub setDelayedCallback {
+	my ( $client, $cb, $outputDelayOnly ) = @_;
+	
+	my $delay = getStreamDelay($client, $outputDelayOnly);
+	
+	my $log = logger('player.streaming.direct') || logger('player.streaming.remote');
+	$log->is_info && $log->info("Delaying callback by $delay secs");
+	
+	Slim::Utils::Timers::setTimer(
+		$client,
+		Time::HiRes::time() + $delay,
+		$cb,
+	);
 }
 
 # If no metadata is available,
@@ -606,15 +637,8 @@ sub plainTitle {
 
 	} else {
 
-		if (isFileURL($file)) {
-			$file = Slim::Utils::Misc::pathFromFileURL($file);
-			$file = Slim::Utils::Unicode::utf8decode_locale($file);
-		}
+		$title = fileName($file);
 
-		if ($file) {
-			$title = (splitdir($file))[-1];
-		}
-		
 		# directories don't get the suffixes
 		if ($title && !($type && $type eq 'dir')) {
 			$title =~ s/\.[^. ]+$//;
@@ -634,6 +658,13 @@ sub plainTitle {
 sub standardTitle {
 	my $client    = shift;
 	my $pathOrObj = shift; # item whose information will be formatted
+	my $meta      = shift; # optional remote metadata to format
+	
+	# Short-circuit if we have metadata
+	if ( $meta ) {
+		my $format = standardTitleFormat($client) || 'TITLE';
+		return displayText($client, undef, $format, $meta);
+	}
 
 	# Be sure to try and "readTags" - which may call into Formats::Parse for playlists.
 	# XXX - exception should go here. comming soon.
@@ -658,7 +689,7 @@ sub standardTitle {
 
 	} else {
 
-		$format = standardTitleFormat($client);
+		$format = standardTitleFormat($client) || 'TITLE';
 
 	}
 
@@ -697,6 +728,12 @@ sub displayText {
 	my $client = shift;
 	my $obj    = shift;
 	my $format = shift || 'TITLE';
+	my $meta   = shift;
+	
+	# Short-circuit if we have a metadata hash
+	if ( $meta ) {
+		return Slim::Music::TitleFormatter::infoFormat(undef, $format, undef, $meta);
+	}
 
 	if (!blessed($obj) || !$obj->can('url')) {
 		return '';
@@ -711,14 +748,14 @@ sub displayText {
 			return $cache->{$format};
 
 		} elsif (Slim::Music::TitleFormatter::cacheFormat($format)) {
-			return $cache->{$format} = Slim::Music::TitleFormatter::infoFormat($obj, $format);
+			return $cache->{$format} = Slim::Music::TitleFormatter::infoFormat($obj, $format, undef, $meta);
 
 		} else {
-			return Slim::Music::TitleFormatter::infoFormat($obj, $format);
+			return Slim::Music::TitleFormatter::infoFormat($obj, $format, undef, $meta);
 		}
 	}
 
-	my $text = Slim::Music::TitleFormatter::infoFormat($obj, $format);
+	my $text = Slim::Music::TitleFormatter::infoFormat($obj, $format, undef, $meta);
 
 	# Clear the cache first.
 	$cache = {};
@@ -837,17 +874,26 @@ sub fileName {
 
 		$j = Slim::Utils::Misc::pathFromFileURL($j);
 
-		if (defined $j && (splitdir($j))[-1]) {
-			$j = (splitdir($j))[-1];
-		}
-
-	} elsif (isRemoteURL($j)) {
+	} 
+	
+	if (isRemoteURL($j)) {
 
 		$j = Slim::Utils::Misc::unescape($j);
 
 	} else {
 
-		$j = (splitdir($j))[-1];
+		# display full name if we got a Windows 8.3 file name
+		if (Slim::Utils::OSDetect::isWindows() && $j =~ /~/) {
+			
+			if (my $n = Win32::GetLongPathName($j)) {
+				$n = File::Basename::basename($n);
+				$log->info("Expand short name returned by readdir() to full name: $j -> $n");
+			
+				$j = $n;
+			}		
+		}
+
+		$j = (splitdir($j))[-1] || $j;
 	}
 
 	return Slim::Utils::Unicode::utf8decode_locale($j);
@@ -1014,27 +1060,9 @@ sub isMMSURL {
 sub isRemoteURL {
 	my $url = shift || return 0;
 
-	if ( $url =~ /^([a-zA-Z0-9\-]+):/ ) {
-		my $proto = $1;
-		if ( my $handler = Slim::Player::ProtocolHandlers->handlerForURL($url) ) {
-			if ( $handler->can('isRemote') ) {
-				return $handler->isRemote();
-			}
-			else {
-				# Backwards-compat for 3rd party plugins not implementing isRemote
-				return 1;
-			}
-		}
-		elsif ( Slim::Player::ProtocolHandlers->isValidHandler( lc($proto) ) ) {
-			# Backwards-compat for handlers without a handler class
-			
-			# Special case a few of our internal protocols that aren't remote
-			if ( $proto =~ /^(?:db|itunesplaylist|musicmagicplaylist)$/ ) {
-				return 0;
-			}
-			
-			return 1;
-		}
+	if ($url =~ /^([a-zA-Z0-9\-]+):/ && Slim::Player::ProtocolHandlers->isValidRemoteHandler( lc($1) )) {
+
+		return 1;
 	}
 
 	return 0;
@@ -1043,61 +1071,8 @@ sub isRemoteURL {
 # Only valid for the current playing song
 sub canSeek {
 	my ($client, $playingSong) = @_;
-	my @errorString;
-	my $canSeek = 0;
 	
-	if ( Slim::Music::Info::isRemoteURL($playingSong) ) {
-
-		my $playingUrl;
-		if (Slim::Music::Info::isPlaylist($playingSong)) {
-			$log->info("Playing list $playingSong");
-			my $entry = $client->remotePlaylistCurrentEntry;
-			if (defined ($entry)) {
-				$playingUrl = $entry->url;
-			} else {
-				$log->info("No current entry in remoteplaylist $playingSong ");
-			}
-		} else {
-			$playingUrl = $playingSong;
-		} ;
-
-		# Check with protocol handler to determine if the remote stream is seekable
-		my $handler = Slim::Player::ProtocolHandlers->handlerForURL($playingUrl);
-		if ( $handler && $handler->can('canSeek') ) {
-			$log->debug( "Checking with protocol handler $handler for canSeek" );
-			if ( !$handler->canSeek( $client, $playingUrl ) ) {
-				if (wantarray) {
-					@errorString = $handler->can('canSeekError') 
-						? $handler->canSeekError( $client, $playingUrl )
-						: ('SEEK_ERROR_REMOTE');
-				}
-			} else {
-				$canSeek = 1;
-			}
-		}
-		else {
-			@errorString = ('SEEK_ERROR_REMOTE');
-		}
-	} 		
-	# XXX: need a better way to determine if a stream is transcoded
-	# because we want to prevent seek with real transcoding but not
-	# proxied streaming
-	else {
-		if ( $client->masterOrSelf()->audioFilehandleIsSocket() ) {
-			@errorString = ('SEEK_ERROR_TRANSCODED');
-		} else {
-			# No seeking supported in WMA files yet
-			my $track = Slim::Player::Playlist::song($client);
-			if ( $track->content_type eq 'wma' ) {
-				$canSeek = 0;
-				@errorString = ('SEEK_ERROR_TYPE_NOT_SUPPORTED', 'WMA');
-			}
-			else {
-				$canSeek = 1;
-			}
-		}	
-	}
-	return (wantarray ? ($canSeek, @errorString) : $canSeek);
+	return $playingSong->canSeek();
 }
 
 sub isPlaylistURL {
@@ -1349,7 +1324,7 @@ sub validTypeExtensions {
 
 	# Always look for Windows shortcuts - but only on Windows machines.
 	# We can't parse them. Bug: 2654
-	if (Slim::Utils::OSDetect::OS() eq 'win' && !$disabled->{'lnk'}) {
+	if (Slim::Utils::OSDetect::isWindows() && !$disabled->{'lnk'}) {
 		push @extensions, 'lnk';
 	}
 
@@ -1480,7 +1455,7 @@ sub typeFromPath {
 
 			if (-f $filepath) {
 
-				if ($filepath =~ /\.lnk$/i && Slim::Utils::OSDetect::OS() eq 'win') {
+				if ($filepath =~ /\.lnk$/i && Slim::Utils::OSDetect::isWindows()) {
 
 					if (Win32::Shortcut->new($filepath)) {
 						$type = 'lnk';

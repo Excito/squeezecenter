@@ -4,43 +4,18 @@
 
 # postinst script for SqueezeCenter
 
-set -e
-
 # source debconf stuff
 . /usr/share/debconf/confmodule
 
 case "$1" in
     configure)
 	. /usr/share/dbconfig-common/dpkg/postinst.mysql 
+	dbc_generate_include_owner=squeezecenter:nogroup
+	dbc_generate_include_perms=0600
+	dbc_generate_include=perl:/etc/squeezecenter/debian-db.pm
+
 	dbc_go squeezecenter $@
 	db_stop
-	. /etc/dbconfig-common/squeezecenter.conf
-
-	if [ ! -f /var/lib/squeezecenter/prefs/server.prefs ]; then
-		echo "dbpassword: ''
-dbsource: dbi:mysql:database=squeezecenter
-dbusername: squeezecenter
-audiodir: /home/storage/music
-playlistdir: /home/storage/music
-scannerPriority: 20
-resampleArtwork: 0
-disableStatistics: 1
-wizardDone: 1" > /var/lib/squeezecenter/prefs/server.prefs
-	fi
-	sed -i "s/^dbusername:.*\$/dbusername: $dbc_dbuser/" /var/lib/squeezecenter/prefs/server.prefs
-	sed -i "s/^dbpassword:.*\$/dbpassword: $dbc_dbpass/" /var/lib/squeezecenter/prefs/server.prefs
-	_host="hostname=localhost"
-	_port=
-	_name=";database=$dbc_dbname"
-	if [ ! x$dbc_dbhost = x ]; then
-		_host="hostname=$dbc_dbhost"
-	fi
-	if [ ! x$dbc_dbport = "x" ]; then
-		_port=";port=$dbc_dbport"
-	fi
-	_db="dbi:mysql:$_host$_port$_name"
-	
-	sed -i "s/^dbsource:.*\$/dbsource: $_db/" /var/lib/squeezecenter/prefs/server.prefs
 
     	# If it's an upgrade, make chown verbose
 	if [ "$2" != "" ] ; then
@@ -106,7 +81,7 @@ wizardDone: 1" > /var/lib/squeezecenter/prefs/server.prefs
     ;;
 esac
 
-if [ -x "/etc/init.d/squeezecenter" ] && [ -f "/etc/rc2.d/S??squeezecenter" ]; then
+if [ -x /etc/init.d/squeezecenter ] && [ -f /etc/rc2.d/S??squeezecenter ]; then
         if [ -x "`which invoke-rc.d 2>/dev/null`" ]; then
                 invoke-rc.d squeezecenter start || exit $?
         else

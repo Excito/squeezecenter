@@ -1,6 +1,6 @@
 package Slim::Utils::Accessor;
 
-# $Id: Accessor.pm 22986 2008-08-31 13:47:47Z andy $
+# $Id: Accessor.pm 22988 2008-08-31 17:00:52Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

@@ -17,6 +17,8 @@ my $log = Slim::Utils::Log->addLogCategory( {
 	description  => 'PLUGIN_SLACKER_MODULE_NAME',
 } );
 
+# XXX: Port to new streaming
+
 # To support remote streaming (synced players, slimp3/SB1), we need to subclass Protocols::HTTP
 # XXX: needs testing in SqueezeCenter
 sub new {
@@ -24,9 +26,8 @@ sub new {
 	my $args   = shift;
 
 	my $client = $args->{client};
-	my $url    = $args->{url};
 	
-	my $track  = $client->pluginData('currentTrack') || {};
+	my $track  = $client->master->pluginData('currentTrack') || {};
 	
 	$log->debug( 'Remote streaming Slacker track: ' . $track->{URL} );
 
@@ -34,6 +35,7 @@ sub new {
 
 	my $sock = $class->SUPER::new( {
 		url     => $track->{URL},
+		song    => $args->{'song'},
 		client  => $client,
 		bitrate => 128_000,
 	} ) || return;
@@ -53,6 +55,8 @@ sub shouldLoop () { 0 }
 
 sub canSeek { 0 }
 
+sub canSeekError { return ( 'SEEK_ERROR_TYPE_NOT_SUPPORTED', 'Slacker' ); }
+
 # Source for AudioScrobbler ( E = Personalised recommendation except Last.fm)
 sub audioScrobblerSource () { 'E' }
 
@@ -60,6 +64,26 @@ sub audioScrobblerSource () { 'E' }
 sub bufferThreshold { 20 }
 
 sub isRemote { 1 }
+
+# If either the previous or current track is an ad, disable transitions
+sub transitionType {
+	my ( $class, $client, $song, $transitionType ) = @_;
+	
+	# Ignore if transitionType is already 0
+	return if $transitionType == 0;
+	
+	my $current = $client->master->pluginData('currentTrack');
+	my $prev    = $client->master->pluginData('prevTrack');
+	
+	return unless $current && $prev;
+	
+	if ( $current->{ad} || $prev->{ad} ) {
+		$log->is_debug && $log->debug('Disabling transition because of audio ad');
+		return 0;
+	}
+
+	return;
+}
 
 sub handleError {
     my ( $error, $client ) = @_;
@@ -80,22 +104,18 @@ sub handleError {
 	}
 }
 
-# Whether or not to display buffering info while a track is loading
-sub showBuffering {
-	my ( $class, $client, $url ) = @_;
-	
-	my $showBuffering = $client->pluginData('showBuffering');
-	
-	return ( defined $showBuffering ) ? $showBuffering : 1;
+sub scanUrl {
+	my ($class, $url, $args) = @_;
+	$args->{'cb'}->($args->{'song'}->currentTrack());
 }
 
-sub getNextTrack {
+sub _getNextTrack {
 	my ( $client, $params ) = @_;
 	
 	my $url   = Slim::Player::Playlist::url($client);
 	my $sid   = $params->{stationId};
 	my $mode  = $params->{mode};
-	my $track = $client->pluginData('currentTrack');
+	my $track = $client->master->pluginData('currentTrack');
 	
 	my $last    = '';
 	my $len     = $track ? $track->{tlen} : '';
@@ -123,7 +143,7 @@ sub getNextTrack {
 		},
 	);
 	
-	$log->debug("Getting next track from SqueezeNetwork");
+	$log->is_debug && $log->debug( $client->id . " Getting next track from SqueezeNetwork");
 	
 	$http->get( $trackURL );
 }
@@ -158,8 +178,8 @@ sub gotNextTrack {
 			# Session bumped
 			$title = $client->string('PLUGIN_SLACKER_SESSION_BUMPED');
 			
-			$client->pluginData( prevTrack    => 0 );
-			$client->pluginData( currentTrack => 0 );
+			$client->master->pluginData( prevTrack    => 0 );
+			$client->master->pluginData( currentTrack => 0 );
 		}
 		elsif ( $track->{error} =~ /Skip limits exceeded/ ) {
 			$title = $client->string('PLUGIN_SLACKER_SKIPS_EXCEEDED_STATION');
@@ -168,29 +188,28 @@ sub gotNextTrack {
 			$title = $client->string('PLUGIN_SLACKER_NO_TRACKS') . ' (' . $track->{error} . ')';
 		}
 		
-		if ( $client->playmode =~ /play/ ) {
-			setCurrentTitle( $client, $url, $title );
-		
-			$client->update();
-
+		if ( $client->isPlaying() ) {
 			Slim::Player::Source::playmode( $client, 'stop' );
 		}
-		else {
-			my $line1 = $client->string('PLUGIN_SLACKER_ERROR');
-			my $line2 = $title;
-			
-			$client->showBriefly( {
-				line1 => $line1,
-				line2 => $line2,
-				jive  => {
-					type => 'popupplay',
-					text => [ $line1, $line2 ],
-				},
+		
+		$client->master->pluginData( prevTrack => {
+			title => $title,
+		} );
+
+		my $line1 = $client->string('PLUGIN_SLACKER_ERROR');
+		my $line2 = $title;
+		
+		$client->showBriefly( {
+			line1 => $line1,
+			line2 => $line2,
+			jive  => {
+				type => 'popupplay',
+				text => [ $line1, $line2 ],
 			},
-			{
-				scroll => 1,
-			} );
-		}
+		},
+		{
+			scroll => 1,
+		} );
 	
 		return;
 	}
@@ -199,7 +218,7 @@ sub gotNextTrack {
 	my $repeat = Slim::Player::Playlist::repeat($client);
 	if ( $repeat != 2 ) {
 		$log->debug( "Saving existing repeat value: $repeat" );
-		$client->pluginData( oldRepeat => $repeat );
+		$client->master->pluginData( oldRepeat => $repeat );
 	}
 	
 	# Watch for playlist commands
@@ -221,10 +240,10 @@ sub gotNextTrack {
 	
 	# Save the previous track's metadata, in case the user wants track info
 	# after the next track begins buffering
-	$client->pluginData( prevTrack => $client->pluginData('currentTrack') );
+	$client->master->pluginData( prevTrack => $client->master->pluginData('currentTrack') );
 	
 	# Save metadata for this track
-	$client->pluginData( currentTrack => $track );
+	$client->master->pluginData( currentTrack => $track );
 	
 	my $cb = $params->{callback};
 	$cb->();
@@ -235,9 +254,6 @@ sub gotNextTrackError {
 	my $client = $http->params('client');
 	
 	handleError( $http->error, $client );
-	
-	# Make sure we re-enable readNextChunkOk
-	#$client->readNextChunkOk(1);
 }
 
 # Handle normal advances to the next track
@@ -245,7 +261,7 @@ sub onDecoderUnderrun {
 	my ( $class, $client, $nextURL, $callback ) = @_;
 	
 	# Special handling needed when synced
-	if ( Slim::Player::Sync::isSynced($client) ) {
+	if ( $client->isSynced() ) {
 		if ( !Slim::Player::Sync::isMaster($client) ) {
 			# Only the master needs to fetch next track info
 			$log->debug('Letting sync master fetch next Slacker track');
@@ -253,13 +269,10 @@ sub onDecoderUnderrun {
 		}
 	}
 	
-	# Flag that we don't want any buffering messages while loading the next track,
-	$client->pluginData( showBuffering => 0 );
-	
 	# Get next track
 	my ($stationId) = $nextURL =~ m{^slacker://([^.]+)\.mp3};
 	
-	getNextTrack( $client, {
+	_getNextTrack( $client, {
 		stationId => $stationId,
 		callback  => $callback,
 		mode      => 'end',
@@ -270,22 +283,12 @@ sub onDecoderUnderrun {
 
 # On skip, load the next track before playback
 sub onJump {
-    my ( $class, $client, $nextURL, $callback ) = @_;
-
-	# Display buffering info on loading the next track
-	# unless we shouldn't (when banning tracks)
-	if ( $client->pluginData('banMode') ) {
-		$client->pluginData( showBuffering => 0 );
-		$client->pluginData( banMode => 0 );
-	}
-	else {
-		$client->pluginData( showBuffering => 1 );
-	}
+    my ( $class, $client, $nextURL, $seekdata, $callback ) = @_;
 	
 	# If synced and we already fetched a track in onDecoderUnderrun,
 	# just callback, don't fetch another track.  Checks prevTrack to
 	# make sure there is actually a track ready to be played.
-	if ( Slim::Player::Sync::isSynced($client) && $client->pluginData('prevTrack') ) {
+	if ( $client->isSynced() && $client->master->pluginData('prevTrack') ) {
 		$log->debug( 'onJump while synced, but already got the next track to play' );
 		$callback->();
 		return;
@@ -294,9 +297,9 @@ sub onJump {
 	# Get next track
 	my ($stationId) = $nextURL =~ m{^slacker://([^.]+)\.mp3};
 	
-	my $mode = ( $client->playmode =~ /play/ ) ? 'skip' : '';
+	my $mode = ( $client->isPlaying() ) ? 'skip' : '';
 	
-	getNextTrack( $client, {
+	_getNextTrack( $client, {
 		stationId => $stationId,
 		callback  => $callback,
 		mode      => $mode,
@@ -361,7 +364,7 @@ sub handleDirectError {
 sub canSkip {
 	my $client = shift;
 	
-	if ( my $track = $client->pluginData('currentTrack') ) {
+	if ( my $track = $client->master->pluginData('currentTrack') ) {
 		return $track->{skip} eq 'yes';
 	}
 	
@@ -395,6 +398,10 @@ sub canDoAction {
 		return 0;
 	}
 	
+	if ( $action eq 'rew' ) {
+		return 0;
+	}
+	
 	return 1;
 }
 
@@ -408,10 +415,10 @@ sub canDirectStream {
 		return 0;
 	}
 	
-	my $track = $client->pluginData('currentTrack') || {};
+	my $track = $client->master->pluginData('currentTrack') || {};
 	
 	# Needed so stopCallback can have the URL after a 'playlist clear'
-	$client->pluginData( lastURL => $url );
+	$client->master->pluginData( lastURL => $url );
 	
 	return $track->{URL} || 0;
 }
@@ -429,11 +436,11 @@ sub playlistCallback {
 	
 	if ( !$url || $url !~ /^slacker/ ) {
 		# No longer playing Slacker, clear plugin data
-		$client->pluginData( prevTrack    => 0 );
-		$client->pluginData( currentTrack => 0 );
+		$client->master->pluginData( prevTrack    => 0 );
+		$client->master->pluginData( currentTrack => 0 );
 		
 		# User stopped playing Slacker, reset old repeat setting if any
-		my $repeat = $client->pluginData('oldRepeat');
+		my $repeat = $client->master->pluginData('oldRepeat');
 		if ( defined $repeat ) {
 			$log->debug( "Stopped Slacker, restoring old repeat setting: $repeat" );
 			$client->execute(["playlist", "repeat", $repeat]);
@@ -455,24 +462,11 @@ sub playlistCallback {
 			$log->debug("User changed repeat setting, forcing back to 2");
 		
 			$client->execute(["playlist", "repeat", 2]);
-		
-			if ( $client->playmode =~ /playout/ ) {
-				$client->playmode( 'playout-play' );
-			}
 		}
 	}
 	elsif ( $p1 eq 'newsong' ) {
-		# A new song has started playing.  We use this to change titles
-		if ( my $track = $client->pluginData('currentTrack') ) {		
-			my $title = $track->{title}  . ' ' . $client->string('BY')   . ' '
-					  . $track->{artist} . ' ' . $client->string('FROM') . ' '
-					  . $track->{album};
-		
-			setCurrentTitle( $client, $url, $title );
-		}
-		
 		# Remove the previous track metadata
-		$client->pluginData( prevTrack => 0 );
+		$client->master->pluginData( prevTrack => 0 );
 		
 		# Start a timer to track elapsed time.  Can't find a better way to do this
 		# because we can't read songTime when starting a new station or in stopCallback
@@ -488,7 +482,7 @@ sub playlistCallback {
 sub trackElapsed {
 	my $client = shift || return;
 	
-	my $track = $client->pluginData('currentTrack') || return;
+	my $track = $client->master->pluginData('currentTrack') || return;
 	
 	if ( my $songtime = Slim::Player::Source::songTime($client) ) {
 		$track->{elapsed} = $songtime;
@@ -513,7 +507,7 @@ sub stopCallback {
 	if ( $p0 eq 'stop' || ( $p1 && $p1 eq 'clear' ) ) {
 
 		# Check that the user is still playing Slacker
-		my $url = Slim::Player::Playlist::url($client) || $client->pluginData('lastURL');
+		my $url = Slim::Player::Playlist::url($client) || $client->master->pluginData('lastURL');
 
 		if ( !$url || $url !~ /^slacker/ ) {
 			# stop listening for stop events
@@ -523,7 +517,7 @@ sub stopCallback {
 		
 		$log->debug("Player stopped, reporting stop to SqueezeNetwork");
 		
-		if ( my $track = $client->pluginData('currentTrack') ) {
+		if ( my $track = $client->master->pluginData('currentTrack') ) {
 			my ($sid)   = $url =~ m{^slacker://([^.]+)\.mp3};
 			my $len     = $track->{tlen};
 			my $elapsed = $track->{elapsed};
@@ -543,13 +537,9 @@ sub stopCallback {
 			$http->get( $stopURL );
 		}
 		
-		# Reset title to station title
-		my $title = Slim::Music::Info::title($url);
-		setCurrentTitle( $client, $url, $title );
-		
 		# Clear track data
-		$client->pluginData( prevTrack    => 0 );
-		$client->pluginData( currentTrack => 0 );
+		$client->master->pluginData( prevTrack    => 0 );
+		$client->master->pluginData( currentTrack => 0 );
 	}
 }
 
@@ -557,7 +547,7 @@ sub stopCallback {
 sub trackGain {
 	my ( $class, $client, $url ) = @_;
 	
-	my $currentTrack = $client->pluginData('currentTrack');
+	my $currentTrack = $client->master->pluginData('currentTrack');
 	
 	my $gain = $currentTrack->{audiogain} || 0;
 	
@@ -575,7 +565,7 @@ sub trackInfo {
 	my ($stationId) = $url =~ m{^slacker://([^.]+)\.mp3};
 	
 	# Get the current track
-	my $currentTrack = $client->pluginData('prevTrack') || $client->pluginData('currentTrack') || {};
+	my $currentTrack = $client->master->pluginData('prevTrack') || $client->master->pluginData('currentTrack') || {};
 	
 	# SN URL to fetch track info menu
 	my $trackInfoURL = Slim::Networking::SqueezeNetwork->url(
@@ -605,7 +595,7 @@ sub trackInfoURL {
 	my ($stationId) = $url =~ m{^slacker://([^.]+)\.mp3};
 	
 	# Get the current track
-	my $currentTrack = $client->pluginData('prevTrack') || $client->pluginData('currentTrack') || {};
+	my $currentTrack = $client->master->pluginData('prevTrack') || $client->master->pluginData('currentTrack') || {};
 	
 	# SN URL to fetch track info menu
 	my $trackInfoURL = Slim::Networking::SqueezeNetwork->url(
@@ -618,24 +608,14 @@ sub trackInfoURL {
 
 # Re-init Slacker when a player reconnects
 sub reinit {
-	my ( $class, $client, $playlist ) = @_;
+	my ( $class, $client, $song ) = @_;
 	
-	my $url = $playlist->[0];
+	my $url = $song->currentTrack->url();
 	
-	if ( my $track = $client->pluginData('currentTrack') ) {
+	$log->debug("Re-init Slacker - $url");
+	
+	if ( my $track = $client->master->pluginData('currentTrack') ) {
 		# We have previous data about the currently-playing song
-		
-		$log->debug("Re-init Slacker");
-		
-		# Re-add playlist item
-		$client->execute( [ 'playlist', 'add', $url ] );
-	
-		# Reset track title
-		my $title = $track->{title}  . ' ' . $client->string('BY')   . ' '
-				  . $track->{artist} . ' ' . $client->string('FROM') . ' '
-				  . $track->{album};
-				
-		setCurrentTitle( $client, $url, $title );
 		
 		# Restart elapsed second timer
 		Slim::Utils::Timers::killTimers( $client, \&trackElapsed );
@@ -675,24 +655,6 @@ sub reinit {
 	return 1;
 }
 
-sub setCurrentTitle {
-	my ( $client, $url, $title ) = @_;
-	
-	# We can't use the normal getCurrentTitle method because it would cause multiple
-	# players playing the same station to get the same titles
-	$client->pluginData( currentTitle => $title );
-	
-	# Call the normal setCurrentTitle method anyway, so it triggers callbacks to
-	# update the display
-	Slim::Music::Info::setCurrentTitle( $url, $title );
-}
-
-sub getCurrentTitle {
-	my ( $class, $client, $url ) = @_;
-	
-	return $client->pluginData('currentTitle');
-}
-
 # Metadata for a URL, used by CLI/JSON clients
 sub getMetadataFor {
 	my ( $class, $client, $url, $forceCurrent ) = @_;
@@ -702,10 +664,10 @@ sub getMetadataFor {
 	# forceCurrent means the caller wants only the current song
 	# This is used by Audioscrobbler
 	if ( $forceCurrent ) {
-		$track = $client->pluginData('currentTrack');
+		$track = $client->master->pluginData('currentTrack');
 	}
 	else {	
-		$track = $client->pluginData('prevTrack') || $client->pluginData('currentTrack');
+		$track = $client->master->pluginData('prevTrack') || $client->master->pluginData('currentTrack');
 	}
 	
 	my $icon = $class->getIcon();

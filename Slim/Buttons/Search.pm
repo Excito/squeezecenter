@@ -1,6 +1,6 @@
 package Slim::Buttons::Search;
 
-# $Id: Search.pm 15258 2007-12-13 15:29:14Z mherger $
+# $Id: Search.pm 24518 2009-01-05 21:51:58Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -123,13 +123,13 @@ sub searchExitHandler {
 
 	if ($exitType eq 'LEFT') {
 		my $oldlines = $client->curLines();
-
+		
 		Slim::Buttons::Home::jump($client, 'SEARCH');
 		while (Slim::Buttons::Common::popMode($client, 1)) {};
 		Slim::Buttons::Common::pushMode($client, 'home');
-
+		
 		$client->pushRight($oldlines, $client->curLines());
-
+		
 	} elsif ($exitType eq 'RIGHT') {
 
 		my $current = $client->modeParam('valueRef');

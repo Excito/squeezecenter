@@ -1,6 +1,6 @@
 package Slim::Buttons::Input::Text;
 
-# $Id: Text.pm 23255 2008-09-23 16:50:24Z andy $
+# $Id: Text.pm 23257 2008-09-23 17:46:29Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

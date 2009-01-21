@@ -25,7 +25,6 @@ BEGIN {
 }
 
 use Slim::Player::ProtocolHandlers;
-use Slim::Player::Transporter;
 use Slim::Utils::Prefs;
 use Slim::Hardware::TriLED;
 
@@ -44,6 +43,8 @@ sub new {
 sub model {
 	return 'receiver';
 }
+
+sub hasIR() { return 0; }
 
 sub reconnect {
 	my $client = shift;

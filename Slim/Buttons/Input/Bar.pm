@@ -1,6 +1,6 @@
 package Slim::Buttons::Input::Bar;
 
-# $Id: Bar.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Bar.pm 22939 2008-08-28 16:42:33Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

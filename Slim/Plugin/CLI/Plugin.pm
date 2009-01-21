@@ -529,6 +529,7 @@ sub cli_process {
 
 	# parse the command
 	my ($client, $arrayRef) = Slim::Control::Stdio::string_to_array($command);
+	
 	my $clientid = blessed($client) ? $client->id() : undef;
 
 	if ($clientid) {
@@ -542,7 +543,7 @@ sub cli_process {
 	if (!defined $arrayRef) {
 		return;
 	}
-
+	
 	# create a request
 	my $request = Slim::Control::Request->new($clientid, $arrayRef, 1);
 
@@ -680,8 +681,12 @@ sub cli_request_write {
 
 	$client_socket = $request->connectionID() unless defined $client_socket;
 
-	my $encoding   = $request->getParam('charset') || 'utf8';
-	my @elements   = $request->renderAsArray($encoding);
+	my $encoding = $request->getParam('charset') || 'utf8';
+	
+	# bug 9559 - don't re-encode the response if we're using the requested locale
+	$encoding    = '' if $encoding eq Slim::Utils::Unicode::currentLocale();
+	
+	my @elements = $request->renderAsArray($encoding);
 
 	my $output = Slim::Control::Stdio::array_to_string($request->clientid(), \@elements);
 

@@ -1,6 +1,6 @@
 package Slim::Web::Pages::BrowseTree;
 
-# $Id: BrowseTree.pm 17887 2008-03-14 12:37:52Z mherger $
+# $Id: BrowseTree.pm 24179 2008-12-02 01:35:41Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -64,7 +64,7 @@ sub browsetree {
 
 			push @{$params->{'pwd_list'}}, {
 				'hreftype'     => 'browseTree',
-				'title'        => $i == 0 ? string('MUSIC') :
+				'title'        => $i == 0 ? string('BROWSE_MUSIC_FOLDER') :
 						($obj->title ? $obj->title : Slim::Music::Info::fileName($obj->url)),
 				'hierarchy'    => join('/', @levels[0..$i]),
 			};
@@ -99,7 +99,7 @@ sub browsetree {
 	}
 
 	my $topPath = $topLevelObj->path;
-	my $osName  = Slim::Utils::OSDetect::OS();
+	my $isWin   = Slim::Utils::OSDetect::isWindows();
 
 	for my $relPath (@$items[$start..$end]) {
 
@@ -108,7 +108,7 @@ sub browsetree {
 		# Amazingly, this just works. :)
 		# Do the cheap compare for osName first - so non-windows users
 		# won't take the penalty for the lookup.
-		if ($osName eq 'win' && Slim::Music::Info::isWinShortcut($url)) {
+		if ($isWin && Slim::Music::Info::isWinShortcut($url)) {
 			$url = Slim::Utils::Misc::fileURLFromWinShortcut($url);
 		}
 

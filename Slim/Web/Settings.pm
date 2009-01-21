@@ -1,6 +1,6 @@
 package Slim::Web::Settings;
 
-# $Id: Settings.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Settings.pm 23300 2008-09-25 16:21:39Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -239,11 +239,16 @@ sub handler {
 
 	if ($class->needsClient()) {
 
+		my $basic = 'BASIC_PLAYER_SETTINGS';
+
 		my @orderedLinks = 
 			map { $_->[1] }
 			sort { $a->[0] cmp $b->[0] }
-			map { [ uc( Slim::Utils::Strings::string($_) ), $_ ] } 
+			map { [ uc( Slim::Utils::Strings::string($_) ), $_ ] }
+			grep { $_ !~ /$basic/ } 
 			keys %{$paramRef->{'playersetup'}};
+	
+		unshift @orderedLinks, $basic if $paramRef->{'playersetup'}->{$basic};
 	
 		$paramRef->{'orderedLinks'} = \@orderedLinks;
 	}

@@ -1,2 +1,2 @@
 remove_dbix_migration
-remove_version_checks
+custom_os_detect

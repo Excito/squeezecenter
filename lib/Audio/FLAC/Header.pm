@@ -1,6 +1,6 @@
 package Audio::FLAC::Header;
 
-# $Id: Header.pm 18965 2008-04-20 17:56:01Z andy $
+# $Id: Header.pm 18967 2008-04-20 17:56:24Z andy $
 
 use strict;
 use File::Basename;

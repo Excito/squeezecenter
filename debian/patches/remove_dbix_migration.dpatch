@@ -8,17 +8,17 @@
 
 @DPATCH@
 diff -urNad squeezecenter~/Slim/Schema.pm squeezecenter/Slim/Schema.pm
---- squeezecenter~/Slim/Schema.pm	2008-09-24 23:48:19.000000000 +0200
-+++ squeezecenter/Slim/Schema.pm	2008-10-02 17:58:23.000000000 +0200
-@@ -28,7 +28,6 @@
- 
+--- squeezecenter~/Slim/Schema.pm	2009-01-21 13:20:33.000000000 +0100
++++ squeezecenter/Slim/Schema.pm	2009-01-21 13:58:48.000000000 +0100
+@@ -29,7 +29,6 @@
  use base qw(DBIx::Class::Schema);
  
+ use Data::Dump;
 -use DBIx::Migration;
  use File::Basename qw(dirname);
  use File::Spec::Functions qw(:ALL);
  use List::Util qw(max);
-@@ -400,67 +399,7 @@
+@@ -393,67 +392,7 @@
  =cut
  
  sub migrateDB {

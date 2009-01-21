@@ -26,7 +26,6 @@ use Slim::Formats::Playlists;
 use Slim::Player::Player;
 use Slim::Player::ProtocolHandlers;
 use Slim::Player::Protocols::HTTP;
-use Slim::Player::Protocols::MMS;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Utils::Unicode;
@@ -62,12 +61,6 @@ sub initPrefs {
 	$client->SUPER::initPrefs();
 }
 
-sub reconnect {
-	my $client = shift;
-	$client->SUPER::reconnect(@_);
-
-}
-
 sub maxBass { 50 };
 sub minBass { 50 };
 sub maxTreble { 50 };
@@ -78,7 +71,10 @@ sub minPitch { 100 };
 sub model {
 	return 'squeezeslave';
 }
+
 sub modelName { 'Squeezeslave' }
+
+sub hasIR { return 0; }
 
 # in order of preference based on whether we're connected via wired or wireless...
 sub formats {
@@ -170,10 +166,6 @@ sub needsUpgrade {
 	return 0;
 }
 
-sub reportsTrackStart {
-	return 1;
-}
-
 sub requestStatus {
 	shift->stream('t');
 }
@@ -245,5 +237,71 @@ sub packetLatency {
 		$client->SUPER::packetLatency()
 	);
 }
+
+sub statHandler {
+	my ($client, $code) = @_;
+	
+	if ($code eq 'STMd') {
+		$client->readyToStream(1);
+		$client->controller()->playerReadyToStream($client);
+	} elsif ($code eq 'STMn') {
+		$client->readyToStream(1);
+		logError($client->id(). ": Decoder does not support file format");
+		$client->controller()->playerStreamingFailed($client, 'PROBLEM_OPENING');
+	} elsif ($code eq 'STMl') {
+		$client->bufferReady(1);
+		$client->controller()->playerBufferReady($client);
+	} elsif ($code eq 'STMu') {
+		$client->readyToStream(1);
+		$client->controller()->playerStopped($client);
+	} elsif ($code eq 'STMa') {
+		$client->bufferReady(1);
+	} elsif ($code eq 'STMc') {
+		$client->readyToStream(0);
+		$client->bufferReady(0);
+	} elsif ($code eq 'STMs') {
+		$client->controller()->playerTrackStarted($client);
+	} elsif ($code eq 'STMo') {
+		$client->controller()->playerOutputUnderrun($client);
+	} elsif ($code eq 'EoS') {
+		$client->controller()->playerEndOfStream($client);
+	} else {		
+		if ( !$client->bufferReady() && ($client->outputBufferFullness() > 40_000) && $client->isSynced(1) ) {
+			# Fake up buffer ready (0.25s audio)
+			$client->bufferReady(1);	# to stop multiple starts 
+			$client->controller()->playerBufferReady($client);
+		} else {
+			$client->controller->playerStatusHeartbeat($client);
+		}
+	}	
+	
+}
+
+sub startAt {
+	my ($client, $at) = @_;
+
+	Slim::Utils::Timers::killTimers($client, \&_buffering);
+	Slim::Utils::Timers::setHighTimer(
+			$client,
+			$at - $client->packetLatency(),
+			\&_unpauseAfterInterval
+		);
+	return 1;
+}
+
+sub _unpauseAfterInterval {
+	my $client = shift;
+	$client->stream('u');
+	$client->playPoint(undef);
+	return 1;
+}
+
+# Need to use weighted play-point
+sub needsWeightedPlayPoint { 1 }
+
+sub playPoint {
+	return Slim::Player::Client::playPoint(@_);
+}
+
 
 1;

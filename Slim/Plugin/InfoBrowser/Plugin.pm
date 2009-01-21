@@ -2,7 +2,7 @@ package Slim::Plugin::InfoBrowser::Plugin;
 
 # InfoBrowser - an extensible information parser for SqueezeCenter 7.0
 #
-# $Id: Plugin.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Plugin.pm 23849 2008-11-07 23:24:32Z adrian $
 #
 # InfoBrowser provides a framework to use SqueezeCenter's xmlbrowser to fetch remote content and convert it into a format
 # which can be displayed via the SqueezeCenter web interface, cli for jive or another cli client or via the player display.
@@ -30,9 +30,8 @@ package Slim::Plugin::InfoBrowser::Plugin;
 #
 # In this case Plugins::InfoBrowserAddons::parse gets called with ( $class, $html, $paramstring ).
 #
-# Addons are stored in Plugins/InfoBrowserAddons.  It is suggested that each addon is a separate directory within this top level
-# directory containing the opml menu and any associated parser files.  InfoBrowser will search this entire directory tree for
-# opml files and add them to the main information browser menu.
+# Addons are stored in Plugins/InfoBrowserAddons or within a plugin with name InfoBrowser<somename>.  InfoBrowser will search all folder
+# within Plugins/InfoBrowserAddons and Plugins/InfoBrowser<somename> for opml files and add them to the main information browser menu.
 #
 # Users may remove or reorder menu entries in the top level opml menu via settings.  They may also reset the menu which will reimport all
 # default and Addon opml files.
@@ -131,11 +130,11 @@ sub cliQuery {
 		use Slim::Networking::SqueezeNetwork;
 		my $url = Slim::Networking::SqueezeNetwork->url( '/public/opml/' . $client->playerData->userid->emailHash . '/rss.opml' );
 		
-		Slim::Buttons::XMLBrowser::cliQuery('infobrowser', $url, $request);
+		Slim::Control::XMLBrowser::cliQuery('infobrowser', $url, $request);
 		return;
 	}
 
-	Slim::Buttons::XMLBrowser::cliQuery('infobrowser', $menuUrl, $request);
+	Slim::Control::XMLBrowser::cliQuery('infobrowser', $menuUrl, $request);
 }
 
 sub searchDirs {
@@ -187,14 +186,22 @@ sub _searchDirs {
 
 	my @searchDirs;
 	
-	push @searchDirs, $class->_pluginDataFor('basedir');
-
-	# find location of Addons dir and add this to the path searched for opml menus
+	# find locations of main Plugin and Addons and add these to the path searched for opml menus
 	my @pluginDirs = Slim::Utils::OSDetect::dirsFor('Plugins');
+
 	for my $dir (@pluginDirs) {
-		my $addonDir = catdir($dir, 'InfoBrowserAddons');
-		if (-r $addonDir) {
-			push @searchDirs, $addonDir;
+
+		opendir(DIR, $dir);
+
+		my @entries = readdir(DIR);
+
+		close(DIR);
+
+		for my $entry (@entries) {
+
+			if ($entry =~ /^InfoBrowser/) {
+				push @searchDirs, catdir($dir,$entry);
+			}
 		}
 	}
 

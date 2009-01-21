@@ -1,6 +1,6 @@
 package Slim::Buttons::Playlist;
 
-# $Id: Playlist.pm 23411 2008-10-03 17:02:16Z andy $
+# $Id: Playlist.pm 24460 2009-01-01 12:10:56Z adrian $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -238,23 +238,6 @@ sub init {
 			}
 		},
 		
-		'zap' => sub {
-			my $client = shift;
-			my $zapped = catfile($prefs->get('playlistdir'), $client->string('ZAPPED_SONGS') . '.m3u');
-
-			if (Slim::Player::Playlist::count($client) > 0) {
-
-				$client->showBriefly( {
-					'line' => [ $client->string('ZAPPING_FROM_PLAYLIST'), Slim::Music::Info::standardTitle($client,
-						Slim::Player::Playlist::song($client, browseplaylistindex($client))) ]
-				}, {
-					'firstline' => 1
-				}); 
-
-				$client->execute(["playlist", "zap", browseplaylistindex($client)]);
-			}
-		},
-
 		'play' => sub  {
 			my $client = shift;
 
@@ -263,10 +246,6 @@ sub init {
 				if (Slim::Player::Source::playmode($client) eq 'pause') {
 
 					$client->execute(["pause"]);
-
-				} elsif (Slim::Player::Source::rate($client) != 1) {
-
-					$client->execute(["rate", 1]);
 
 				} else {
 
@@ -452,7 +431,7 @@ sub lines {
 
 	} elsif ($args->{'periodic'} && $client->animateState) {
 
-		return {};
+		return undef;
 
 	} else {
 
@@ -470,8 +449,27 @@ sub lines {
 
 		my $song = Slim::Player::Playlist::song($client, browseplaylistindex($client) );
 		
+		my $title;
+		
+		# Get remote metadata for other tracks in the playlist if available
+		if ( $song->isRemoteURL ) {
+			my $handler = Slim::Player::ProtocolHandlers->handlerForURL($song->url);
+
+			if ( $handler && $handler->can('getMetadataFor') ) {
+				my $meta = $handler->getMetadataFor( $client, $song->url );
+				
+				if ( $meta->{title} ) {
+					$title = Slim::Music::Info::getCurrentTitle( $client, $song->url, 0, $meta );
+				}
+			}
+		}
+		
+		if ( !$title ) {
+			$title = Slim::Music::Info::standardTitle($client, $song);
+		}
+		
 		$parts = {
-			'line'    => [ $line1, Slim::Music::Info::standardTitle($client, $song) ],
+			'line'    => [ $line1, $title ],
 			'overlay' => [ $overlay1, $client->symbols('notesymbol') ],
 		};
 

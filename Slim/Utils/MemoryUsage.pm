@@ -1,6 +1,6 @@
 package Slim::Utils::MemoryUsage;
 
-# $Id: MemoryUsage.pm 23237 2008-09-22 14:22:25Z andy $ 
+# $Id: MemoryUsage.pm 23740 2008-10-30 16:32:23Z mherger $ 
 #
 # This module is a merging of B::TerseSize and Apache::Status 
 # put together to work with SqueezeCenter by Dan Sully
@@ -859,6 +859,9 @@ sub noh_b_lexinfo {
 
 	return \$html;
 }
+
+use Memoize;
+memoize('status_memory_usage');
 
 sub status_memory_usage {
 	my $class = shift;

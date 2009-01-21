@@ -16,50 +16,13 @@ use Slim::Utils::Prefs;
 use Slim::Utils::Timers;
 use Slim::Networking::SqueezeNetwork;
 
-my $showProxy = 1;
-my $serverPrefs = preferences('server');
-
 my $log = Slim::Utils::Log->addLogCategory({
 	'category'     => 'wizard',
 	'defaultLevel' => 'ERROR',
 });
 
-my %prefs = (
-	'server' => ['webproxy', 'sn_email', 'sn_password_sha', 'audiodir', 'playlistdir'],
-	'plugin.itunes' => ['itunes', 'xml_file'],
-	'plugin.musicip' => ['musicip', 'port']
-);
-
-sub new {
-	my $class = shift;
-
-	# try to connect to SqueezeNetwork to test for the need of proxy settings
-	my $http = Slim::Networking::SimpleAsyncHTTP->new(
-		sub {
-			my $http = shift;
-			# TODO: check for a proxy server's answer
-			$showProxy = 0;
-		},
-		sub {
-			my $http = shift;
-			$log->error("Couldn't connect to SqueezeNetwork - do we need a proxy?\n" . $http->error);
-		},
-		{
-			timeout => 30
-		}
-	);
-	
-	# Any async HTTP in init must be on a timer
-	Slim::Utils::Timers::setTimer(
-		undef,
-		time(),
-		sub {
-			$http->get( Slim::Networking::SqueezeNetwork->url( '/api/v1/time' ) );
-		},
-	);
-
-	return $class->SUPER::new($class);
-}
+my $serverPrefs = preferences('server');
+my @prefs = ('audiodir', 'playlistdir');
 
 sub page {
 	return 'settings/server/wizard.html';
@@ -87,7 +50,7 @@ sub handler {
 
 		# try to guess the local language setting
 		# only on non-Windows systems, as the Windows installer is setting the langugae
-		if (Slim::Utils::OSDetect::OS() ne 'win' && !$paramRef->{saveLanguage}
+		if (!Slim::Utils::OSDetect::isWindows() && !$paramRef->{saveLanguage}
 			&& defined $response->{_request}->{_headers}->{'accept-language'}) {
 
 			$log->debug("Accepted-Languages: " . $response->{_request}->{_headers}->{'accept-language'});
@@ -121,65 +84,49 @@ sub handler {
 	# set right-to-left orientation for Hebrew users
 	$paramRef->{rtl} = 1 if ($paramRef->{prefs}->{language} eq 'HE');
 
-	# bug 8986: sort namespaces to have "plugins < server", as setting audiodir
-	# before iTunes/MusicIP would result in a wrong scan type
-	foreach my $namespace (sort keys %prefs) {
-		foreach my $pref (@{$prefs{$namespace}}) {
+	foreach my $pref (@prefs) {
 
-			if ($paramRef->{saveSettings}) {
+		if ($paramRef->{saveSettings}) {
 				
-				# Skip SN prefs, they were set earlier
-				next if $pref =~ /^sn_/;
-				
-				# reset audiodir if it had been disabled
-				if ($pref =~ /^(?:audiodir|playlistdir)$/ && !$paramRef->{useAudiodir}) {
-					$paramRef->{$pref} = '';
-				}
-
-				if ($pref =~ /^(?:itunes|musicip)/ && !$paramRef->{$pref}) {
-					$paramRef->{$pref} = '0';
-				}
-
-				preferences($namespace)->set($pref, $paramRef->{$pref});
+			# if a scan is running and one of the music sources has changed, abort scan
+			if ($pref =~ /^(?:audiodir|playlistdir)$/ 
+				&& $paramRef->{$pref} ne $serverPrefs->get($pref) 
+				&& Slim::Music::Import->stillScanning) 
+			{
+				$log->debug('Aborting running scan, as user re-configured music source in the wizard');
+				Slim::Music::Import->abortScan();
+			}
+			
+			# revert logic: while the pref is "disable", the UI is opt-in
+			# if this value is set we actually want to not disable it...
+			elsif ($pref eq 'sn_disable_stats') {
+				$paramRef->{$pref} = $paramRef->{$pref} ? 0 : 1;
 			}
 
-			if ($log->is_debug) {
-	 			$log->debug("$namespace.$pref: " . preferences($namespace)->get($pref));
-			}
-			$paramRef->{prefs}->{$pref} = preferences($namespace)->get($pref);
-
-			# Cleanup the checkbox
-			if ($pref =~ /itunes|musicip/) {
-				$paramRef->{prefs}->{$pref} = defined $paramRef->{prefs}->{$pref} ? $paramRef->{prefs}->{$pref} : 0;
-			}
+			$serverPrefs->set($pref, $paramRef->{$pref});
 		}
+
+		if ($log->is_debug) {
+ 			$log->debug("$pref: " . $serverPrefs->get($pref));
+		}
+		$paramRef->{prefs}->{$pref} = $serverPrefs->get($pref);
 	}
+
+	$paramRef->{useiTunes} = preferences('plugin.itunes')->get('itunes');
+	$paramRef->{useMusicIP} = preferences('plugin.musicip')->get('musicip');
+	$paramRef->{serverOS} = Slim::Utils::OSDetect::OS();
 
 	# if the wizard has been run for the first time, redirect to the main we page
 	if ($paramRef->{firstTimeRunCompleted}) {
 
 		$response->code(RC_MOVED_TEMPORARILY);
 		$response->header('Location' => '/');
-
-		main::checkDataSource();
 	}
 
 	else {
-		$paramRef->{showProxy} = $showProxy;
-		$paramRef->{showiTunes} = Slim::Utils::PluginManager->isEnabled('Slim::Plugin::iTunes::Plugin') && !Slim::Plugin::iTunes::Common->canUseiTunesLibrary();
-		$paramRef->{showMusicIP} = Slim::Utils::PluginManager->isEnabled('Slim::Plugin::MusicMagic::Plugin') && !Slim::Plugin::MusicMagic::Plugin::canUseMusicMagic();
-		$paramRef->{serverOS} = Slim::Utils::OSDetect::OS();
-
-		# presets for first execution:
-		# - use iTunes if available
-		# - use local path if no iTunes available
-		if (!$serverPrefs->get('wizardDone')) {
-			$paramRef->{prefs}->{iTunes} = $paramRef->{prefs}->{iTunes} && Slim::Plugin::iTunes::Common->canUseiTunesLibrary();
-			$paramRef->{useAudiodir} = $paramRef->{prefs}->{audiodir} || !$paramRef->{prefs}->{iTunes};
-		}
-		else {
-			$paramRef->{useAudiodir} = $paramRef->{prefs}->{audiodir};			
-		}
+		
+		# use local path if neither iTunes nor MusicIP is available, or on anything but Windows/OSX
+		$paramRef->{useAudiodir} = Slim::Utils::OSDetect::OS() !~ /^(?:mac|win)$/ || !($paramRef->{useiTunes} || $paramRef->{useMusicIP});
 	}
 	
 	if ( $paramRef->{saveSettings} ) {
@@ -199,14 +146,19 @@ sub handler {
 			);
 		}
 		
-		# Disable iTunes and MusicIP if they aren't being used
-		if ( !$paramRef->{itunes} ) {
+		# Disable iTunes and MusicIP plugins if they aren't being used
+		if ( !$paramRef->{useiTunes} ) {
 			Slim::Utils::PluginManager->disablePlugin('Slim::Plugin::iTunes::Plugin');
 		}
 		
-		if ( !$paramRef->{musicip} ) {
+		if ( !$paramRef->{useMusicIP} ) {
 			Slim::Utils::PluginManager->disablePlugin('Slim::Plugin::MusicMagic::Plugin');
 		}
+	}
+	
+	if ($client) {
+		$paramRef->{playericon} = Slim::Web::Settings::Player::Basic->getPlayerIcon($client);
+		$paramRef->{playertype} = $client->model();
 	}
 
 	return Slim::Web::HTTP::filltemplatefile($class->page, $paramRef);

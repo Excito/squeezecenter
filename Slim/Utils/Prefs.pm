@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs;
 
-# $Id: Prefs.pm 23315 2008-09-26 22:51:26Z andy $
+# $Id: Prefs.pm 24310 2008-12-15 20:05:24Z andy $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -94,6 +94,7 @@ my %namespaces;
 
 # we need to check for prefsdir being set on cmdline as we are run before the server parses options
 Getopt::Long::GetOptions('prefsdir=s' => \$path);
+$::prefsdir = $path;
 
 $path ||= Slim::Utils::OSDetect::dirsFor('prefs');
 
@@ -147,25 +148,13 @@ sub init {
 		'rank-BROWSE_MUSIC_FOLDER' => 10,
 		'rank-SAVED_PLAYLISTS'     => 5,
 		'rank-SEARCH'              => 3,
-		# Internet Radio menu ordering
-		'rank-PLUGIN_PICKS_MODULE_NAME'            => 25,
-		'rank-PLUGIN_RADIOIO_MODULE_NAME'          => 20,
-		'rank-PLUGIN_RADIOTIME_MODULE_NAME'        => 15,
-		'rank-PLUGIN_LIVE365_MODULE_NAME'          => 10,
-		'rank-PLUGIN_SHOUTCASTBROWSER_MODULE_NAME' => 5,
-		# Music Services menu ordering
-		'rank-PLUGIN_PANDORA_MODULE_NAME'         => 25,
-		'rank-PLUGIN_RHAPSODY_DIRECT_MODULE_NAME' => 20,
-		'rank-PLUGIN_SLACKER_MODULE_NAME'         => 15,
-		'rank-PLUGIN_MP3TUNES_MODULE_NAME'        => 10,
-		'rank-PLUGIN_LMA_MODULE_NAME'             => 5,
 		# Extras menu ordering
-		'rank-PLUGIN_PODCAST'                     => 35,
-		'rank-PLUGIN_RSSNEWS'                     => 30,
-		'rank-PLUGIN_SOUNDS_MODULE_NAME'          => 25,
-		'rank-GAMES'                              => 20,
+		'rank-PLUGIN_PODCAST'            => 35,
+		'rank-PLUGIN_RSSNEWS'            => 30,
+		'rank-PLUGIN_SOUNDS_MODULE_NAME' => 25,
+		'rank-GAMES'                     => 20,
 		# Server Settings - Basic
-		'language'              => 'EN',
+		'language'              => \&defaultLanguage,
 		'audiodir'              => \&defaultAudioDir,
 		'playlistdir'           => \&defaultPlaylistDir,
 		# Server Settings - Behaviour
@@ -212,7 +201,7 @@ sub init {
 		# Server Settings - Security
 		'filterHosts'           => 0,
 		'allowedHosts'          => sub { join(',', Slim::Utils::Network::hostAddr()) },
-		'csrfProtectionLevel'   => 1,
+		'csrfProtectionLevel'   => 0,
 		'authorize'             => 0,
 		'username'              => '',
 		'password'              => '',
@@ -240,7 +229,7 @@ sub init {
 									'TITLE (ARTIST)',
 									'ARTIST - TITLE'
 								   ],
-		'titleFormatWeb'        => 1,
+		'titleFormatWeb'        => 0,
 		# Server Settings - UserInterface
 		'skin'                  => 'Default',
 		'itemsPerPage'          => 50,
@@ -249,13 +238,16 @@ sub init {
 		'artfolder'             => '',
 		'thumbSize'             => 100,
 		# Server Settings - jive UI
-		'jivealbumsort'		=> 'artistalbum',
+		'jivealbumsort'		=> 'album',
 		# Server Settings - SqueezeNetwork
 		'sn_sync'               => 1,
 		# Bug 5557, disable UPnP support by default
 		'noupnp'                => 1,
 	);
 
+	# we can have different defaults depending on the OS 
+	Slim::Utils::OSDetect::getOS->initPrefs(\%defaults);
+	
 	# add entry to dispatch table if it is loaded (it isn't in scanner.pl) as migration may call notify for this
 	# this is required as Slim::Control::Request::init will not have run at this point
 	if (exists &Slim::Control::Request::addDispatch) {
@@ -272,7 +264,7 @@ sub init {
 				my $old = Slim::Utils::Prefs::OldPrefs->get($pref);
 
 				# bug 7237: don't migrate dbsource if we're upgrading from SS6.3
-				next if $pref eq 'dbsource' && $old =~ /SQLite/i;
+				next if $pref eq 'dbsource' && $old && $old =~ /SQLite/i;
 
 				$prefs->set($pref, $old) if !$prefs->exists($pref) && defined $old;
 			}
@@ -493,6 +485,35 @@ sub init {
 			}
 			1;
 		} );
+		
+		# Add Music Stores menu item after Music Services
+		$prefs->migrateClient( 8, sub {
+			my ( $cprefs, $client ) = @_;
+			my $menuItem = $cprefs->get('menuItem');
+			
+			# Ignore if MUSIC_STORES is already present
+			return 1 if grep /MUSIC_STORES/, @{$menuItem};
+			
+			my $done = 0;
+			my $i = 0;
+			for my $item ( @{$menuItem} ) {
+				$i++;
+				if ( $item eq 'MUSIC_SERVICES' ) {
+					splice @{$menuItem}, $i, 0, 'MUSIC_STORES';
+					$done = 1;
+					last;
+				}
+			}
+			
+			if ( !$done ) {
+				# Just add the item at the end
+				push @{$menuItem}, 'MUSIC_STORES';
+			}
+		
+			$cprefs->set( menuItem => $menuItem );
+			
+			1;
+		} );
 	}
 
 	# initialise any new prefs
@@ -505,7 +526,7 @@ sub init {
 	$prefs->setValidate( 'array', qw(guessFileFormats titleFormat disabledformats) );
 
 	# allow users to set a port below 1024 on windows which does not require admin for this
-	my $minP = Slim::Utils::OSDetect::OS() eq 'win' ? 1 : 1024;
+	my $minP = Slim::Utils::OSDetect::isWindows() ? 1 : 1024;
 	$prefs->setValidate({ 'validator' => 'intlimit', 'low' => $minP,'high'=>  65535 }, 'httpport'    );
 	
 	$prefs->setValidate({ 'validator' => 'intlimit', 'low' =>    3, 'high' =>    30 }, 'bufferSecs'  );
@@ -547,6 +568,20 @@ sub init {
 	$prefs->setValidate({ 'validator' => 'intlimit', 'low' => 0, 'high' => 100 }, 'alarmDefaultVolume');
 	$prefs->setValidate({ 'validator' => 'intlimit', 'low' => 1                }, 'alarmSnoozeSeconds');
 	$prefs->setValidate({ 'validator' => 'intlimit', 'low' => 0                }, 'alarmTimeoutSeconds');
+
+	$prefs->setValidate({
+		validator => sub {
+						if ($_[1] =~ /.+\.([^.]+)$/) {
+							my $suffix = $1;
+	
+							return grep(/^$suffix$/, qw(jpg gif png jpeg));
+					
+						} else {
+							return 1;
+						}
+					}
+		}, 'coverArt',
+	);
 
 	# set on change functions
 	$prefs->setChange( \&Slim::Web::HTTP::adjustHTTPPort, 'httpport' );
@@ -731,6 +766,10 @@ sub makeSecuritySecret {
 	return $secret;
 }
 
+sub defaultLanguage {
+	return Slim::Utils::OSDetect->getOS->getSystemLanguage;
+}
+
 sub defaultAudioDir {
 	my $path = Slim::Utils::OSDetect::dirsFor('music');
 
@@ -742,7 +781,7 @@ sub defaultAudioDir {
 }
 
 sub defaultPlaylistDir {
-	my $path = Slim::Utils::OSDetect::dirsFor('playlists');;
+	my $path = Slim::Utils::OSDetect::dirsFor('playlists');
 
 	if ($path) {
 
@@ -832,7 +871,7 @@ sub maxRate {
 	}
 	
 	# if we're the master, make sure we return the lowest common denominator bitrate.
-	my @playergroup = ($client, Slim::Player::Sync::syncedWith($client));
+	my @playergroup = ($client->syncGroupActiveMembers());
 	
 	for my $everyclient (@playergroup) {
 

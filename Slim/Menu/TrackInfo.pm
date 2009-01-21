@@ -1,6 +1,6 @@
 package Slim::Menu::TrackInfo;
 
-# $Id: TrackInfo.pm 22236 2008-07-30 20:17:53Z andy $
+# $Id: TrackInfo.pm 24314 2008-12-15 20:56:26Z andy $
 
 # SqueezeCenter Copyright 2001-2008 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -23,6 +23,8 @@ plugins to register additional menu items.
 
 use strict;
 
+use base qw(Slim::Menu::Base);
+
 use Scalar::Util qw(blessed);
 
 use Slim::Utils::Log;
@@ -30,16 +32,23 @@ use Slim::Utils::Strings qw(cstring);
 
 my $log = logger('menu.trackinfo');
 
-my %infoProvider;
-my @infoOrdering;
-
 sub init {
 	my $class = shift;
+	$class->SUPER::init();
 	
-	# Our information providers are pluggable, call the 
-	# registerInfoProvider function to extend the details
-	# provided in the track info menu.
-	$class->registerDefaultInfoProviders();
+	Slim::Control::Request::addDispatch(
+		[ 'trackinfo', 'items', '_index', '_quantity' ],
+		[ 1, 1, 1, \&cliQuery ]
+	);
+	
+	Slim::Control::Request::addDispatch(
+		[ 'trackinfo', 'playlist', '_method' ],
+		[ 1, 1, 1, \&cliQuery ]
+	);
+}
+
+sub name {
+	return 'SONG_INFO';
 }
 
 ##
@@ -49,11 +58,7 @@ sub init {
 sub registerDefaultInfoProviders {
 	my $class = shift;
 	
-	# The 'top', 'middle' and 'bottom' groups
-	# so that we can add items in absolute positions
-	$class->registerInfoProvider( top    => ( isa => '' ) );
-	$class->registerInfoProvider( middle => ( isa => '' ) );
-	$class->registerInfoProvider( bottom => ( isa => '' ) );
+	$class->SUPER::registerDefaultInfoProviders();
 
 	$class->registerInfoProvider( playtrack => (
 		menuMode  => 1,
@@ -193,77 +198,6 @@ sub registerDefaultInfoProviders {
 	
 }
 
-=head1 METHODS
-
-=head2 Slim::Menu::TrackInfo->registerInfoProvider( $name, %details )
-
-Register a new menu provider to be displayed in Track Info.
-
-  Slim::Menu::TrackInfo->registerInfoProvider( album => (
-      after => 'artist',
-      func  => \&infoAlbum,
-  ) );
-
-=over 4
-
-=item $name
-
-The name of the menu provider.  This must be unique within the server, so
-you should prefix it with your plugin's namespace.
-
-=item %details
-
-after: Place this menu after the given menu item.
-
-before: Place this menu before the given menu item.
-
-func: Callback to produce the menu.  Is passed $client, $url, $track, $remoteMeta.
-Note that $client may be undef if browsing track info without a client (i.e. from the web).
-
-The special values 'top', 'middle', and 'bottom' may be used if you don't
-want exact placement in the menu.
-
-=back
-
-=cut
-
-sub registerInfoProvider {
-	my ( $class, $name, %details ) = @_;
-
-	$details{name} = $name; # For diagnostic purposes
-	
-	if (
-		   !defined $details{after}
-		&& !defined $details{before}
-		&& !defined $details{isa}
-	) {
-		# If they didn't say anything about where it goes,
-		# place it in the middle.
-		$details{isa} = 'middle';
-	}
-	
-	$infoProvider{$name} = \%details;
-
-	# Clear the array to force it to be rebuilt
-	@infoOrdering = ();
-}
-
-=head2 Slim::Menu::TrackInfo->deregisterInfoProvider( $name )
-
-Removes the given menu from Track Info.  Core menus can be removed,
-but you should only do this if you know what you are doing.
-
-=cut
-
-sub deregisterInfoProvider {
-	my ( $class, $name ) = @_;
-	
-	delete $infoProvider{$name};
-
-	# Clear the array to force it to be rebuilt
-	@infoOrdering = ();
-}
-
 sub menu {
 	my ( $class, $client, $url, $track, $tags ) = @_;
 	$tags ||= {};
@@ -273,13 +207,7 @@ sub menu {
 	# registered information providers, but only then. After
 	# that, we will have our ordering and only need to step
 	# through it.
-	if ( !scalar @infoOrdering ) {
-		# We don't know what order the entries should be in,
-		# so work that out.
-		$class->generateInfoOrderingItem( 'top' );
-		$class->generateInfoOrderingItem( 'middle' );
-		$class->generateInfoOrderingItem( 'bottom' );
-	}
+	my $infoOrdering = $class->getInfoOrdering;
 	
 	# Get track object if necessary
 	if ( !blessed($track) ) {
@@ -341,7 +269,7 @@ sub menu {
 	# Now run the order, which generates all the items we need
 	my $items = [];
 	
-	for my $ref ( @infoOrdering ) {
+	for my $ref ( @{ $infoOrdering } ) {
 		# Skip items with a defined parent, they are handled
 		# as children below
 		next if $ref->{parent};
@@ -352,7 +280,7 @@ sub menu {
 		# Look for children of this item
 		my @children = grep {
 			$_->{parent} && $_->{parent} eq $ref->{name}
-		} @infoOrdering;
+		} @{ $infoOrdering };
 		
 		if ( @children ) {
 			my $subitems = $items->[-1]->{items} = [];
@@ -371,69 +299,6 @@ sub menu {
 	};
 }
 
-##
-# Adds an item to the ordering list, following any
-# 'after', 'before' and 'isa' requirements that the
-# registered providers have requested.
-#
-# @param[in]  $name     The name of the item to add
-# @param[in]  $previous The item before this one, for 'before' processing
-sub generateInfoOrderingItem {
-	my ( $class, $name, $previous ) = @_;
-
-	# Check for the 'before' items which are 'after' the last item
-	if ( defined $previous ) {
-		for my $item (
-			sort { $a cmp $b }
-			grep {
-				   defined $infoProvider{$_}->{after}
-				&& $infoProvider{$_}->{after} eq $previous
-				&& defined $infoProvider{$_}->{before}
-				&& $infoProvider{$_}->{before} eq $name
-			} keys %infoProvider
-		) {
-			$class->generateInfoOrderingItem( $item, $previous );
-		}
-	}
-
-	# Now the before items which are just before this item
-	for my $item (
-		sort { $a cmp $b }
-		grep {
-			   !defined $infoProvider{$_}->{after}
-			&& defined $infoProvider{$_}->{before}
-			&& $infoProvider{$_}->{before} eq $name
-		} keys %infoProvider
-	) {
-		$class->generateInfoOrderingItem( $item, $previous );
-	}
-
-	# Add the item itself
-	push @infoOrdering, $infoProvider{$name};
-
-	# Now any items that are members of the group
-	for my $item (
-		sort { $a cmp $b }
-		grep {
-			   defined $infoProvider{$_}->{isa}
-			&& $infoProvider{$_}->{isa} eq $name
-		} keys %infoProvider
-	) {
-		$class->generateInfoOrderingItem( $item );
-	}
-
-	# Any 'after' items
-	for my $item (
-		sort { $a cmp $b }
-		grep {
-			   defined $infoProvider{$_}->{after}
-			&& $infoProvider{$_}->{after} eq $name
-			&& !defined $infoProvider{$_}->{before}
-		} keys %infoProvider
-	) {
-		$class->generateInfoOrderingItem( $item, $name );
-	}
-}
 
 sub infoContributors {
 	my ( $client, $url, $track, $remoteMeta ) = @_;
@@ -974,6 +839,9 @@ sub infoComment {
 	
 	if ( $comment ) {
 
+		$comment =~ s/\r\n/\n/g;
+		$comment =~ s/\r/\n/g;
+		$comment =~ s/\n\n+/\n\n/g;
 
 		$item = {
 			name  => cstring($client, 'COMMENT'),
@@ -1002,7 +870,9 @@ sub infoLyrics {
 	
 	if ( my $lyrics = $track->lyrics ) {
 
-		$lyrics =~ s/\r//g;
+		$lyrics =~ s/\r\n/\n/g;
+		$lyrics =~ s/\r/\n/g;
+		$lyrics =~ s/\n\n+/\n\n/g;
 
 		$item = {
 			name  => cstring($client, 'LYRICS'),
@@ -1076,9 +946,9 @@ sub infoContentType {
 	my $item;
 	
 	if ( my $ct = Slim::Schema->contentType($track) ) {
-		if ( $track->remote && Slim::Music::Info::isPlaylist( $track, $ct ) )  {
-			if ( my $entry = $client->masterOrSelf->remotePlaylistCurrentEntry ) {
-				$ct = $entry->content_type;
+		if ( blessed($client) && $track->remote && Slim::Music::Info::isPlaylist( $track, $ct ) )  {
+			if ( my $url = $client->master()->currentTrackForUrl( $track->url ) ) {
+				$ct = Slim::Schema->contentType($url);
 			}
 		}
 		
@@ -1114,18 +984,42 @@ sub infoReplayGain {
 	my $album = $track->album;
 	
 	if ( my $replaygain = $track->replay_gain ) {
-		push @{$items}, {
-			type => 'text',
-			name => cstring($client, 'REPLAYGAIN') . cstring($client, 'COLON') . ' ' . sprintf( "%2.2f", $replaygain ) . ' dB',
-		};
+		my $noclip = Slim::Player::ReplayGain::preventClipping( $replaygain, $track->replay_peak );
+		if ( $noclip < $replaygain ) {
+			# Gain was reduced to avoid clipping
+			push @{$items}, {
+				type => 'text',
+				name => cstring($client, 'REPLAYGAIN') . cstring($client, 'COLON') . ' ' 
+					. sprintf( "%2.2f", $replaygain ) . ' dB (' 
+					. cstring( $client, 'REDUCED_TO_PREVENT_CLIPPING', sprintf( "%2.2f dB", $noclip ) ) . ')',
+			};
+		}
+		else {
+			push @{$items}, {
+				type => 'text',
+				name => cstring($client, 'REPLAYGAIN') . cstring($client, 'COLON') . ' ' . sprintf( "%2.2f", $replaygain ) . ' dB',
+			};
+		}
 	}
 	
 	if ( blessed($album) && $album->can('replay_gain') ) {
 		if ( my $albumreplaygain = $album->replay_gain ) {
-			push @{$items}, {
-				type => 'text',
-				name => cstring($client, 'ALBUMREPLAYGAIN') . cstring($client, 'COLON') . ' ' . sprintf( "%2.2f", $albumreplaygain ) . ' dB',
-			};
+			my $noclip = Slim::Player::ReplayGain::preventClipping( $albumreplaygain, $album->replay_peak );
+			if ( $noclip < $albumreplaygain ) {
+				# Gain was reduced to avoid clipping
+				push @{$items}, {
+					type => 'text',
+					name => cstring($client, 'ALBUMREPLAYGAIN') . cstring($client, 'COLON') . ' ' 
+						. sprintf( "%2.2f", $albumreplaygain ) . ' dB (' 
+						. cstring( $client, 'REDUCED_TO_PREVENT_CLIPPING', sprintf( "%2.2f dB", $noclip ) ) . ')',
+				};
+			}
+			else {
+				push @{$items}, {
+					type => 'text',
+					name => cstring($client, 'ALBUMREPLAYGAIN') . cstring($client, 'COLON') . ' ' . sprintf( "%2.2f", $albumreplaygain ) . ' dB',
+				};
+			}
 		}
 	}
 	
@@ -1160,24 +1054,25 @@ sub infoBitrate {
 		
 		# A bitrate of -1 is set by Scanner::scanBitrate or Formats::*::scanBitrate when the
 		# bitrate of a remote stream can't be determined
-		if ( $bitrate ne '-1' ) {
-			my $undermax = Slim::Player::TranscodingHelper::underMax($client, $track->url);
-			my $rate     = $bitrate;
-			my $convert  = '';
-
-			if ( !$undermax ) {
-
-				$rate = Slim::Utils::Prefs::maxRate($client) . cstring($client, 'KBPS') . " ABR";
-			}
-
-			# XXX: used to be shown only if modeParam 'current' was set
-			if ( defined $undermax && !$undermax ) { 
-				$convert = sprintf( '(%s %s)', cstring($client, 'CONVERTED_TO'), $rate );
+		if ( $bitrate && $bitrate ne '-1' ) {
+			
+			my ($song, $sourcebitrate, $streambitrate);
+			my $convert = '';
+			
+			if (blessed($client) && ($song = $client->currentSongForUrl($track->url))
+				&& ($sourcebitrate = $song->bitrate())
+				&& ($streambitrate = $song->streambitrate())
+				&& $sourcebitrate != $streambitrate)
+			{
+					$convert = sprintf( ' (%s %s%s ABR)', 
+						cstring($client, 'CONVERTED_TO'), 
+						$streambitrate / 1000,
+						cstring($client, 'KBPS')); 
 			}
 			
 			$item = {
 				type => 'text',
-				name => sprintf( "%s: %s %s",
+				name => sprintf( "%s: %s%s",
 					cstring($client, 'BITRATE'), $bitrate, $convert,
 				),
 			};
@@ -1376,55 +1271,50 @@ sub _mixerItemHandler {
 	}
 }
 
-=head1 CREATING MENUS
-
-Menus must be returned in the internal hashref format used for representing OPML.  Each
-provider may also return more than one menu item by returning an arrayref.
-
-=head2 EXAMPLES
-
-=over 4
-
-=item Text item, no actions
-
-  {
-      type => 'text',
-      name => 'Rating: *****',
-  }
-
-=item Item with submenu containing one text item
-
-  {
-      name => 'More Info',
-      items => [
-          {
-	          type => 'text',
-	          name => 'Bitrate: 128kbps',
-	      },
-	  ],
-  }
-
-=item Item using a callback to perform some action in a plugin
-
-  {
-      name        => 'Perform Some Action',
-      url         => \&myAction,
-      passthrough => [ $foo, $bar ], # optional
-  }
-
-  sub myAction {
-      my ( $client, $callback, $foo, $bar ) = @_;
-
-      my $menu = {
-          type => 'text',
-          name => 'Results: ...',
-      };
+sub cliQuery {
+	my $request = shift;
 	
-      return $callback->( $menu );
-  }
+	my $client         = $request->client;
+	my $url            = $request->getParam('url');
+	my $trackId        = $request->getParam('track_id');
+	my $menuMode       = $request->getParam('menu') || 0;
+	my $menuContext    = $request->getParam('context') || 'normal';
+	my $playlist_index = defined( $request->getParam('playlist_index') ) ?  $request->getParam('playlist_index') : undef;
+	
 
-=back
+	my $tags = {
+		menuMode      => $menuMode,
+		menuContext   => $menuContext,
+		playlistIndex => $playlist_index,
+	};
 
-=cut
+	unless ( $url || $trackId ) {
+		$request->setStatusBadParams();
+		return;
+	}
+	
+	my $feed;
+	
+	# Protocol Handlers can define their own track info OPML menus
+	if ( $url ) {
+		my $handler = Slim::Player::ProtocolHandlers->handlerForURL( $url );
+		if ( $handler && $handler->can('trackInfoURL') ) {
+			$feed = $handler->trackInfoURL( $client, $url );
+		}
+	}
+	
+	if ( !$feed ) {
+		# Default menu
+		if ( $url ) {
+			$feed = Slim::Menu::TrackInfo->menu( $client, $url, undef, $tags );
+		}
+		else {
+			my $track = Slim::Schema->find( Track => $trackId );
+			$feed     = Slim::Menu::TrackInfo->menu( $client, $track->url, $track, $tags );
+		}
+	}
+	
+	Slim::Control::XMLBrowser::cliQuery( 'trackinfo', $feed, $request );
+}
 
 1;

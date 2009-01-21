@@ -59,6 +59,9 @@ my %tagMapping = (
 	'REPLAY GAIN'               => 'REPLAYGAIN_TRACK_GAIN',
 	'PEAK LEVEL'                => 'REPLAYGAIN_TRACK_PEAK',
 	'DISC #'                    => 'DISC',
+
+	# for dBpoweramp CD Ripper
+	'TOTALDISCS'                => 'DISCC',
 );
 
 my @tagNames = (Slim::Schema::Contributor->contributorRoles, qw(ALBUM DISCNUMBER TITLE TRACKNUMBER DATE GENRE));
@@ -1201,6 +1204,8 @@ sub scanBitrate {
 	# FLAC bitrate is not accurate with a small header file, so don't bother
 	return (-1, undef);
 }
+
+sub canSeek {1}
 
 =head1 SEE ALSO
 

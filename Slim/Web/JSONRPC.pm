@@ -1,6 +1,6 @@
 package Slim::Web::JSONRPC;
 
-# $Id: JSONRPC.pm 18533 2008-04-07 23:11:05Z andy $
+# $Id: JSONRPC.pm 18535 2008-04-07 23:11:49Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

@@ -1,0 +1,48 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## custom_os_detect.dpatch by Carl Fürstenberg <carl@excito.com>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: No description.
+
+@DPATCH@
+diff -urNad squeezecenter~/Slim/Utils/OS/Custom.pm squeezecenter/Slim/Utils/OS/Custom.pm
+--- squeezecenter~/Slim/Utils/OS/Custom.pm	1970-01-01 01:00:00.000000000 +0100
++++ squeezecenter/Slim/Utils/OS/Custom.pm	2009-01-21 14:49:31.000000000 +0100
+@@ -0,0 +1,37 @@
++package Slim::Utils::OS::Custom;
++
++use strict;
++use base qw(Slim::Utils::OS::Debian);
++
++sub initDetails {
++	my $class = shift;
++
++	$class->{osDetails} = $class->SUPER::initDetails();
++	$class->{osDetails}->{name} = "BUBBA|TWO";
++
++	return $class->{osDetails};
++}
++
++sub initPrefs {
++	my ($class, $prefs) = @_;
++
++	{
++		our ( $dbuser, $dbpass, $dbtype, $dbname, $dbserver, $dbport );
++		
++		use lib '/etc/squeezecenter';
++		require 'debian-db.pm';
++
++		$prefs->{dbusername}		= $dbuser;
++		$prefs->{dbpassword}		= $dbpass;
++		$prefs->{dbsource}			= "dbi\:$dbtype\:database=$dbname;hostname=$dbserver;port=$dbport";
++	}
++
++	$prefs->{scannerPriority}   = 20;
++	$prefs->{resampleArtwork}   = 0;
++	$prefs->{disableStatistics} = 1;
++	$prefs->{playlistdir}		= '/home/storage/music';
++	$prefs->{audiodir}			= '/home/storage/music';
++}
++
++1;
++

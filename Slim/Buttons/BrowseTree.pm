@@ -1,6 +1,6 @@
 package Slim::Buttons::BrowseTree;
 
-# $Id: BrowseTree.pm 23004 2008-09-02 12:52:09Z mherger $
+# $Id: BrowseTree.pm 24179 2008-12-02 01:35:41Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -315,7 +315,7 @@ sub browseTreeItemName {
 		# having to do so at initial load time of possibly hundreds of items.
 		my $url = Slim::Utils::Misc::fixPath($item, $client->modeParam('topLevelPath')) || return;
 
-		if (Slim::Music::Info::isWinShortcut($url)) {
+		if (Slim::Utils::OSDetect::isWindows() && Slim::Music::Info::isWinShortcut($url)) {
 
 			$url = Slim::Utils::Misc::fileURLFromWinShortcut($url);
 		}
@@ -404,7 +404,7 @@ sub setMode {
 	# top level, we show MUSIC FOLDER
 	if (scalar @levels == 1) {
 
-		push @headers, $client->string('MUSIC');
+		push @headers, $client->string('BROWSE_MUSIC_FOLDER');
 
 	} else {
 

@@ -5,7 +5,7 @@ package Slim::Display::Transporter;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Transporter.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Transporter.pm 22939 2008-08-28 16:42:33Z andy $
 
 =head1 NAME
 

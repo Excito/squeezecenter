@@ -47,7 +47,7 @@ use Slim::Utils::Text;
 
 {
 	if ($^O =~ /Win32/) {
-		require Slim::Utils::Win32;
+		require Slim::Utils::OS::Win32;
 	}
 }
 
@@ -57,6 +57,98 @@ my $prefs = preferences('server');
 
 # Frequently used data can be cached in memory, such as the list of albums for Jive
 my $cache = {};
+
+
+sub alarmPlaylistsQuery {
+	my $request = shift;
+
+	# check this is the correct query.
+	if ($request->isNotQuery([['alarm'], ['playlists']])) {
+		$request->setStatusBadDispatch();
+		return;
+	}
+
+	# get our parameters
+	my $client   = $request->client();
+	my $index    = $request->getParam('_index');
+	my $quantity = $request->getParam('_quantity');
+	my $menuMode = $request->getParam('menu') || 0;
+	my $id       = $request->getParam('id');
+
+	my $playlists      = Slim::Utils::Alarm->getPlaylists($client);
+	my $alarm          = Slim::Utils::Alarm->getAlarm($client, $id) if $id;
+	my $currentSetting = $alarm ? $alarm->playlist() : '';
+
+	my @playlistChoices;
+	my $loopname = 'item_loop';
+	my $cnt = 0;
+	
+	my ($valid, $start, $end) = ( $menuMode ? (1, 0, scalar @$playlists) : $request->normalize(scalar($index), scalar($quantity), scalar @$playlists) );
+
+	for my $typeRef (@$playlists[$start..$end]) {
+		
+		my $type    = $typeRef->{type};
+		my @choices = ();
+		my $aref    = $typeRef->{items};
+		
+		for my $choice (@$aref) {
+
+			if ($menuMode) {
+				my $radio = ( 
+					( $currentSetting && $currentSetting eq $choice->{url} )
+					|| ( !defined $choice->{url} && !defined $currentSetting )
+				);
+
+				my $subitem = {
+					text    => $choice->{title},
+					radio   => $radio + 0,
+					nextWindow => 'refreshOrigin',
+					actions => {
+						do => {
+							cmd    => [ 'alarm', 'update' ],
+							params => {
+								id          => $id,
+								playlisturl => $choice->{url} || 0, # send 0 for "current playlist"
+							},
+						},
+					},
+				};
+	
+				
+				if ($typeRef->{singleItem}) {
+					$subitem->{'nextWindow'} = 'refresh';
+				}
+				
+				push @choices, $subitem;
+			}
+			
+			else {
+				$request->addResultLoop($loopname, $cnt, 'category', $type);
+				$request->addResultLoop($loopname, $cnt, 'title', $choice->{title});
+				$request->addResultLoop($loopname, $cnt, 'url', $choice->{url});
+				$request->addResultLoop($loopname, $cnt, 'singleton', $typeRef->{singleItem} ? '1' : '0');
+				$cnt++;
+			}
+		}
+
+		if ( scalar(@choices) ) {
+
+			my $item = {
+				text      => $type,
+				offset    => 0,
+				count     => scalar(@choices),
+				item_loop => \@choices,
+			};
+			$request->setResultLoopHash($loopname, $cnt, $item);
+			
+			$cnt++;
+		}
+	}
+	
+	$request->addResult("offset", $start);
+	$request->addResult("count", $cnt);
+	$request->setStatusDone;
+}
 
 sub alarmsQuery {
 	my $request = shift;
@@ -73,7 +165,6 @@ sub alarmsQuery {
 	my $quantity = $request->getParam('_quantity');
 	my $filter	 = $request->getParam('filter');
 	my $alarmDOW = $request->getParam('dow');
-	
 	
 	# being nice: we'll still be accepting 'defined' though this doesn't make sense any longer
 	if ($request->paramNotOneOfIfDefined($filter, ['all', 'defined', 'enabled'])) {
@@ -149,6 +240,7 @@ sub albumsQuery {
 	my $menu          = $request->getParam('menu');
 	my $insert        = $request->getParam('menu_all');
 	my $to_cache      = $request->getParam('cache');
+	my $party         = $request->getParam('party');
 	
 	if ($request->paramNotOneOfIfDefined($sort, ['new', 'album', 'artflow', 'artistalbum', 'yearalbum', 'yearartistalbum' ])) {
 		$request->setStatusBadParams();
@@ -157,12 +249,13 @@ sub albumsQuery {
 
 	# menu/jive mgmt
 	my $menuMode = defined $menu;
-	my $insertAll = $menuMode && defined $insert;
+	my $partyMode = _partyModeCheck($request);
+	my $insertAll = $menuMode && defined $insert && !$partyMode;
 
 	if (!defined $tags) {
 		$tags = 'l';
 	}
-	
+
 	# get them all by default
 	my $where = {};
 	my $attr = {};
@@ -244,13 +337,13 @@ sub albumsQuery {
 	if ( $menuMode ) {
 		push @{ $attr->{'join'} }, 'contributor';
 		
-		$attr->{'cols'} = [ qw(id artwork title contributor.name contributor.namesort titlesort musicmagic_mixable ) ];
+		$attr->{'cols'} = [ qw(id artwork title contributor.name contributor.namesort titlesort musicmagic_mixable disc discc ) ];
 	}
 	
 	# Flatten request for lookup in cache, only for Jive menu queries
 	my $cacheKey = complex_to_query($where) . complex_to_query($attr) . $menu . $tags . (defined $insert ? $insert : '');
 	if ( $menuMode ) {
-		if ( my $cached = $cache->{albums}->{$cacheKey} ) {
+		if ( my $cached = $cache->{albums}->[$party]->{$cacheKey} ) {
 			my $copy = from_json( $cached );
 			
 			# Don't slice past the end of the array
@@ -344,6 +437,9 @@ sub albumsQuery {
 		};
 		
 		$base->{'actions'}{'play-hold'} = _mixerBase();
+		if ( $party || $partyMode ) {
+			$base->{'actions'}->{'play'} = $base->{'actions'}->{'go'};
+		}
 
 		# adapt actions to SS preference
 		if (!$prefs->get('noGenreFilter') && defined $genreID) {
@@ -386,13 +482,22 @@ sub albumsQuery {
 
 		my $artist;
 		for my $eachitem ($rs->slice($start, $end)) {
+			
+			my $textKey = '';
+
+			#FIXME: see if multiple char textkey is doable for year/genre sort
+			if ($sort && ($sort eq 'artflow' || $sort eq 'artistalbum') ) {
+				$textKey = substr($eachitem->contributor->namesort, 0, 1);
+			} elsif ($sort && $sort ne 'new') {
+				$textKey = substr($eachitem->titlesort, 0, 1);
+			}
 
 			# Jive result formatting
 			if ($menuMode) {
 				
 				# we want the text to be album\nartist
-				$artist = $eachitem->contributor->name;
-				my $text   = $eachitem->title;
+				$artist  = $eachitem->contributor->name;
+				my $text = $eachitem->title;
 				if (defined $artist) {
 					$text = $text . "\n" . $artist;
 				}
@@ -414,20 +519,17 @@ sub albumsQuery {
 					'album_id'        => $id,
 					'favorites_url'   => $url,
 					'favorites_title' => $favorites_title,
+					'textkey'         => $textKey,
 				};
 				
 				if (defined $contributorID) {
 					$params->{artist_id} = $contributorID;
 				}
 
-				#FIXME: see if multiple char textkey is doable for year/genre sort
-				if ($sort && ($sort eq 'artflow' || $sort eq 'artistalbum') ) {
-					$params->{textkey} = substr($eachitem->contributor->namesort, 0, 1);
-				} elsif ($sort && $sort ne 'new') {
-					$params->{textkey} = substr($eachitem->titlesort, 0, 1);
-				}
-
 				$request->addResultLoop($loopname, $chunkCount, 'params', $params);
+				if ($party || $partyMode) {
+					$request->addResultLoop($loopname, $chunkCount, 'playAction', 'go');
+				}
 
 				# artwork if we have it
 				if ($eachitem->title ne $noAlbumName &&
@@ -455,6 +557,7 @@ sub albumsQuery {
 						$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artist', $artists[0]->name());
 					}
 				}
+				$tags =~ /s/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'textkey', $textKey);
 			}
 			
 			$chunkCount++;
@@ -489,7 +592,7 @@ sub albumsQuery {
 	# Cache data as JSON to speed up the cloning of it later, this is faster
 	# than using Storable
 	if ( $to_cache && $menuMode ) {
-		$cache->{albums}->{$cacheKey} = to_json( $request->getResults() );
+		$cache->{albums}->[$party]->{$cacheKey} = to_json( $request->getResults() );
 	} elsif ( $menuMode && $search && $totalCount > 0 && $start == 0 && !$request->getParam('cached_search') ) {
 		my $jiveSearchCache = {
 			text        => $request->string('ALBUMS') . ": " . $search,
@@ -534,13 +637,17 @@ sub artistsQuery {
 	my $menu     = $request->getParam('menu');
 	my $insert   = $request->getParam('menu_all');
 	my $to_cache = $request->getParam('cache');
+	my $party    = $request->getParam('party') || 0;
+	my $tags     = $request->getParam('tags') || '';
+	
 	my %favorites;
 	$favorites{'url'} = $request->getParam('favorites_url');
 	$favorites{'title'} = $request->getParam('favorites_title');
 	
 	# menu/jive mgmt
 	my $menuMode = defined $menu;
-	my $insertAll = $menuMode && defined $insert;
+	my $partyMode = _partyModeCheck($request);
+	my $insertAll = $menuMode && defined $insert && !$partyMode;
 	my $allAlbums = defined $genreID;
 	
 	# get them all by default
@@ -612,7 +719,7 @@ sub artistsQuery {
 		# Flatten request for lookup in cache, only for Jive menu queries
 		$cacheKey = complex_to_query($where) . complex_to_query($attr) . $menu . (defined $insert ? $insert : '');
 		if ( $menuMode ) {
-			if ( my $cached = $cache->{artists}->{$cacheKey} ) {
+			if ( my $cached = $cache->{artists}->[$party]->{$cacheKey} ) {
 
 				my $copy = from_json( $cached );
 
@@ -711,7 +818,9 @@ sub artistsQuery {
 			},
 		};
 		$base->{'actions'}{'play-hold'} = _mixerBase();
-
+		if ($partyMode || $party) {
+			$base->{'actions'}->{'play'} = $base->{'actions'}->{'go'};
+		}
 		if (!$prefs->get('noGenreFilter') && defined $genreID) {
 			$base->{'actions'}->{'go'}->{'params'}->{'genre_id'} = $genreID;
 			$base->{'actions'}->{'play'}->{'params'}->{'genre_id'} = $genreID;
@@ -756,6 +865,8 @@ sub artistsQuery {
 			next if !$obj;
 			my $id = $obj->id();
 			$id += 0;
+			
+			my $textKey = substr($obj->namesort, 0, 1);
 
 			if ($menuMode){
 				$request->addResultLoop($loopname, $chunkCount, 'text', $obj->name);
@@ -767,14 +878,18 @@ sub artistsQuery {
 					'favorites_url'   => $url,
 					'favorites_title' => $obj->name,
 					'artist_id' => $id, 
-					'textkey' => substr($obj->namesort, 0, 1),
+					'textkey' => $textKey,
 				};
 				_mixerItemParams(request => $request, obj => $obj, loopname => $loopname, chunkCount => $chunkCount, params => $params);
 				$request->addResultLoop($loopname, $chunkCount, 'params', $params);
+				if ($party || $partyMode) {
+					$request->addResultLoop($loopname, $chunkCount, 'playAction', 'go');
+				}
 			}
 			else {
 				$request->addResultLoop($loopname, $chunkCount, 'id', $id);
 				$request->addResultLoop($loopname, $chunkCount, 'artist', $obj->name);
+				$tags =~ /s/ && $request->addResultLoop($loopname, $chunkCount, 'textkey', $textKey);
 			}
 
 			$chunkCount++;
@@ -808,7 +923,7 @@ sub artistsQuery {
 	# Cache data as JSON to speed up the cloning of it later, this is faster
 	# than using Storable
 	if ( $to_cache && $menuMode ) {
-		$cache->{artists}->{$cacheKey} = to_json( $request->getResults() );
+		$cache->{artists}->[$party]->{$cacheKey} = to_json( $request->getResults() );
 	} elsif ( $menuMode && $search && $totalCount > 0 && $start == 0 && !$request->getParam('cached_search') ) {
 		my $jiveSearchCache = {
 			text        => $request->string('ARTISTS') . ": " . $search,
@@ -1188,10 +1303,13 @@ sub genresQuery {
 	my $menu          = $request->getParam('menu');
 	my $insert        = $request->getParam('menu_all');
 	my $to_cache      = $request->getParam('cache');
+	my $party         = $request->getParam('party') || 0;
+	my $tags          = $request->getParam('tags') || '';
 	
 	# menu/jive mgmt
 	my $menuMode  = defined $menu;
-	my $insertAll = $menuMode && defined $insert;
+	my $partyMode = _partyModeCheck($request);
+	my $insertAll = $menuMode && defined $insert && !$partyMode;
 		
 	# get them all by default
 	my $where = {};
@@ -1242,7 +1360,7 @@ sub genresQuery {
 	# Flatten request for lookup in cache, only for Jive menu queries
 	my $cacheKey = complex_to_query($where) . complex_to_query($attr) . $menu . (defined $insert ? $insert : '');
 	if ( $menuMode ) {
-		if ( my $cached = $cache->{genres}->{$cacheKey} ) {
+		if ( my $cached = $cache->{genres}->[$party]->{$cacheKey} ) {
 			my $copy = from_json( $cached );
 
 			# Don't slice past the end of the array
@@ -1316,6 +1434,9 @@ sub genresQuery {
 			window => { titleStyle => 'genres', },
 		};
 		$base->{'actions'}{'play-hold'} = _mixerBase();
+		if ($party || $partyMode) {
+			$base->{'actions'}->{'play'} = $base->{'actions'}->{'go'};
+		}
 		$request->addResult('base', $base);
 
 	}
@@ -1343,6 +1464,8 @@ sub genresQuery {
 			my $id = $eachitem->id();
 			$id += 0;
 			
+			my $textKey = substr($eachitem->namesort, 0, 1);
+				
 			if ($menuMode) {
 				$request->addResultLoop($loopname, $chunkCount, 'text', $eachitem->name);
 				
@@ -1351,17 +1474,21 @@ sub genresQuery {
 				my $params = {
 					'genre_id'        => $id,
 					'genre_string'    => $eachitem->name,
-					'textkey'         => substr($eachitem->namesort, 0, 1),
+					'textkey'         => $textKey,
 					'favorites_url'   => $url,
 					'favorites_title' => $eachitem->name,
 				};
 
 				$request->addResultLoop($loopname, $chunkCount, 'params', $params);
 				_mixerItemParams(request => $request, obj => $eachitem, loopname => $loopname, chunkCount => $chunkCount, params => $params);
+				if ($party || $partyMode) {
+					$request->addResultLoop($loopname, $chunkCount, 'playAction', 'go');
+				}
 			}
 			else {
 				$request->addResultLoop($loopname, $chunkCount, 'id', $id);
 				$request->addResultLoop($loopname, $chunkCount, 'genre', $eachitem->name);
+				$tags =~ /s/ && $request->addResultLoop($loopname, $chunkCount, 'textkey', $textKey);
 			}
 			$chunkCount++;
 		}
@@ -1376,7 +1503,7 @@ sub genresQuery {
 	# Cache data as JSON to speed up the cloning of it later, this is faster
 	# than using Storable
 	if ( $to_cache && $menuMode ) {
-		$cache->{genres}->{$cacheKey} = to_json( $request->getResults() );
+		$cache->{genres}->[$party]->{$cacheKey} = to_json( $request->getResults() );
 	}
 
 	$request->setStatusDone();
@@ -1396,7 +1523,18 @@ sub getStringQuery {
 	my $tokenlist = $request->getParam('_tokens');
 
 	foreach my $token (split /,/, $tokenlist) {
-		$request->addResult($token, $request->string($token));
+		
+		# check whether string exists or not, to prevent stack dumps if
+		# client queries inexistent string
+		if (Slim::Utils::Strings::stringExists($token)) {
+			
+			$request->addResult($token, $request->string($token));
+		}
+		
+		else {
+			
+			$request->addResult($token, '');
+		}
 	}
 	
 	$request->setStatusDone();
@@ -1533,10 +1671,13 @@ sub musicfolderQuery {
 	my $url      = $request->getParam('url');
 	my $menu     = $request->getParam('menu');
 	my $insert   = $request->getParam('menu_all');
+	my $party    = $request->getParam('party') || 0;
+	my $tags     = $request->getParam('tags') || '';
 	
 	# menu/jive mgmt
 	my $menuMode  = defined $menu;
-	my $insertAll = $menuMode && defined $insert;
+	my $partyMode = _partyModeCheck($request);
+	my $insertAll = $menuMode && defined $insert && !$partyMode;
 	
 	# url overrides any folderId
 	my $params = ();
@@ -1552,13 +1693,13 @@ sub musicfolderQuery {
 	my ($topLevelObj, $items, $count);
 
 	# if this is a follow up query ($index > 0), try to read from the cache
-	if ($index > 0 && $cache->{bmf}
-		&& $cache->{bmf}->{id} eq ($params->{url} || $params->{id}) 
-		&& $cache->{bmf}->{ttl} > time()) {
+	if ($index > 0 && $cache->{bmf}->[$party]
+		&& $cache->{bmf}->[$party]->{id} eq ($params->{url} || $params->{id}) 
+		&& $cache->{bmf}->[$party]->{ttl} > time()) {
 			
-		$items       = $cache->{bmf}->{items};
-		$topLevelObj = $cache->{bmf}->{topLevelObj};
-		$count       = $cache->{bmf}->{count};
+		$items       = $cache->{bmf}->[$party]->{items};
+		$topLevelObj = $cache->{bmf}->[$party]->{topLevelObj};
+		$count       = $cache->{bmf}->[$party]->{count};
 	}
 	else {
 		
@@ -1628,6 +1769,9 @@ sub musicfolderQuery {
 				titleStyle => 'musicfolder',
 			},
 		};
+		if ($party || $partyMode) {
+			$base->{'actions'}->{'play'} = $base->{'actions'}->{'go'};
+		}
 		$request->addResult('base', $base);
 
 	}
@@ -1682,13 +1826,15 @@ sub musicfolderQuery {
 			my $id = $item->id();
 			$id += 0;
 			
-			$filename = Slim::Utils::Unicode::utf8decode_locale($filename);
+			$filename = Slim::Music::Info::fileName($url);
+
+			my $textKey = uc(substr(Slim::Utils::Text::ignorePunct($filename), 0, 1));
 			
 			if ($menuMode) {
 				$request->addResultLoop($loopname, $chunkCount, 'text', $filename);
 
 				my $params = {
-					'textkey' => uc(substr(Slim::Utils::Text::ignorePunct($filename), 0, 1)),
+					'textkey' => $textKey,
 				};
 				
 				# each item is different, but most items are folders
@@ -1699,6 +1845,9 @@ sub musicfolderQuery {
 
 					$params->{'folder_id'} = $id;
 
+					if ($partyMode || $party) {
+						$request->addResultLoop($loopname, $chunkCount, 'playAction', 'go');
+					}
 				# song
 				} elsif (Slim::Music::Info::isSong($item)) {
 					
@@ -1736,7 +1885,7 @@ sub musicfolderQuery {
 						},
 					};
 					
-					if ( $playalbum ) {
+					if ( $playalbum && ! $partyMode ) {
 						$actions->{'play'} = {
 							player => 0,
 							cmd    => ['jiveplaytrackalbum'],
@@ -1789,6 +1938,9 @@ sub musicfolderQuery {
 						},
 					};
 					$request->addResultLoop($loopname, $chunkCount, 'actions', $actions);
+					if ($partyMode || $party) {
+						$request->addResultLoop($loopname, $chunkCount, 'playAction', 'go');
+					}
 
 				# not sure
 				} else {
@@ -1827,6 +1979,9 @@ sub musicfolderQuery {
 							'itemsParams' => 'params',
 						},
 					};
+					if ($partyMode || $party) {
+						$request->addResultLoop($loopname, $chunkCount, 'playAction', 'go');
+					}
 					$request->addResultLoop($loopname, $chunkCount, 'actions', $actions);
 				}
 
@@ -1848,6 +2003,8 @@ sub musicfolderQuery {
 				} else {
 					$request->addResultLoop($loopname, $chunkCount, 'type', 'unknown');
 				}
+
+				$tags =~ /s/ && $request->addResultLoop($loopname, $chunkCount, 'textkey', $textKey);
 			}
 			$chunkCount++;
 		}
@@ -1861,7 +2018,7 @@ sub musicfolderQuery {
 
 	# cache results in case the same folder is queried again shortly 
 	# should speed up Jive BMF, as only the first chunk needs to run the full loop above
-	$cache->{bmf} = {
+	$cache->{bmf}->[$party] = {
 		id          => ($params->{url} || $params->{id}),
 		ttl         => (time() + 15),
 		items       => $items,
@@ -2007,7 +2164,7 @@ sub playersQuery {
 				$request->addResultLoop('players_loop', $cnt, 
 					'name', $eachclient->name());
 				$request->addResultLoop('players_loop', $cnt, 
-					'model', $eachclient->model());
+					'model', $eachclient->model(1));
 				$request->addResultLoop('players_loop', $cnt, 
 					'isplayer', $eachclient->isPlayer());
 				$request->addResultLoop('players_loop', $cnt, 
@@ -2381,6 +2538,7 @@ sub playlistsQuery {
 				titleStyle => 'playlist',
 			},
 		};
+		$base->{'actions'}{'play-hold'} = _mixerBase();
 		$request->addResult('base', $base);
 	}
 
@@ -2410,20 +2568,24 @@ sub playlistsQuery {
 
 				my $id = $eachitem->id();
 				$id += 0;
+				
+				my $textKey = substr($eachitem->namesort, 0, 1);
 
 				if ($menuMode) {
 					$request->addResultLoop($loopname, $chunkCount, 'text', $eachitem->title);
 
 					my $params = {
 						'playlist_id' =>  $id, 
-						'textkey' => substr($eachitem->namesort, 0, 1),
+						'textkey' => $textKey,
 					};
 
+					_mixerItemParams(request => $request, obj => $eachitem, loopname => $loopname, chunkCount => $chunkCount, params => $params);
 					$request->addResultLoop($loopname, $chunkCount, 'params', $params);
 				} else {
 					$request->addResultLoop($loopname, $chunkCount, "id", $id);
 					$request->addResultLoop($loopname, $chunkCount, "playlist", $eachitem->title);
-					$request->addResultLoop($loopname, $chunkCount, "url", $eachitem->url) if ($tags =~ /u/);
+					$tags =~ /u/ && $request->addResultLoop($loopname, $chunkCount, "url", $eachitem->url);
+					$tags =~ /s/ && $request->addResultLoop($loopname, $chunkCount, 'textkey', $textKey);
 				}
 				$chunkCount++;
 			}
@@ -2460,69 +2622,6 @@ sub playlistsQuery {
 }
 
 
-sub playerprefQuery {
-	my $request = shift;
-
-	# check this is the correct query.
-	if ($request->isNotQuery([['playerpref']])) {
-		$request->setStatusBadDispatch();
-		return;
-	}
-	
-	# get the parameters
-	my $client   = $request->client();
-	my $prefName = $request->getParam('_prefname');
-
-	# split pref name from namespace: name.space.pref:
-	my $namespace = 'server';
-	if ($prefName =~ /^(.*):(\w+)$/) {
-		$namespace = $1;
-		$prefName = $2;
-	}
-	
-	if (!defined $prefName || !defined $namespace) {
-		$request->setStatusBadParams();
-		return;
-	}
-
-	$request->addResult('_p2', preferences($namespace)->client($client)->get($prefName));
-	
-	$request->setStatusDone();
-}
-
-
-sub playerprefValidateQuery {
-	my $request = shift;
-
-	# check this is the correct query.
-	if ($request->isNotQuery([['playerpref'], ['validate']])) {
-		$request->setStatusBadDispatch();
-		return;
-	}
-
-	# get our parameters
-	my $client   = $request->client();
-	my $prefName = $request->getParam('_prefname');
-	my $newValue = $request->getParam('_newvalue');
-
-	# split pref name from namespace: name.space.pref:
-	my $namespace = 'server';
-	if ($prefName =~ /^(.*):(\w+)$/) {
-		$namespace = $1;
-		$prefName = $2;
-	}
-	
-	if (!defined $prefName || !defined $namespace || !defined $newValue) {
-		$request->setStatusBadParams();
-		return;
-	}
-
-	$request->addResult('valid', preferences($namespace)->client($client)->validate($prefName, $newValue) ? 1 : 0);
-	
-	$request->setStatusDone();
-}
-
-
 sub powerQuery {
 	my $request = shift;
 
@@ -2545,11 +2644,23 @@ sub prefQuery {
 	my $request = shift;
 
 	# check this is the correct query.
-	if ($request->isNotQuery([['pref']])) {
+	if ($request->isNotQuery([['pref']]) && $request->isNotQuery([['playerpref']])) {
 		$request->setStatusBadDispatch();
 		return;
 	}
 	
+	my $client;
+
+	if ($request->isQuery([['playerpref']])) {
+		
+		$client = $request->client();
+		
+		unless ($client) {			
+			$request->setStatusBadDispatch();
+			return;
+		}
+	}
+
 	# get the parameters
 	my $prefName = $request->getParam('_prefname');
 
@@ -2565,7 +2676,10 @@ sub prefQuery {
 		return;
 	}
 
-	$request->addResult('_p2', preferences($namespace)->get($prefName));
+	$request->addResult('_p2', $client
+		? preferences($namespace)->client($client)->get($prefName)
+		: preferences($namespace)->get($prefName)
+	);
 	
 	$request->setStatusDone();
 }
@@ -2575,10 +2689,12 @@ sub prefValidateQuery {
 	my $request = shift;
 
 	# check this is the correct query.
-	if ($request->isNotQuery([['pref'], ['validate']])) {
+	if ($request->isNotQuery([['pref'], ['validate']]) && $request->isNotQuery([['playerpref'], ['validate']])) {
 		$request->setStatusBadDispatch();
 		return;
 	}
+	
+	my $client = $request->client();
 
 	# get our parameters
 	my $prefName = $request->getParam('_prefname');
@@ -2596,25 +2712,13 @@ sub prefValidateQuery {
 		return;
 	}
 
-	$request->addResult('valid', preferences($namespace)->validate($prefName, $newValue) ? 1 : 0);
-	
-	$request->setStatusDone();
-}
-
-
-sub rateQuery {
-	my $request = shift;
-
-	# check this is the correct query.
-	if ($request->isNotQuery([['rate']])) {
-		$request->setStatusBadDispatch();
-		return;
-	}
-	
-	# get the parameters
-	my $client = $request->client();
-
-	$request->addResult('_rate', Slim::Player::Source::rate($client));
+	$request->addResult('valid', 
+		($client
+			? preferences($namespace)->client($client)->validate($prefName, $newValue)
+			: preferences($namespace)->validate($prefName, $newValue)
+		) 
+		? 1 : 0
+	);
 	
 	$request->setStatusDone();
 }
@@ -2641,14 +2745,14 @@ sub readDirectoryQuery {
 	my @fsitems;		# raw list of items 
 	my %fsitems;		# meta data cache
 
-	if ($folder eq '/' && Slim::Utils::OSDetect::OS() eq 'win') {
+	if ($folder eq '/' && Slim::Utils::OSDetect::isWindows()) {
 		@fsitems = sort map {
 			$fsitems{"$_"} = {
 				d => 1,
 				f => 0
 			};
 			"$_"; 
-		} Slim::Utils::Win32::getDrives();
+		} Slim::Utils::OS::Win32->getDrives();
 		$folder = '';
 	}
 	else {
@@ -2676,7 +2780,7 @@ sub readDirectoryQuery {
 
 	# return all folders plus files of type
 	elsif ($filter =~ /^filetype:(.*)/) {
-		my $filterRE = qr/(?:\.$1)$/;
+		my $filterRE = qr/(?:\.$1)$/i;
 		@fsitems = grep { $fsitems{$_}->{d} || $_ =~ $filterRE } @fsitems;
 	}
 
@@ -2712,8 +2816,16 @@ sub readDirectoryQuery {
 			for my $item (@fsitems[$start..$end]) {
 				$path = ($folder ? catdir($folder, $item) : $item);
 
+				my $name = $item;
+
+				# display full name if we got a Windows 8.3 file name
+				if (Slim::Utils::OSDetect::isWindows() && $name =~ /~\d/) {
+					$name = Slim::Music::Info::fileName($path);
+				}
+
 				$request->addResultLoop('fsitems_loop', $cnt, 'path', Slim::Utils::Unicode::utf8decode($path));
-				$request->addResultLoop('fsitems_loop', $cnt, 'name', Slim::Utils::Unicode::utf8decode($item));
+				$request->addResultLoop('fsitems_loop', $cnt, 'name', Slim::Utils::Unicode::utf8decode($name));
+				
 				$request->addResultLoop('fsitems_loop', $cnt, 'isfolder', $fsitems{$item}->{d});
 
 				$idx++;
@@ -2805,6 +2917,10 @@ sub searchQuery {
 	my $index    = $request->getParam('_index');
 	my $quantity = $request->getParam('_quantity');
 	my $query    = $request->getParam('term');
+
+	# transliterate umlauts and accented characters
+	# http://bugs.slimdevices.com/show_bug.cgi?id=8585
+	$query = Slim::Utils::Text::matchCase($query);
 
 	if (!defined $query || $query eq '') {
 		$request->setStatusBadParams();
@@ -2924,6 +3040,11 @@ sub serverstatusQuery {
 			$request->addResult('progresstotal', $p->total);
 		}
 	}
+
+	elsif (my @p = Slim::Schema->rs('Progress')->search({ 'type' => 'importer' }, { 'order_by' => 'start,id' })->all) {
+
+		$request->addResult('lastscan', $p[-1]->finish);
+	}
 	
 	# add version
 	$request->addResult('version', $::VERSION);
@@ -2977,14 +3098,14 @@ sub serverstatusQuery {
 			for my $eachclient (@players[$start..$end]) {
 				$request->addResultLoop('players_loop', $cnt, 
 					'playerid', $eachclient->id());
-                                $request->addResultLoop('players_loop', $cnt,
-                                        'uuid', $eachclient->uuid());
+				$request->addResultLoop('players_loop', $cnt,
+					'uuid', $eachclient->uuid());
 				$request->addResultLoop('players_loop', $cnt, 
 					'ip', $eachclient->ipport());
 				$request->addResultLoop('players_loop', $cnt, 
 					'name', $eachclient->name());
 				$request->addResultLoop('players_loop', $cnt, 
-					'model', $eachclient->model());
+					'model', $eachclient->model(1));
 				$request->addResultLoop('players_loop', $cnt, 
 					'power', $eachclient->power());
 				$request->addResultLoop('players_loop', $cnt, 
@@ -3210,20 +3331,14 @@ sub statusQuery {
 		$request->setStatusDone();
 		return;
 	}
-		
-	my $SP3  = ($client->model() eq 'slimp3');
-	my $SQ   = ($client->model() eq 'softsqueeze');
-	my $SB   = ($client->model() eq 'squeezebox');
-	my $SB2  = ($client->model() eq 'squeezebox2');
-	my $TS   = ($client->model() eq 'transporter');
-	my $RSC  = ($client->model() eq 'http');
 	
-	my $connected = $client->connected() || 0;
-	my $power     = $client->power();
-	my $ip        = $client->ipport();
-	my $repeat    = Slim::Player::Playlist::repeat($client);
-	my $shuffle   = Slim::Player::Playlist::shuffle($client);
-	my $songCount = Slim::Player::Playlist::count($client);
+	my $connected    = $client->connected() || 0;
+	my $power        = $client->power();
+	my $ip           = $client->ipport();
+	my $repeat       = Slim::Player::Playlist::repeat($client);
+	my $shuffle      = Slim::Player::Playlist::shuffle($client);
+	my $songCount    = Slim::Player::Playlist::count($client);
+	my $playlistMode = Slim::Player::Playlist::playlistMode($client);
 	my $idx = 0;
 
 
@@ -3253,107 +3368,102 @@ sub statusQuery {
 		$request->addResult('showBriefly', $client->display->renderCache->{showBriefly}->{line});
 	}
 
-	if (!$RSC) {
+	if ($client->isPlayer()) {
 		$power += 0;
 		$request->addResult("power", $power);
 	}
 	
-	if ($SB || $SB2 || $TS) {
+	if ($client->isa('Slim::Player::Squeezebox')) {
 		$request->addResult("signalstrength", ($client->signalStrength() || 0));
 	}
 	
 	my $playlist_cur_index;
-	# this will be true for http class players
 	
-		$request->addResult('mode', Slim::Player::Source::playmode($client));
+	$request->addResult('mode', Slim::Player::Source::playmode($client));
 
-		if (my $song = Slim::Player::Playlist::url($client)) {
+	if (my $song = $client->playingSong()) {
 
-			if (Slim::Music::Info::isRemoteURL($song)) {
-				$request->addResult('remote', 1);
-				$request->addResult('current_title', 
-					Slim::Music::Info::getCurrentTitle($client, $song));
-			}
-			
-			$request->addResult('time', 
-				Slim::Player::Source::songTime($client));
-			$request->addResult('rate', 
-				Slim::Player::Source::rate($client));
-			
-			my $track = Slim::Schema->rs('Track')->objectForUrl($song);
-
-			if (blessed($track) && $track->can('secs')) {
-
-				my $dur = $track->secs;
-
-				if ($dur) {
-					$dur += 0;
-					$request->addResult('duration', $dur);
-				}
-			}
-			
-			my $canSeek = Slim::Music::Info::canSeek($client, $song);
-			if ($canSeek) {
-				$request->addResult('can_seek', 1);
-			}
+		if ($song->isRemote()) {
+			$request->addResult('remote', 1);
+			$request->addResult('current_title', 
+				Slim::Music::Info::getCurrentTitle($client, $song->currentTrack()->url));
 		}
+			
+		$request->addResult('time', 
+			Slim::Player::Source::songTime($client));
+
+		# This is just here for backward compatibility with older SBC firmware
+		$request->addResult('rate', 1);
+			
+		if (my $dur = $song->duration()) {
+			$dur += 0;
+			$request->addResult('duration', $dur);
+		}
+			
+		my $canSeek = Slim::Music::Info::canSeek($client, $song);
+		if ($canSeek) {
+			$request->addResult('can_seek', 1);
+		}
+	}
 		
-		if ($client->currentSleepTime()) {
+	if ($client->currentSleepTime()) {
 
-			my $sleep = $client->sleepTime() - Time::HiRes::time();
-			$request->addResult('sleep', $client->currentSleepTime() * 60);
-			$request->addResult('will_sleep_in', ($sleep < 0 ? 0 : $sleep));
-		}
+		my $sleep = $client->sleepTime() - Time::HiRes::time();
+		$request->addResult('sleep', $client->currentSleepTime() * 60);
+		$request->addResult('will_sleep_in', ($sleep < 0 ? 0 : $sleep));
+	}
 		
-		if (Slim::Player::Sync::isSynced($client)) {
+	if ($client->isSynced()) {
 
-			my $master = Slim::Player::Sync::masterOrSelf($client);
+		my $master = $client->master();
 
-			$request->addResult('sync_master', $master->id());
+		$request->addResult('sync_master', $master->id());
 
-			my @slaves = Slim::Player::Sync::slaves($master);
-			my @sync_slaves = map { $_->id } @slaves;
+		my @slaves = Slim::Player::Sync::slaves($master);
+		my @sync_slaves = map { $_->id } @slaves;
 
-			$request->addResult('sync_slaves', join(",", @sync_slaves));
-		}
+		$request->addResult('sync_slaves', join(",", @sync_slaves));
+	}
 	
-		if (!$RSC) {
-			# undefined for remote streams
-			my $vol = $prefs->client($client)->get('volume');
-			$vol += 0;
-			$request->addResult("mixer volume", $vol);
-		}
+	if ($client->hasVolumeControl()) {
+		# undefined for remote streams
+		my $vol = $prefs->client($client)->get('volume');
+		$vol += 0;
+		$request->addResult("mixer volume", $vol);
+	}
 		
-		if ($SB || $SP3) {
-			$request->addResult("mixer treble", $client->treble());
-			$request->addResult("mixer bass", $client->bass());
-		}
+	if ($client->model() =~ /^(?:squeezebox|slimp3)$/) {
+		$request->addResult("mixer treble", $client->treble());
+		$request->addResult("mixer bass", $client->bass());
+	}
 
-		if ($SB) {
-			$request->addResult("mixer pitch", $client->pitch());
-		}
+	if ($client->model() eq 'squeezebox') {
+		$request->addResult("mixer pitch", $client->pitch());
+	}
 
-		$repeat += 0;
-		$request->addResult("playlist repeat", $repeat);
-		$shuffle += 0;
-		$request->addResult("playlist shuffle", $shuffle); 
+	$repeat += 0;
+	$request->addResult("playlist repeat", $repeat);
+	$shuffle += 0;
+	$request->addResult("playlist shuffle", $shuffle); 
+
+	$request->addResult("playlist mode", $playlistMode);
 	
-		if (defined (my $playlistObj = $client->currentPlaylist())) {
-			$request->addResult("playlist_id", $playlistObj->id());
-			$request->addResult("playlist_name", $playlistObj->title());
-			$request->addResult("playlist_modified", $client->currentPlaylistModified());
-		}
+	if (defined (my $playlistObj = $client->currentPlaylist())) {
+		$request->addResult("playlist_id", $playlistObj->id());
+		$request->addResult("playlist_name", $playlistObj->title());
+		$request->addResult("playlist_modified", $client->currentPlaylistModified());
+	}
 
-		if ($songCount > 0) {
-			$playlist_cur_index = Slim::Player::Source::playingSongIndex($client);
-			$request->addResult(
-				"playlist_cur_index", 
-				$playlist_cur_index
-			);
-			$request->addResult("playlist_timestamp", $client->currentPlaylistUpdateTime())
-		}
+	if ($songCount > 0) {
+		$playlist_cur_index = Slim::Player::Source::playingSongIndex($client);
+		$request->addResult(
+			"playlist_cur_index", 
+			$playlist_cur_index
+		);
+		$request->addResult("playlist_timestamp", $client->currentPlaylistUpdateTime())
+	}
 
-		$request->addResult("playlist_tracks", $songCount);
+	$request->addResult("playlist_tracks", $songCount);
 	
 	# give a count in menu mode no matter what
 	if ($menuMode) {
@@ -3406,11 +3516,15 @@ sub statusQuery {
 			$modecurrent = 1;
 		}
 		
+		# bug 9132: rating might have changed
+		# we need to be sure we have the latest data from the DB if ratings are requested
+		my $refreshTrack = $tags =~ /R/;
+		
 		# if repeat is 1 (song) and modecurrent, then show the current song
 		if ($modecurrent && ($repeat == 1) && $quantity) {
 
 			$request->addResult('offset', $playlist_cur_index) if $menuMode;
-			my $track = Slim::Player::Playlist::song($client, $playlist_cur_index);
+			my $track = Slim::Player::Playlist::song($client, $playlist_cur_index, $refreshTrack);
 
 			if ($menuMode) {
 				_addJiveSong($request, $loop, 0, 1, $track);
@@ -3439,7 +3553,7 @@ sub statusQuery {
 				
 				for ($idx = $start; $idx <= $end; $idx++) {
 					
-					my $track = Slim::Player::Playlist::song($client, $idx);
+					my $track = Slim::Player::Playlist::song($client, $idx, $refreshTrack);
 					my $current = ($idx == $playlist_cur_index);
 
 					if ($menuMode) {
@@ -3484,7 +3598,7 @@ sub statusQuery {
 							for ($idx = $start; $idx <= $end; $idx++){
 
 								_addSong($request, $loop, $count, 
-									Slim::Player::Playlist::song($client, $idx), $tags,
+									Slim::Player::Playlist::song($client, $idx, $refreshTrack), $tags,
 									'playlist index', $idx
 								);
 
@@ -3511,7 +3625,6 @@ sub statusQuery {
 	$request->setStatusDone();
 }
 
-# XXX: deprecated
 sub songinfoQuery {
 	my $request = shift;
 
@@ -3632,7 +3745,6 @@ sub songinfoQuery {
 				$base->{'actions'}{'go'} = $go_action;
 				$base->{'window'}{'titleStyle'} = 'album';
 				$base->{'window'}{'icon-id'} = $trackId;
-				$log->error($base->{'actions'}{'go'});
 			} else {
 				# tags for songinfo page, ordered like SC7 Web UI
 				# j tag is '1' if artwork exists; it's put in front so it can act as a flag for "J"
@@ -4061,9 +4173,9 @@ sub songinfoQuery {
                 						$request->addResultLoop($loopname, $chunkCount, 'window', $window);
 
 								my $actions = {
-						                # this is a dummy command...doesn't do anything but is required
+							                # this is a dummy command...doesn't do anything but is required
 									go =>   {
-                                               					 cmd    => ['playerinformation'],
+                                               					 cmd    => ['jivedummycommand'],
 							                         player => 0,
 									},
 								};
@@ -4139,15 +4251,49 @@ sub syncQuery {
 	# get the parameters
 	my $client = $request->client();
 
-	if (Slim::Player::Sync::isSynced($client)) {
+	if ($client->isSynced()) {
 	
-		my @buddies = Slim::Player::Sync::syncedWith($client);
-		my @sync_buddies = map { $_->id() } @buddies;
+		my @sync_buddies = map { $_->id() } $client->syncedWith();
 
 		$request->addResult('_sync', join(",", @sync_buddies));
 	} else {
 	
 		$request->addResult('_sync', '-');
+	}
+	
+	$request->setStatusDone();
+}
+
+
+sub syncGroupsQuery {
+	my $request = shift;
+
+	# check this is the correct query
+	if ($request->isNotQuery([['syncgroups']])) {
+		$request->setStatusBadDispatch();
+		return;
+	}
+	
+	
+	my $cnt      = 0;
+	my @players  = Slim::Player::Client::clients();
+	my $loopname = 'syncgroups_loop'; 
+
+	if (scalar(@players) > 0) {
+
+		for my $eachclient (@players) {
+			
+			# create a group if $eachclient is a master
+			if ($eachclient->isSynced() && Slim::Player::Sync::isMaster($eachclient)) {
+				my @sync_buddies = map { $_->id() } $eachclient->syncedWith();
+				my @sync_names   = map { $_->name() } $eachclient->syncedWith();
+		
+				$request->addResultLoop($loopname, $cnt, 'sync_members', join(",", $eachclient->id, @sync_buddies));				
+				$request->addResultLoop($loopname, $cnt, 'sync_member_names', join(",", $eachclient->name, @sync_names));				
+				
+				$cnt++;
+			}
+		}
 	}
 	
 	$request->setStatusDone();
@@ -4206,8 +4352,9 @@ sub titlesQuery {
 	my $insert        = $request->getParam('menu_all');
 	
 	# menu/jive mgmt
-	my $menuMode = defined $menu;
-	my $insertAll = $menuMode && defined $insert;
+	my $menuMode  = defined $menu;
+	my $partyMode = _partyModeCheck($request);
+	my $insertAll = $menuMode && defined $insert && !$partyMode;
 
 	if ($request->paramNotOneOfIfDefined($sort, ['title', 'tracknum'])) {
 		$request->setStatusBadParams();
@@ -4337,7 +4484,8 @@ sub titlesQuery {
 		
 		# Bug 5981
 		# special play handler for "play all tracks in album
-		if ($playalbum && $albumID ) {
+		# ignore this setting when in party mode
+		if ( $playalbum && $albumID && ! $partyMode ) {
 			$base->{'actions'}{'play'} = {
 				player => 0,
 				cmd    => ['jiveplaytrackalbum'],
@@ -4353,7 +4501,7 @@ sub titlesQuery {
 	}
 
 	$count += 0;
-	my $totalCount = _fixCount($insertAll, \$index, \$quantity, $count);
+	my $totalCount = _fixCount( $insertAll, \$index, \$quantity, $count);
 
 	my ($valid, $start, $end) = $request->normalize(scalar($index), scalar($quantity), $count);
 
@@ -4368,7 +4516,7 @@ sub titlesQuery {
 		my $format = $prefs->get('titleFormat')->[ $prefs->get('titleFormatWeb') ];
 
 		# first PLAY ALL item
-		if ($insertAll) {
+		if ( $insertAll ) {
 			$chunkCount = _playAll(start => $start, end => $end, chunkCount => $chunkCount, request => $request, loopname => $loopname, includeArt => ( $menuStyle eq 'album' ) );
 		}
 
@@ -4530,10 +4678,12 @@ sub yearsQuery {
 	my $quantity      = $request->getParam('_quantity');	
 	my $menu          = $request->getParam('menu');
 	my $insert        = $request->getParam('menu_all');
+	my $party         = $request->getParam('party');
 	
 	# menu/jive mgmt
 	my $menuMode  = defined $menu;
-	my $insertAll = $menuMode && defined $insert;
+	my $partyMode = _partyModeCheck($request);
+	my $insertAll = $menuMode && defined $insert && !$partyMode;
 	
 	# get them all by default
 	my $where = {};
@@ -4602,6 +4752,10 @@ sub yearsQuery {
 		if ($actioncmd eq 'albums') {
 			$base->{'actions'}{'go'}{'params'}{'sort'} = 'artistalbum';
 		}
+		if ($party || $partyMode) {
+			$base->{'actions'}->{'play'} = $base->{'actions'}->{'go'};
+		}
+		$base->{'actions'}{'play-hold'} = _mixerBase();
 		$request->addResult('base', $base);
 	}
 
@@ -4643,6 +4797,10 @@ sub yearsQuery {
 				};
 
 				$request->addResultLoop($loopname, $chunkCount, 'params', $params);
+				_mixerItemParams(request => $request, obj => $eachitem, loopname => $loopname, chunkCount => $chunkCount, params => $params);
+				if ($party || $partyMode) {
+					$request->addResultLoop($loopname, $chunkCount, 'playAction', 'go');
+				}
 			}
 			else {
 				$request->addResultLoop($loopname, $chunkCount, 'year', $id);
@@ -4731,7 +4889,7 @@ sub dynamicAutoQuery {
 		my $cnt = $request->getResultLoopCount($loop) || 0;
 		
 		if ( ref $data eq 'HASH' && scalar keys %{$data} ) {
-			$data->{weight} = $data->{weight} || 100;
+			$data->{weight} = $data->{weight} || 1000;
 			$request->setResultLoopHash($loop, $cnt, $data);
 		}
 		
@@ -4809,7 +4967,7 @@ sub _addJivePlaylistControls {
 
 	my ($request, $loop, $count) = @_;
 	
-	my $client = $request->client;
+	my $client = $request->client || return;
 	
 	# clear playlist
 	my $text = $client->string('CLEAR_PLAYLIST');
@@ -4893,7 +5051,7 @@ sub _addJiveSong {
 	my $loop      = shift; # loop
 	my $count     = shift; # loop index
 	my $current   = shift;
-	my $track     = shift;
+	my $track     = shift || return;
 	
 	# If we have a remote track, check if a plugin can provide metadata
 	my $remoteMeta = {};
@@ -5246,7 +5404,10 @@ sub _songData {
 		my $handler = Slim::Player::ProtocolHandlers->handlerForURL($url);
 		
 		if ( $handler && $handler->can('getMetadataFor') ) {
-			$remoteMeta = $handler->getMetadataFor( $request->client, $url );
+			# Don't modify source data
+			$remoteMeta = Storable::dclone(
+				$handler->getMetadataFor( $request->client, $url )
+			);
 			
 			$remoteMeta->{a} = $remoteMeta->{artist};
 			$remoteMeta->{A} = $remoteMeta->{artist};
@@ -5907,6 +6068,17 @@ sub _mixerItemHandler {
 		return undef;
 	}
 }
+
+sub _partyModeCheck {
+	my $request   = shift;
+	my $partyMode = 0;
+	if ($request->client) {
+		my $client = $request->client();
+		$partyMode = Slim::Player::Playlist::playlistMode($client);
+	}
+	return ($partyMode eq 'party');
+}
+
 
 =head1 SEE ALSO
 

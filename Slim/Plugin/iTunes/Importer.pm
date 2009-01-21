@@ -11,6 +11,7 @@ use base qw(Slim::Plugin::iTunes::Common);
 use Date::Parse qw(str2time);
 use File::Spec::Functions qw(:ALL);
 use File::Basename;
+use File::Path qw(rmtree);
 use XML::Parser;
 
 INIT: {
@@ -73,10 +74,27 @@ sub initPlugin {
 	}
 
 	Slim::Music::Import->addImporter($class, {
+		'type'         => 'file',
 		'reset'        => \&resetState,
 		'playlistOnly' => 1,
 		'use'          => $prefs->get('itunes'),
 	});
+	
+	if ( Slim::Utils::OSDetect::isWindows() ) {
+		require Win32;
+		require Slim::Plugin::iTunes::Importer::Artwork::Win32;
+		Slim::Music::Import->addImporter( 'Slim::Plugin::iTunes::Importer::Artwork::Win32', {
+			'type' => 'artwork',
+			'use'  => $prefs->get('itunes'),
+		} );
+	}
+	elsif ( Slim::Utils::OSDetect::isMac() ) {
+		require Slim::Plugin::iTunes::Importer::Artwork::OSX;
+		Slim::Music::Import->addImporter( 'Slim::Plugin::iTunes::Importer::Artwork::OSX', {
+			'type' => 'artwork',
+			'use'  => $prefs->get('itunes'),
+		} );
+	}
 
 	Slim::Player::ProtocolHandlers->registerHandler('itunesplaylist', 0);
 
@@ -93,6 +111,13 @@ sub resetState {
 	$lastITunesMusicLibraryDate = -1;
 
 	Slim::Music::Import->setLastScanTime('iTunesLastLibraryChange', -1);
+	Slim::Music::Import->setLastScanTime('iTunesLastLibraryChecksum', '');
+	
+	# Delete the iTunes artwork cache
+	my $cachedir = catdir( Slim::Utils::OSDetect::dirsFor('cache'), 'iTunesArtwork' );
+	if ( -d $cachedir ) {
+		rmtree $cachedir;
+	}
 }
 
 sub getTotalTrackCount {
@@ -194,8 +219,9 @@ sub doneScanning {
 	if ( $log->is_info ) {
 		$log->info(sprintf("Scan completed in %d seconds.", (time() - $iTunesScanStartTime)));
 	}
-
-	Slim::Music::Import->setLastScanTime('iTunesLastLibraryChange', $currentITunesMusicLibraryDate);
+	
+	Slim::Music::Import->setLastScanTime( 'iTunesLastLibraryChange', $currentITunesMusicLibraryDate );
+	Slim::Music::Import->setLastScanTime( 'iTunesLastLibraryChecksum', $class->getLibraryChecksum() );
 
 	Slim::Music::Import->endImporter($class);
 }
@@ -206,6 +232,7 @@ sub handleTrack {
 
 	my %cacheEntry = ();
 
+	my $pid      = $curTrack->{'Persistent ID'};
 	my $id       = $curTrack->{'Track ID'};
 	my $location = $curTrack->{'Location'};
 	my $filetype = $curTrack->{'File Type'};
@@ -238,10 +265,23 @@ sub handleTrack {
 
 		if ($] > 5.007 && $file && Slim::Utils::Unicode::currentLocale() ne 'utf8') {
 
+			my $file2 = $file;
+
 			eval { Encode::from_to($file, 'utf8', Slim::Utils::Unicode::currentLocale()) };
 
 			if ($@) {
 				logError("[$@]");
+			}
+
+			if (Slim::Utils::OSDetect::isWindows() && !-e $file) {
+
+				# bug 7966: try the short (8.3) file name for unreadable unicode file names
+				$file2 = Slim::Utils::Unicode::utf8decode( Slim::Utils::Unicode::recomposeUnicode($file2) );
+				
+				if ( ($file2 = Win32::GetANSIPathName($file2)) && -e $file2 ) {
+					$log->debug("Falling back to DOS style 8.3 filename: $file2");
+					$file = $file2;
+				}
 			}
 		}
 
@@ -360,6 +400,7 @@ sub handleTrack {
 			$curTrack->{$key} = Slim::Utils::Misc::unescape($curTrack->{$key});
 		}
 
+		$cacheEntry{'EXTID'}    = $pid;
 		$cacheEntry{'CT'}       = $type;
 		$cacheEntry{'TITLE'}    = $curTrack->{'Name'};
 		$cacheEntry{'ARTIST'}   = $curTrack->{'Artist'};
@@ -422,8 +463,17 @@ sub handleTrack {
 
 			return 1;
 		};
+		
+		# If a music folder is defined, the above updateOrCreate won't update attributes
+		# We need to make sure the persistent ID is set
+		if ( !$track->extid ) {
+			$track->extid( $pid );
+			$track->update;
+		}
 
 	} else {
+
+		delete $tracks{$id};
 
 		if ( $log->is_warn ) {
 			$log->warn("Unknown file type " . ($curTrack->{'Kind'} || '') . " " . ($url || 'Unknown URL'));
@@ -434,6 +484,8 @@ sub handleTrack {
 sub handlePlaylist {
 	my $class      = shift;
 	my $cacheEntry = shift;
+
+	return unless scalar @{$cacheEntry->{'LIST'}};
 
 	my $name = Slim::Utils::Misc::unescape($cacheEntry->{'TITLE'});
 	my $url  = join('', 'itunesplaylist:', Slim::Utils::Misc::escape($name));

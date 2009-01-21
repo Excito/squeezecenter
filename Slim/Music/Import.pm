@@ -45,6 +45,7 @@ use FindBin qw($Bin);
 use Proc::Background;
 use Scalar::Util qw(blessed);
 
+use Slim::Music::Artwork;
 use Slim::Music::Info;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
@@ -85,11 +86,6 @@ Launch the external (forked) scanning process.
 sub launchScan {
 	my ($class, $args) = @_;
 
-	if (!$prefs->get('wizardDone')) {
-		$log->info('Don\'t run the scanner before the setup wizard has been run.');
-		return 0;
-	}
-
 	# Pass along the prefsfile & logfile flags to the scanner.
 	if (defined $::prefsfile && -r $::prefsfile) {
 		$args->{"prefsfile=$::prefsfile"} = 1;
@@ -97,12 +93,10 @@ sub launchScan {
 
 	Slim::Utils::Prefs->writeAll;
 
-	my $path = Slim::Utils::Prefs->dir;
+	my $path = Slim::Utils::OSDetect::getOS->decodeExternalHelperPath(
+		Slim::Utils::Prefs->dir
+	);
 	
-	if (Slim::Utils::OSDetect::OS() eq 'win') {
-		$path = Win32::GetShortPathName($path);
-	}
-
 	$args->{ "prefsdir=$path" } = 1;
 
 	if ( my $logconfig = Slim::Utils::Log->defaultConfigFile ) {
@@ -141,22 +135,7 @@ sub launchScan {
 
 	my @scanArgs = map { "--$_" } keys %{$args};
 
-	my $command  = "$Bin/scanner.pl";
-
-	# Check for different scanner types.
-	if (Slim::Utils::OSDetect::OS() eq 'win' && -x "$Bin/scanner.exe") {
-
-		$command  = "$Bin/scanner.exe";
-
-	} elsif (Slim::Utils::OSDetect::isRHorSUSE()) {
-
-		$command  = '/usr/libexec/squeezecenter-scanner';
-
-	} elsif (Slim::Utils::OSDetect::isDebian()) {
-
-		$command  = '/usr/sbin/squeezecenter-scanner';
-
-	}
+	my $command  = Slim::Utils::OSDetect::getOS->scanner();
 
 	# Bug: 3530 - use the same version of perl we were started with.
 	if ($Config{'perlpath'} && -x $Config{'perlpath'} && $command !~ /\.exe$/) {
@@ -177,8 +156,17 @@ sub launchScan {
 	# Clear progress info so scan progress displays are blank
 	$class->clearProgressInfo;
 
+	my $scanType = 'SETUP_STANDARDRESCAN';
+
+	if ($args->{"wipe"}) {
+		$scanType = 'SETUP_WIPEDB';
+
+	} elsif ($args->{"playlists"}) {
+		$scanType = 'SETUP_PLAYLISTRESCAN';
+	}
+
 	# Update a DB flag, so the server knows we're scanning.
-	$class->setIsScanning(1);
+	$class->setIsScanning($scanType);
 
 	# Set a timer to check on the scanning process.
 	Slim::Utils::Timers::setTimer(undef, (Time::HiRes::time() + 5), \&checkScanningStatus);
@@ -344,6 +332,11 @@ sub runScan {
 		if ($importer eq $folderScanClass) {
 			next;
 		}
+		
+		# Skip non-file scanners here (i.e. artwork)
+		if ( $Importers{$importer}->{'type'} && $Importers{$importer}->{'type'} ne 'file' ) {
+			next;
+		} 
 
 		# These importers all implement 'playlist only' scanning.
 		# See bug: 1892
@@ -388,7 +381,17 @@ sub runScanPostProcessing {
 	$importsRunning{'findArtwork'} = Time::HiRes::time();
 
 	Slim::Music::Artwork->findArtwork;
-
+	
+	# Run any artwork importers
+	for my $importer (keys %Importers) {		
+		# Skip non-artwork scanners
+		if ( !$Importers{$importer}->{'type'} || $Importers{$importer}->{'type'} ne 'artwork' ) {
+			next;
+		}
+		
+		$class->runArtworkImporter($importer);
+	}
+	
 	# Remove and dangling references.
 	if ($class->cleanupDatabase) {
 
@@ -489,6 +492,31 @@ sub runImporter {
 		$log->info("Starting $importer scan");
 
 		$importer->startScan;
+
+		return 1;
+	}
+
+	return 0;
+}
+
+=head2 runArtworkImporter( $importer )
+
+Calls the importer's startArtworkScan() method, and adds a start time to the list of
+running importers.
+
+=cut
+
+sub runArtworkImporter {
+	my ($class, $importer) = @_;
+
+	if ($Importers{$importer}->{'use'}) {
+
+		$importsRunning{$importer} = Time::HiRes::time();
+
+		# rescan each enabled Import, or scan the newly enabled Import
+		$log->info("Starting $importer artwork scan");
+		
+		$importer->startArtworkScan;
 
 		return 1;
 	}
@@ -609,7 +637,7 @@ sub endImporter {
 
 =head2 stillScanning( )
 
-Returns true if the server is still scanning your library. False otherwise.
+Returns scan type string token if the server is still scanning your library. False otherwise.
 
 =cut
 
@@ -632,7 +660,7 @@ sub stillScanning {
 	my $running  = blessed($class->scanningProcess) && $class->scanningProcess->alive ? 1 : 0;
 
 	if ($running && $scanning) {
-		return 1;
+		return $scanning;
 	}
 
 	return 0;

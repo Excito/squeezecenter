@@ -12,7 +12,7 @@ use base qw(Slim::Web::Settings);
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
-use Slim::Utils::Strings qw(string);
+use Slim::Utils::Strings qw(string cstring);
 
 my $prefs = preferences('server');
 
@@ -116,12 +116,11 @@ sub handler {
 		$paramRef->{'saveropts'}             = Slim::Buttons::Common::validSavers($client);
 	}
 
-	$paramRef->{'version'}        = $client->revision;
-	$paramRef->{'ipaddress'}      = $client->ipport;
-	$paramRef->{'macaddress'}     = $client->macaddress;
-	$paramRef->{'signalstrength'} = $client->signalStrength;
-	$paramRef->{'voltage'}        = $client->voltage;
-
+	$paramRef->{'playerinfo'} = Slim::Menu::SystemInfo::infoCurrentPlayer( $client );
+	$paramRef->{'playerinfo'} = $paramRef->{'playerinfo'}->{web}->{items};
+	
+	$paramRef->{'playericon'} = $class->getPlayerIcon($client);
+	
 	my $page = $class->SUPER::handler($client, $paramRef);
 
 	if ($client && $client->display->isa('Slim::Display::Transporter')) {
@@ -209,6 +208,18 @@ sub getVisualModes {
 	}
 
 	return $display;
+}
+
+sub getPlayerIcon {
+	my ($class, $client) = @_;
+
+	my $model = $client->model(1);
+	
+	# default icon for software emulators and media players
+	$model = 'squeezebox' if $model eq 'squeezebox2';
+	$model = 'softsqueeze' if $model =~ /(?:http|squeezeslave)/i;
+	
+	return $model;
 }
 
 1;

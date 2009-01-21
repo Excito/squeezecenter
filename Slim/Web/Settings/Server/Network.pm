@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Network;
 
-# $Id: Network.pm 22966 2008-08-29 19:41:57Z andy $
+# $Id: Network.pm 22967 2008-08-29 19:43:10Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

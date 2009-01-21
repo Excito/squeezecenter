@@ -136,7 +136,6 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
  Y    playlist        save                        <name>
  Y    playlist        zap                         <index>
  Y    playlistcontrol <tagged parameters>
- Y    rate            <rate|?>
  Y    stop
  Y    time            <0..n|-n|+n|?>
  
@@ -464,15 +463,16 @@ sub init {
 	Slim::bootstrap::tryModuleLoad('Slim::Utils::PerlRunTime');
 
 ######################################################################################################################################################################
-#                                                                                                           |requires Client
-#                                                                                                           |  |is a Query
-#                                                                                                           |  |  |has Tags
-#                                                                                                           |  |  |  |Function to call
-#                     P0               P1                P2            P3             P4         P5         C  Q  T  F
+#	                                                                                                    |requires Client
+#	                                                                                                    |  |is a Query
+#	                                                                                                    |  |  |has Tags
+#	                                                                                                    |  |  |  |Function to call
+#	              P0               P1                P2            P3             P4         P5         C  Q  T  F
 ######################################################################################################################################################################
 
 	addDispatch(['abortscan'],                                                                         [0, 0, 0, \&Slim::Control::Commands::abortScanCommand]);
-	addDispatch(['alarm',          '_cmd'],                                                                     [1, 0, 1, \&Slim::Control::Commands::alarmCommand]);
+	addDispatch(['alarm',          '_cmd'],                                                            [1, 0, 1, \&Slim::Control::Commands::alarmCommand]);
+	addDispatch(['alarm',          'playlists',      '_index',     '_quantity'],                       [0, 1, 1, \&Slim::Control::Queries::alarmPlaylistsQuery]);
 	addDispatch(['alarms',         '_index',         '_quantity'],                                     [1, 1, 1, \&Slim::Control::Queries::alarmsQuery]);
 	addDispatch(['album',          '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::cursonginfoQuery]);
 	addDispatch(['albums',         '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::albumsQuery]);
@@ -533,9 +533,9 @@ sub init {
 	addDispatch(['player',         'isplayer',       '_IDorIndex', '?'],                               [0, 1, 0, \&Slim::Control::Queries::playerXQuery]);
 	addDispatch(['player',         'name',           '_IDorIndex', '?'],                               [0, 1, 0, \&Slim::Control::Queries::playerXQuery]);
 	addDispatch(['player',         'canpoweroff',    '_IDorIndex', '?'],                               [0, 1, 0, \&Slim::Control::Queries::playerXQuery]);
-	addDispatch(['playerpref',     '_prefname',      '?'],                                             [1, 1, 0, \&Slim::Control::Queries::playerprefQuery]);
+	addDispatch(['playerpref',     '_prefname',      '?'],                                             [1, 1, 0, \&Slim::Control::Queries::prefQuery]);
 	addDispatch(['playerpref',     'validate',       '_prefname',  '_newvalue'],                       [1, 1, 0, \&Slim::Control::Queries::prefValidateQuery]);
-	addDispatch(['playerpref',     '_prefname',      '_newvalue'],                                     [1, 0, 0, \&Slim::Control::Commands::playerprefCommand]);
+	addDispatch(['playerpref',     '_prefname',      '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::prefCommand]);
 	addDispatch(['players',        '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::playersQuery]);
 	addDispatch(['playlist',       'add',            '_item'],                                         [1, 0, 0, \&Slim::Control::Commands::playlistXitemCommand]);
 	addDispatch(['playlist',       'addalbum',       '_genre',     '_artist',     '_album', '_title'], [1, 0, 0, \&Slim::Control::Commands::playlistXalbumCommand]);
@@ -551,13 +551,13 @@ sub init {
 	addDispatch(['playlist',       'duration',       '_index',     '?'],                               [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
 	addDispatch(['playlist',       'genre',          '_index',     '?'],                               [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
 	addDispatch(['playlist',       'index',          '?'],                                             [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
-	addDispatch(['playlist',       'index',          '_index',     '_noplay'],                         [1, 0, 0, \&Slim::Control::Commands::playlistJumpCommand]);
+	addDispatch(['playlist',       'index',          '_index',     '_noplay',     '_seekdata'],        [1, 0, 0, \&Slim::Control::Commands::playlistJumpCommand]);
 	addDispatch(['playlist',       'insert',         '_item'],                                         [1, 0, 0, \&Slim::Control::Commands::playlistXitemCommand]);
 	addDispatch(['playlist',       'insertlist',     '_item'],                                         [1, 0, 0, \&Slim::Control::Commands::playlistXitemCommand]);
 	addDispatch(['playlist',       'insertalbum',    '_genre',     '_artist',     '_album', '_title'], [1, 0, 0, \&Slim::Control::Commands::playlistXalbumCommand]);
 	addDispatch(['playlist',       'inserttracks',   '_what',      '_listref'],                        [1, 0, 0, \&Slim::Control::Commands::playlistXtracksCommand]);
 	addDispatch(['playlist',       'jump',           '?'],                                             [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
-	addDispatch(['playlist',       'jump',           '_index',     '_noplay'],                         [1, 0, 0, \&Slim::Control::Commands::playlistJumpCommand]);
+	addDispatch(['playlist',       'jump',           '_index',     '_noplay',     '_seekdata'],        [1, 0, 0, \&Slim::Control::Commands::playlistJumpCommand]);
 	addDispatch(['playlist',       'load',           '_item'],                                         [1, 0, 0, \&Slim::Control::Commands::playlistXitemCommand]);
 	addDispatch(['playlist',       'loadalbum',      '_genre',     '_artist',     '_album', '_title'], [1, 0, 0, \&Slim::Control::Commands::playlistXalbumCommand]);
 	addDispatch(['playlist',       'loadtracks',     '_what',      '_listref'],                        [1, 0, 0, \&Slim::Control::Commands::playlistXtracksCommand]);
@@ -580,6 +580,7 @@ sub init {
 	addDispatch(['playlist',       'tracks',         '?'],                                             [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
 	addDispatch(['playlist',       'url',            '?'],                                             [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
 	addDispatch(['playlist',       'zap',            '_index'],                                        [1, 0, 0, \&Slim::Control::Commands::playlistZapCommand]);
+	addDispatch(['playlistmode',    'set',           '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::playlistModeCommand]);
 	addDispatch(['playlistcontrol'],                                                                   [1, 0, 1, \&Slim::Control::Commands::playlistcontrolCommand]);
 	addDispatch(['playlists',      '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::playlistsQuery]);
 	addDispatch(['playlists',      'edit'],                                                            [0, 0, 1, \&Slim::Control::Commands::playlistsEditCommand]);
@@ -588,12 +589,10 @@ sub init {
 	addDispatch(['playlists',      'rename'],                                                          [0, 0, 1, \&Slim::Control::Commands::playlistsRenameCommand]);
 	addDispatch(['playlists',      'tracks',         '_index',     '_quantity'],                       [0, 1, 1, \&Slim::Control::Queries::playlistsTracksQuery]);
 	addDispatch(['power',          '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::powerQuery]);
-	addDispatch(['power',          '_newvalue'],                                                       [1, 0, 0, \&Slim::Control::Commands::powerCommand]);
+	addDispatch(['power',          '_newvalue',      '_noplay'],                                       [1, 0, 0, \&Slim::Control::Commands::powerCommand]);
 	addDispatch(['pref',           '_prefname',      '?'],                                             [0, 1, 0, \&Slim::Control::Queries::prefQuery]);
 	addDispatch(['pref',           'validate',       '_prefname',  '_newvalue'],                       [0, 1, 0, \&Slim::Control::Queries::prefValidateQuery]);
-	addDispatch(['pref',           '_prefname',      '_newvalue'],                                     [0, 0, 0, \&Slim::Control::Commands::prefCommand]);
-	addDispatch(['rate',           '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::rateQuery]);
-	addDispatch(['rate',           '_newvalue'],                                                       [1, 0, 0, \&Slim::Control::Commands::rateCommand]);
+	addDispatch(['pref',           '_prefname',      '_newvalue'],                                     [0, 0, 1, \&Slim::Control::Commands::prefCommand]);
 	addDispatch(['remote',         '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::cursonginfoQuery]);
 	addDispatch(['rescan',         '?'],                                                               [0, 1, 0, \&Slim::Control::Queries::rescanQuery]);
 	addDispatch(['rescan',         '_playlists'],                                                      [0, 0, 0, \&Slim::Control::Commands::rescanCommand]);
@@ -612,6 +611,7 @@ sub init {
 	addDispatch(['stopserver'],                                                                        [0, 0, 0, \&main::stopServer]);
 	addDispatch(['sync',           '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::syncQuery]);
 	addDispatch(['sync',           '_indexid-'],                                                       [1, 0, 0, \&Slim::Control::Commands::syncCommand]);
+	addDispatch(['syncgroups',     '?'],                                                               [0, 1, 0, \&Slim::Control::Queries::syncGroupsQuery]);
 	addDispatch(['time',           '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::timeQuery]);
 	addDispatch(['time',           '_newvalue'],                                                       [1, 0, 0, \&Slim::Control::Commands::timeCommand]);
 	addDispatch(['title',          '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::cursonginfoQuery]);
@@ -669,10 +669,10 @@ sub init {
 	# protect some commands regardless of args passed to them
 	Slim::Web::HTTP::protectCommand([qw|alarm alarms button client debug display displaynow ir pause play playlist 
 					playlistcontrol playlists stop stopserver wipecache prefset mode
-					power rate rescan sleep sync time gototime
+					power rescan sleep sync time gototime
 					mixer playerpref pref|]);
 	# protect changing setting for command + 1-arg ("?" query always allowed -- except "?" is "%3F" once escaped)
-	#Slim::Web::HTTP::protectCommand(['power', 'rate', 'rescan', 'sleep', 'sync', 'time', 'gototime'],'[^\?].*');	
+	#Slim::Web::HTTP::protectCommand(['power', 'rescan', 'sleep', 'sync', 'time', 'gototime'],'[^\?].*');	
 	# protect changing setting for command + 2 args, 2nd as new value ("?" query always allowed)
 	#Slim::Web::HTTP::protectCommand(['mixer', 'playerpref', 'pref'],'.*','[^\?].*');	# protect changing volume ("?" query always allowed)
 
@@ -996,6 +996,7 @@ sub new {
 	while ($search->{ $requestLineRef->[$i] }) {
 		push @request, $requestLineRef->[$i];
 		$search = $search->{ $requestLineRef->[$i++] };
+		last unless defined $requestLineRef->[$i];
 	}
 	
 	if ($search->{'::'}) { # '::' is the special key indicating a leaf, i.e. verbs match
@@ -2034,7 +2035,7 @@ sub notify {
 	}
 
 	# process listeners if we match the super regexp (i.e. there is an interested listener)
-	if ($self->{'_requeststr'} =~ $listenerSuperRE) {
+	if ($self->{'_requeststr'} && $self->{'_requeststr'} =~ $listenerSuperRE) {
 		
 		for my $listener (values %listeners) {
 
@@ -2221,7 +2222,10 @@ sub fixEncoding {
 
 		if (!ref($val)) {
 
-			${$self->{'_params'}}{$key} = Slim::Utils::Unicode::decode($encoding, $val);
+			# wrap decode in eval, as an incorrect encoding type could hang CLI
+			eval { ${$self->{'_params'}}{$key} = Slim::Utils::Unicode::decode($encoding, $val) };
+			
+			$@ && $log->is_warn && $log->warn($@);
 		}
 	}
 }
@@ -2280,7 +2284,7 @@ sub renderAsArray {
 		# no output
 		next if ($key =~ /^__/);
 
-		$val = Slim::Utils::Unicode::encode($encoding, $val) if $encoding;
+		$val = Slim::Utils::Unicode::from_to($val, Slim::Utils::Unicode::encodingFromString($val), $encoding) if $encoding;
 
 		if ($key =~ /^_/) {
 			push @returnArray, $val;
@@ -2303,10 +2307,7 @@ sub renderAsArray {
 
 				while (my ($key2, $val2) = each %{$hash}) {
 
-					if ($encoding) {
-
-						$val2 = Slim::Utils::Unicode::encode($encoding, $val2);
-					}
+					$val2 = Slim::Utils::Unicode::from_to($val2, Slim::Utils::Unicode::encodingFromString($val2), $encoding) if $encoding;
 
 					if ($key2 =~ /^__/) {
 						# no output
@@ -2321,13 +2322,12 @@ sub renderAsArray {
 		}
 		
 		# array unrolled
-#		if ($key =~ /^$_(.+)/)
-		
 		if (ref $val eq 'ARRAY') {
 			$val = join (',', @{$val})
 		}
-		if (ref $val eq 'SCALAR') {		
-			$val = Slim::Utils::Unicode::encode($encoding, $val) if $encoding;
+		
+		if ($encoding && ref $val eq 'SCALAR') {
+			$val = Slim::Utils::Unicode::from_to($val, Slim::Utils::Unicode::encodingFromString($val), $encoding);
 		}
 		
 		if ($key =~ /^_/) {

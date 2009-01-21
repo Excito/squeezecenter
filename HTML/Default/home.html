@@ -17,7 +17,6 @@
 
 ELSE %]
 	[% extJsScripts = BLOCK %]
-		<script type="text/javascript" src="[% webroot %]html/Home.js?r=[% revision %]"></script>
 		<script type="text/javascript">
 			Ext.onReady(function(){
 				Home.init();
@@ -61,8 +60,19 @@ ELSE %]
 	radioItems = BLOCK;
 		FOREACH item = additionalLinkOrder.radios;
 			IF additionalLinks.radios.exists(item);
-				link.value = additionalLinks.radios.$item;
+				link.value = additionalLinks.radios.item(item);
 				link.key = item;
+				control = '';
+				IF link.value.match('search');
+					control = BLOCK %]
+						<form method="GET" action="[% link.value %]">
+							<input type="hidden" name="player" value="[% playerid %]" />
+							<input type="hidden" name="submit" class="stdclick" value="[% "SEARCH" | string %]" />
+							<input type="text" name="q" class="x-form-focus searchInput" size="30" />
+							<input type="image" src="[% webroot %]html/images/b_search.gif" width="17px" height="17px" alt="[% "SEARCH" | string %]" />
+						</form>
+					[% END;
+				END;
 				PROCESS menuItem;
 			END;
 		END;
@@ -107,6 +117,11 @@ ELSE %]
 				link.value = webroot _ 'settings/index.html?activePage=ALARM&amp;';
 				link.target = 'sc_settings';
 			END;
+			IF link.key == 'PLUGIN_LINE_OUT';
+				NEXT UNLESS player;
+				link.value = webroot _ 'settings/index.html?activePage=AUDIO_SETTINGS&amp;';
+				link.target = 'sc_settings';
+			END;
 			IF link.key == 'PLUGIN_LINE_IN';
 				link.value = 'PLUGIN_LINE_IN_IN_USE' | getstring;
 				link.value = "javascript:Home.setLineIn('" _ link.value _"');\" \"";
@@ -121,14 +136,18 @@ ELSE %]
 		<div class="selectorMarker [% expandable %]" onmouseover="Highlighter.highlight(this [% IF expandable %], Home.onSelectorClicked[% END %]);">
 			<div class="selector_topRight"><div class="selector_topLeft"><div class="selector_bottomRight"><div class="selector_bottomLeft">
 				<div class="homeMenuItem" id="[% link.key %]">
+					[% string   = link.key;
+					   stringUC = link.key | upper;
+					   IF string == stringUC; string = link.key | getstring; END;
+					%]
 					[% IF expandable %]
 						<img class="disclosure_home" src="[% webroot %]html/images/spacer.gif"/>
 					[% ELSE %]
 						<a href="[% link.value %]player=[% player %]" class="browseItemLink" [% IF link.target; 'target="' _ link.target _ '"'; END %]>
 					[% END %]
 
-					[% IF (additionalLinks.icons.${link.key} || link.icon) && !noIcon;
-						link.icon = additionalLinks.icons.${link.key} || link.icon;
+					[% IF (additionalLinks.icons.item(link.key) || link.icon) && !noIcon;
+						link.icon = additionalLinks.icons.item(link.key) || link.icon;
 
 						# have local artwork resized
 						UNLESS link.icon.match('^http:');
@@ -136,11 +155,11 @@ ELSE %]
 						END
 					%]
 						<span class="browseCover">
-							<img src="[% link.icon %]" width="25" border="0" alt="[% link.key | getstring %]">
+							<img src="[% link.icon %]" width="25" border="0" alt="[% string %]">
 						</span>
 						<div class="smallBrowseItemDetail">
 					[% END %]
-					[% IF dontGetString; link.key; ELSE; link.key | getstring; END %]
+					[% IF dontGetString; link.key; ELSE; string; END %]
 					[% IF link.icon && !noIcon %]
 						</div>
 					[% END %]
@@ -225,7 +244,7 @@ ELSE %]
 	</div>
 	[% END %]
 
-	[% PROCESS pageheader.html noHomeLink=1 %]
+	[% PROCESS pageheader.html noHomeLink=1 useSpecialExt="-browse" %]
 
 	[% menu %]
 
@@ -236,6 +255,14 @@ ELSE %]
 			<span id="artistcount">[% artist_count %]</span>.
 		[% END %]
 	[% END %]
+
+	<script type="text/javascript">
+		if (Ext.isIE)
+			Ext.onReady(function(){
+				_init();
+				Home.init();
+			});
+	</script>
 
 	[% PROCESS pagefooter.html %]
 [% END %]

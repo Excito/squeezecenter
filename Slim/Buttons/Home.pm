@@ -108,11 +108,10 @@ sub init {
 				}
 			}
 
-			return $client->string($string);
+			return ( uc($string) eq $string ) ? $client->string($string) : $string;
 		},
 
 		'externRefArgs' => 'CV',
-		'stringExternRef' => 1,
 		'header' => undef,
 		'headerAddCount' => 1,
 		'callback' => \&homeExitHandler,
@@ -579,12 +578,19 @@ sub createList {
 			$disabledMenus{$item} = 1;
 		}
 	}
+	
+	# Get sort order for plugins
+	my $pluginWeights = Slim::Plugin::Base->getWeights();
 
 	SUB:
-	for my $sub (sort {($weighted && ($prefs->get("rank-$b") || 0) <=> 
-		($prefs->get("rank-$a") || 0)) || 
-		(lc(cmpString($client, $a)) cmp lc(cmpString($client, $b)))} 
-		keys %{$params->{'submenus'}}) {
+	for my $sub (
+		sort {
+			($weighted && ($pluginWeights->{$a} || 0) <=> ($pluginWeights->{$b} || 0))
+			||
+			($weighted && ($prefs->get("rank-$b") || 0) <=> ($prefs->get("rank-$a") || 0))
+			|| 
+			(lc(cmpString($client, $a)) cmp lc(cmpString($client, $b)))
+		} keys %{$params->{'submenus'}}) {
 
 		# Leakage of the DigitalInput plugin..
 		if ($sub eq 'PLUGIN_DIGITAL_INPUT' && !$client->hasDigitalIn) {
@@ -595,7 +601,16 @@ sub createList {
 		if ($sub eq 'PLUGIN_LINE_IN' && !$client->hasLineIn) {
 			next;
 		}
-
+		
+		# Leakage of the LineOut plugin..
+		if ($sub eq 'PLUGIN_LINE_OUT' && !$client->hasHeadSubOut) {
+			next;
+		}
+		
+		if ( my $condition = $params->{submenus}->{$sub}->{condition} ) {
+			next unless $condition->( $client );
+		}
+		
 		if ( main::SLIM_SERVICE ) {
 			# Hide disabled menus
 			if ( exists $disabledMenus{$sub} ) {
@@ -608,7 +623,7 @@ sub createList {
 			}
 			
 			# Hide plugins if necessary (private, beta, etc)
-			if ( !$client->playerData->userid->canSeePlugin($sub) ) {
+			if ( !$client->canSeePlugin($sub) ) {
 				next;
 			}
 			
@@ -794,6 +809,11 @@ sub unusedMenuOptions {
 		delete $menuChoices{'PLUGIN_LINE_IN'};
 	}
 
+	# Leakage from Sub/Head Out Plugin
+	if (defined $menuChoices{'PLUGIN_LINE_OUT'} && !$client->hasHeadSubOut) {
+		delete $menuChoices{'PLUGIN_LINE_OUT'};
+	}
+	
 	for my $usedOption (@{$homeChoices{$client}}) {
 		delete $menuChoices{$usedOption};
 	}
@@ -850,16 +870,31 @@ sub updateMenu {
 		}
 	}
 	
-	for my $menuItem (@{ $prefs->client($client)->get('menuItem') }) {
+	my $menuItem = $prefs->client($client)->get('menuItem');
+	if ( !ref $menuItem ) {
+		$menuItem = [ $menuItem ];
+	}
+	
+	for my $menuItem ( @{$menuItem} ) {
 		# more leakage of the LineIn plugin..
 		if ($menuItem eq 'PLUGIN_LINE_IN' && !($client->hasLineIn && $client->lineInConnected)) {
 			next;
 		}
 
+		# more leakage of the Line Out plugin..
+		if ($menuItem eq 'PLUGIN_LINE_OUT' && !($client->hasHeadSubOut && $client->lineOutConnected)) {
+			next;
+		}
+		
 		my $plugin = Slim::Utils::PluginManager->dataForPlugin($menuItem);
 
 		if (!exists $home{$menuItem} && !defined $plugin) {
 
+			next;
+		}
+		
+		# Skip home menu items that contain no submenus
+		if ( ref $home{$menuItem} eq 'HASH' && !scalar keys %{ $home{$menuItem} } ) {
 			next;
 		}
 
