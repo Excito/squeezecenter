@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs;
 
-# $Id: Prefs.pm 24310 2008-12-15 20:05:24Z andy $
+# $Id: Prefs.pm 25152 2009-02-24 22:10:53Z andy $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -338,8 +338,11 @@ sub init {
 		if ( $client->isa('Slim::Player::Boom') ) {
 			$defaults = $Slim::Player::Boom::defaultPrefs;
 		}
-	
-		$cprefs->set( menuItem => Storable::dclone($defaults->{menuItem}) ); # clone for each client
+
+		if ($defaults && defined $defaults->{menuItem}) {
+			# clone for each client
+			$cprefs->set( menuItem => Storable::dclone($defaults->{menuItem}) );
+		}
 		1;
 	} );
 
@@ -649,7 +652,9 @@ sub init {
 
 	$prefs->setChange( sub {
 		my $client = $_[2] || return;
-		$client->display->renderCache()->{'defaultfont'} = undef;
+		if ( $client->display ) {
+			$client->display->renderCache()->{'defaultfont'} = undef;
+		}
 	}, qw(activeFont idleFont activeFont_curr idleFont_curr) );
 
 	$prefs->setChange( sub {

@@ -1,6 +1,6 @@
 package Slim::Plugin::AudioScrobbler::Plugin;
 
-# $Id: Plugin.pm 24510 2009-01-05 18:54:24Z andy $
+# $Id: Plugin.pm 25508 2009-03-12 16:36:38Z andy $
 
 # This plugin handles submission of tracks to Last.fm's
 # Audioscrobbler service.
@@ -113,14 +113,7 @@ sub shutdownPlugin {
 sub condition {
 	my ( $class, $client ) = @_;
 	
-	my $accounts;
-	
-	if ( main::SLIM_SERVICE ) {
-		$accounts = $prefs->client($client)->get('accounts');
-	}
-	else {
-		$accounts = $prefs->get('accounts');
-	}
+	my $accounts = getAccounts($client);
 	
 	if ( ref $accounts eq 'ARRAY' && scalar @{$accounts} ) {
 		return 1;
@@ -142,15 +135,7 @@ sub setMode {
 	
 	my $listRef = [ 0 ];
 	
-	my $accounts = $prefs->get('accounts') || [];
-	
-	if ( main::SLIM_SERVICE ) {
-		$accounts = $prefs->client($client)->get('accounts') || [];
-	
-		if ( !ref $accounts ) {
-			$accounts = from_json( $accounts );
-		}
-	}
+	my $accounts = getAccounts($client);
 	
 	for my $account ( @{$accounts} ) {
 		push @{$listRef}, $account->{username};
@@ -271,15 +256,7 @@ sub handshake {
 		if ( !$params->{username} ) {
 			$params->{username} = $prefs->client($client)->get('account');
 			
-			my $accounts = $prefs->get('accounts') || [];
-			
-			if ( main::SLIM_SERVICE ) {
-				$accounts = $prefs->client($client)->get('accounts') || [];
-			
-				if ( !ref $accounts ) {
-					$accounts = from_json( $accounts );
-				}
-			}
+			my $accounts = getAccounts($client);
 			
 			for my $account ( @{$accounts} ) {
 				if ( $account->{username} eq $params->{username} ) {
@@ -425,16 +402,19 @@ sub newsongCallback {
 	# Check if this player has an account selected
 	return if !$prefs->client($client)->get('account');
 	
+	my $accounts = getAccounts($client);
+	
 	my $enable_scrobbling;
 	
 	if ( main::SLIM_SERVICE ) {
-		$enable_scrobbling  = $prefs->client($client)->get('enable_scrobbling');
+		# Get enable_scrobbling from the user_prefs table
+		$enable_scrobbling = $prefs->client($client)->get( 'enable_scrobbling', undef, 'UserPref' );
 	}
 	else {
-		$enable_scrobbling  = $prefs->get('enable_scrobbling');
+		$enable_scrobbling = $prefs->get('enable_scrobbling');
 	}
 	
-	return unless $enable_scrobbling;
+	return unless $enable_scrobbling && scalar @{$accounts};
 
 	my $url   = Slim::Player::Playlist::url($client);
 	my $track = Slim::Schema->objectForUrl( { url => $url } );
@@ -1094,7 +1074,7 @@ sub submitLoveTrack {
 	my ( $client, $item ) = @_;
 	
 	my $username = $prefs->client($client)->get('account');
-	my $accounts = $prefs->get('accounts') || [];
+	my $accounts = getAccounts($client);
 	my $password;
 	
 	for my $account ( @{$accounts} ) {
@@ -1233,13 +1213,35 @@ sub canScrobble {
 	return;
 }
 
+sub getAccounts {
+	my $client = shift;
+	
+	my $accounts;
+	
+	if ( main::SLIM_SERVICE ) {
+		$accounts = $prefs->client($client)->get( 'accounts', undef, 'UserPref' ) || [];
+	
+		if ( !ref $accounts ) {
+			$accounts = from_json( $accounts );
+		}
+	}
+	else {	
+		$accounts = $prefs->get('accounts') || [];
+	}
+	
+	return $accounts;
+}
+
 sub getQueue {
 	my $client = shift;
 	
-	my $queue = $prefs->client($client)->get('queue') || [];
+	my $queue;
 	
-	if ( main::SLIM_SERVICE && !ref $queue ) {
-		$queue = from_json( $queue );
+	if ( main::SLIM_SERVICE ) {
+		$queue = SDI::Service::Model::ScrobbleQueue->get( $client->playerData->id );
+	}
+	else {
+		$queue = $prefs->client($client)->get('queue') || [];
 	}
 	
 	return $queue;
@@ -1249,10 +1251,11 @@ sub setQueue {
 	my ( $client, $queue ) = @_;
 	
 	if ( main::SLIM_SERVICE ) {
-		$queue = to_json( $queue );
+		SDI::Service::Model::ScrobbleQueue->set( $client->playerData->id, $queue );
 	}
-	
-	$prefs->client($client)->set( queue => $queue );
+	else {
+		$prefs->client($client)->set( queue => $queue );
+	}
 }
 
 sub infoLoveTrack {
@@ -1327,7 +1330,7 @@ sub jiveSettingsMenu {
 
 	my $request  = shift;
 	my $client   = $request->client();
-	my $accounts = $prefs->get('accounts') || [];
+	my $accounts = getAccounts($client);
 	my $enabled  = $prefs->get('enable_scrobbling');
 	my $selected = $prefs->client($client)->get('account');
 

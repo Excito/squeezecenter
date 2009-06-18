@@ -1,6 +1,6 @@
 package Slim::Player::TranscodingHelper;
 
-# $Id: TranscodingHelper.pm 23936 2008-11-15 11:34:57Z awy $
+# $Id: TranscodingHelper.pm 25403 2009-03-08 08:25:00Z ayoung $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -274,6 +274,7 @@ sub getConvertCommand2 {
 	my $player;
 	my $clientid;
 	my $transcoder  = undef;
+	my $error;
 	my $backupTranscoder  = undef;
 	my $url      = blessed($track) && $track->can('url') ? $track->url : $track;
 
@@ -343,11 +344,11 @@ sub getConvertCommand2 {
 		@supportedformats = qw(aif wav mp3);
 	}
 	
-	# Switch Apple Lossless files from a CT of 'mov' to 'alc' for
+	# Switch Apple Lossless files from a CT of 'mov' or 'mp4' to 'alc' for
 	# conversion purposes, so we can use 'alac' if it's available.
 	# 
-	# Bug: 2095
-	if ($type eq 'mov' && blessed($track) && $track->lossless) {
+	# Bug: 2095, 10602
+	if (($type eq 'mov' || $type eq 'mp4') && blessed($track) && $track->lossless) {
 		$log->debug("Track is alac - updating type!");
 		$type = 'alc';
 	}
@@ -398,6 +399,9 @@ sub getConvertCommand2 {
 			if (! $caps->{$_}) {
 				$log->is_debug
 					&& $log->debug("Rejecting $command because required capability $_ not supported: ");
+				if ($_ eq 'D') {
+					$error ||= 'UNSUPPORTED_SAMPLE_RATE';
+				}
 				next PROFILE;
 			}
 		}
@@ -454,7 +458,7 @@ sub getConvertCommand2 {
 		$log->is_info && $log->info("Matched: $type->", $transcoder->{'streamformat'}, " via: ", $transcoder->{'command'});
 	}
 
-	return $transcoder;
+	return wantarray ? ($transcoder, $error) : $transcoder;
 }
 
 sub tokenizeConvertCommand2 {

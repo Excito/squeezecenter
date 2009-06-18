@@ -1,6 +1,6 @@
 package Slim::Formats::Ogg;
 
-# $Id: Ogg.pm 22943 2008-08-28 17:56:34Z andy $
+# $Id: Ogg.pm 25609 2009-03-18 15:09:40Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -50,6 +50,10 @@ my %tagMapping = (
 	'MUSICBRAINZ_ARTISTID'      => 'MUSICBRAINZ_ARTIST_ID',
 	'MUSICBRAINZ_TRACKID'       => 'MUSICBRAINZ_ID',
 	'MUSICBRAINZ_TRMID'         => 'MUSICBRAINZ_TRM_ID',
+	'DESCRIPTION'               => 'COMMENT',
+
+	# for dBpoweramp CD Ripper
+	'TOTALDISCS'                => 'DISCC',
 );
 
 =head2 getTag( $filename )

@@ -7,7 +7,7 @@
 @DPATCH@
 diff -urNad squeezecenter~/Slim/Utils/OS/Custom.pm squeezecenter/Slim/Utils/OS/Custom.pm
 --- squeezecenter~/Slim/Utils/OS/Custom.pm	1970-01-01 01:00:00.000000000 +0100
-+++ squeezecenter/Slim/Utils/OS/Custom.pm	2009-01-21 14:49:31.000000000 +0100
++++ squeezecenter/Slim/Utils/OS/Custom.pm	2009-01-21 15:19:24.000000000 +0100
 @@ -0,0 +1,37 @@
 +package Slim::Utils::OS::Custom;
 +

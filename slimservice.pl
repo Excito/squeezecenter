@@ -90,6 +90,7 @@ BEGIN {
 	require SDI::Service::Comet;
 	require SDI::Service::Control;
 	require SDI::Service::Heartbeat;
+	require SDI::Service::JSONRPC;
 	require SDI::Service::EventLog;
 	require SDI::Service::UPnP;
 };
@@ -194,7 +195,7 @@ our @AUTHORS = (
 );
 my $prefs        = preferences('server');
 
-our $VERSION     = '7.3.2-sn';
+our $VERSION     = '7.3.3-sn';
 our $REVISION    = undef;
 our $audiodir    = undef
 our $playlistdir = undef;
@@ -281,6 +282,20 @@ sub init {
 	# Uncomment to enable crash debugging.
 	$SIG{__DIE__} = \&Slim::Utils::Misc::bt;
 	
+	# Start/stop profiler during runtime (requires Devel::NYTProf)
+	# and NYTPROF env var set to 'start=no'
+	if ( $INC{'Devel/NYTProf.pm'} && $ENV{NYTPROF} =~ /start=no/ ) {
+		$SIG{USR1} = sub {
+			DB::enable_profile();
+			warn "Profiling enabled...\n";
+		};
+	
+		$SIG{USR2} = sub {
+			DB::disable_profile();
+			warn "Profiling disabled...\n";
+		};
+	}
+	
 	# Dump memory usage to a file if called with a USR1
 =pod
 	if ($d_memory) {
@@ -364,6 +379,9 @@ sub init {
 		
 		# start Comet handler
 		SDI::Service::Comet->init();
+		
+		# start JSONRPC handler
+		SDI::Service::JSONRPC->init();
 		
 		# start event logging
 		SDI::Service::EventLog->init();

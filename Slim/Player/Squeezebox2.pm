@@ -1,6 +1,6 @@
 package Slim::Player::Squeezebox2;
 
-# $Id: Squeezebox2.pm 24630 2009-01-12 22:10:37Z andy $
+# $Id: Squeezebox2.pm 25152 2009-02-24 22:10:53Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -78,6 +78,7 @@ sub maxTreble { 50 };
 sub minTreble { 50 };
 sub maxPitch { 100 };
 sub minPitch { 100 };
+sub maxTransitionInterval { 10 };
 
 sub model {
 	my $client       = shift;
@@ -103,15 +104,23 @@ sub formats {
 }
 
 sub statHandler {
-	my ($client, $code) = @_;
+	my ($client, $code, $jiffies, $error_code) = @_;
+	
+	if ($code eq 'STMc') {
+		$client->streamStartTimestamp($jiffies);
+	} else {
+		return if ! defined($client->streamStartTimestamp());
+	}
+	
 	
 	if ($code eq 'STMd') {
 		$client->readyToStream(1);
 		$client->controller()->playerReadyToStream($client);
 	} elsif ($code eq 'STMn') {
 		$client->readyToStream(1);
-		logError($client->id(). ": Decoder does not support file format");
-		$client->controller()->playerStreamingFailed($client, 'PROBLEM_OPENING');
+		logError($client->id(). ": Decoder does not support file format, code $error_code");
+		my $string = $error_code ? 'DECODE_ERROR_' . $error_code : 'PROBLEM_OPENING';
+		$client->controller()->playerStreamingFailed($client, $string);
 	} elsif ($code eq 'STMl') {
 		$client->bufferReady(1);
 		$client->controller()->playerBufferReady($client);
@@ -894,7 +903,7 @@ sub setPlayerSetting {
 
 	# Only send a setd packet to the player if it is stopped and we are not
 	# still waiting for a response to a previous setd packet for this pref
-	if ( $client->isStopped() && !($status & SETD_WAITING) ) {
+	if ( $client->controller() && $client->isStopped() && !($status & SETD_WAITING) ) {
 
 		my $data = pack('C'.$currpref->{pack}, $currpref->{firmwareid}, $value);
 		$client->sendFrame('setd', \$data);

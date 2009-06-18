@@ -1,6 +1,6 @@
 package Slim::Schema::Storage;
 
-# $Id: Storage.pm 18159 2008-03-28 21:35:11Z andy $
+# $Id: Storage.pm 25030 2009-02-16 17:13:26Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -10,7 +10,18 @@ package Slim::Schema::Storage;
 # Shim to get a backtrace out of throw_exception
 
 use strict;
-use base qw(DBIx::Class::Storage::DBI::mysql);
+use vars qw(@ISA);
+
+BEGIN {
+	if ( main::SLIM_SERVICE ) {
+		require DBIx::Class::Storage::DBI::SQLite;
+		push @ISA, qw(DBIx::Class::Storage::DBI::SQLite);
+	}
+	else {
+		require DBIx::Class::Storage::DBI::mysql;
+		push @ISA, qw(DBIx::Class::Storage::DBI::mysql);
+	}
+}
 
 use Carp::Clan qw/DBIx::Class/;
 use File::Slurp;

@@ -10,7 +10,7 @@ package Slim::Player::Player;
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# $Id: Player.pm 24475 2009-01-03 01:20:08Z adrian $
+# $Id: Player.pm 25386 2009-03-07 07:10:58Z ayoung $
 #
 
 use strict;
@@ -684,18 +684,18 @@ sub nowPlayingModeLines {
 	if ( main::SLIM_SERVICE ) {
 		# Allow buffer fullness display to work on SN where we don't have a playingDisplayModes pref
 		if ( $client->isa('Slim::Player::Transporter') ) {
-			if ( $prefs->client($client)->get('playingDisplayMode') == 6 ) {
-				$modes = [0..6];
+			if ( $prefs->client($client)->get('playingDisplayMode') >= 6 ) {
+				$modes = [0..7];
 			}
 		}
 		elsif ( $client->isa('Slim::Player::Boom') ) {
-			if ( $prefs->client($client)->get('playingDisplayMode') == 10 ) {
-				$modes = [0..10];
+			if ( $prefs->client($client)->get('playingDisplayMode') >= 10 ) {
+				$modes = [0..11];
 			}
 		}
 		else {
-			if ( $prefs->client($client)->get('playingDisplayMode') == 12 ) {
-				$modes = [0..12];
+			if ( $prefs->client($client)->get('playingDisplayMode') >= 12 ) {
+				$modes = [0..13];
 			}
 		}
 	}
@@ -1044,11 +1044,6 @@ sub publishPlayPoint {
 			}
 		}
 	}
-}
-
-sub isBufferReady {
-	my $client = shift;
-	return $client->bufferReady();
 }
 
 sub isReadyToStream {

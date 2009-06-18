@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::File;
 
-# $Id: File.pm 24404 2008-12-23 15:07:11Z awy $
+# $Id: File.pm 25581 2009-03-17 15:34:28Z michael $
 
 # SqueezeCenter Copyright 2001-2007 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -320,6 +320,28 @@ sub canSeekError {
 	my ($class, $client, $song) = @_;
 	
 	return ('SEEK_ERROR_TYPE_NOT_SUPPORTED', Slim::Music::Info::contentType($song->currentTrack()->url));
+}
+
+sub getIcon {
+	my ( $class, $url ) = @_;
+
+	if (Slim::Music::Info::isSong($url)) {
+		
+		my $track = Slim::Schema->rs('Track')->objectForUrl({
+			'url' => $url,
+		});
+
+		if ($track && $track->coverArt) {
+			return 'music/' . $track->id . '/cover.png';
+		}
+
+	}
+	
+	elsif (Slim::Music::Info::isPlaylist($url)) {
+		return 'html/images/playlists.png';
+	}
+	
+	return 'html/images/cover.png';
 }
 
 1;

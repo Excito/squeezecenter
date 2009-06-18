@@ -1,6 +1,6 @@
 package Slim::Plugin::Amazon::Plugin;
 
-# $Id: Plugin.pm 24267 2008-12-09 20:30:25Z andy $
+# $Id: Plugin.pm 24983 2009-02-12 21:37:44Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -55,7 +55,7 @@ sub trackInfoMenu {
 			  . '&upc='      . $remoteMeta->{upc};
 	}
 	
-	if ( $artist || $album || $title ) {
+	if ( $artist && ( $album || $title ) ) {
 		return {
 			type      => 'link',
 			name      => $client->string('PLUGIN_AMAZON_ON_AMAZON'),

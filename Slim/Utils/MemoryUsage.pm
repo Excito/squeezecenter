@@ -1,6 +1,6 @@
 package Slim::Utils::MemoryUsage;
 
-# $Id: MemoryUsage.pm 23740 2008-10-30 16:32:23Z mherger $ 
+# $Id: MemoryUsage.pm 25335 2009-03-04 23:05:23Z blblack $ 
 #
 # This module is a merging of B::TerseSize and Apache::Status 
 # put together to work with SqueezeCenter by Dan Sully
@@ -155,8 +155,7 @@ sub package_size {
 		CV_walk('slow', $name, 'op_size');
 
 		for (keys %{ $filelex{$package} }) {
-
-			$total_opsize += $opsize;
+			$total_opsize += $filelex{$package}->{$_};
 			$retval{"my ${_} = ...;"} = {
 				'size' => $filelex{$package}->{$_},
 			};

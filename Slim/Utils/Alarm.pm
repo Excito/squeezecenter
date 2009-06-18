@@ -43,6 +43,7 @@ Two types of alarm are implemented - daily alarms and calendar alarms.  Daily al
 
 #use Data::Dumper;
 use Time::HiRes;
+use URI::Escape qw(uri_unescape);
 
 use Slim::Player::Client;
 use Slim::Utils::DateTime;
@@ -118,6 +119,7 @@ sub new {
 		_enabled => 0,
 		_repeat => 1,
 		_playlist => undef,
+		_title => undef,
 		_volume => undef, # Use default volume
 		_active => 0,
 		_snoozeActive => 0,
@@ -362,6 +364,24 @@ sub playlist {
 	return $self->{_playlist};
 }
 
+=head3 title( $title )
+
+Sets/returns the title for the alarm playlist.  If no title is supplied, the playlist URL will be returned.
+
+=cut
+
+sub title {
+	my $self = shift;
+
+	if (@_) {
+		my $newValue = shift;
+		
+		$self->{_title} = $newValue;
+	}
+	
+	return $self->{_title} || $self->{_playlist};
+}
+
 =head3 nextDue( )
 
 Returns the epoch value for when this alarm is next due.
@@ -509,6 +529,47 @@ sub sound {
 		$self->{_enabled} = 0;
 		$self->save(0);
 	}
+	
+	# Support special URLs for executing CLI commands, i.e.
+	# cli://power__0 (turn off)
+	# 2 underscores are used to separate commands, to allow for commands including 1 underscore
+	# Must be URI-escaped, and clientid is implied at the start of the command
+	
+	if ( $soundAlarm && $self->playlist =~ m{^cli://(.+)} ) {
+		my @cmd = map { uri_unescape($_) } split /__/, $1;
+		
+		$log->is_debug && $log->debug( 'Executing Alarm CLI: ' . Data::Dump::dump(\@cmd) );
+		
+		$client->execute( \@cmd );
+		
+		# Make sure this alarm is not scheduled again right away
+		$client->alarmData->{lastAlarmTime} = $self->{_nextDue};
+		
+		# don't sound the alarm via the code below
+		$soundAlarm = 0;
+	}
+	
+	if ( main::SLIM_SERVICE ) {
+		# Some players on SN have alarms that simply execute a playlist play command, they don't
+		# need the alarm screensaver, fallback alarm, etc.
+		if ( $client->hasSpecialAlarm ) {
+			# Log it
+			$client->logStreamEvent( 'Alarm: ' . $self->title );
+			
+			# Run it
+			if ( $soundAlarm ) {
+				$log->is_debug && $log->debug( 'Playing special alarm ' . $self->title . ' (' . $self->playlist . ')' );
+				
+				$client->execute( [ 'playlist', 'play', $self->playlist, $self->title ] );
+			
+				# Make sure this alarm is not scheduled again right away
+				$client->alarmData->{lastAlarmTime} = $self->{_nextDue};
+			
+				# don't sound the alarm via the code below
+				$soundAlarm = 0;
+			}
+		}
+	}
 
 	if ($soundAlarm) {
 		# Sound an Alarm (HWV 63)
@@ -538,13 +599,14 @@ sub sound {
 
 		$class->pushAlarmScreensaver($client);
 
-		# Set analogOutMode to subwoofer to force output through main speakers even if headphones are plugged in
-		# This needs doing a lot more thoroughly.  Bug 8146 
+		# If player has headphones connected, play alarm sound through main
+		# speakers as well
 		if ($client->can('setAnalogOutMode') && $client->can('lineOutConnected')
-			&& $client->lineOutConnected())
+			&& $client->lineOutConnected()
+			&& $prefs->client($client)->get('analogOutMode') == 0)
 		{
-			$log->debug('Temporarily forcing line out to subwoofer');
-			$client->setAnalogOutMode(1);
+			$log->debug('Setting analog out mode to always on');
+			$client->setAnalogOutMode(2);
 		}
 
 		# Set up volume
@@ -560,7 +622,7 @@ sub sound {
 		# Play alarm playlist, falling back to the current playlist if undef
 		if (defined $self->playlist) {
 			$log->debug('Alarm playlist url: ' . $self->playlist);
-			$request = $client->execute(['playlist', 'play', $self->playlist]);
+			$request = $client->execute(['playlist', 'play', $self->playlist, $self->title, _fadeInSeconds($client)]);
 			$request->source('ALARM');
 
 		} else {
@@ -568,20 +630,13 @@ sub sound {
 			# Check that the current playlist isn't empty
 			my $playlistLen = Slim::Player::Playlist::count($client);
 			if ($playlistLen) {
-				$request = $client->execute(['play']);
+				$request = $client->execute(['play', _fadeInSeconds($client)]);
 				$request->source('ALARM');
 			} else {
 				$log->debug('Current playlist is empty');
 
 				$self->_playFallback();
 			}
-		}
-
-		# Fade volume change if requested (do this after playing as playing
-		# seems to sometimes cancel the fade)
-		if ( $prefs->client($client)->get('alarmfadeseconds') ) {
-			$log->debug('Fading volume');
-			$client->fade_volume( $FADE_SECONDS );
 		}
 
 		# Set a callback to check we managed to play something
@@ -746,14 +801,8 @@ sub stopSnooze {
 	
 	if ($unPause) {
 		$log->debug('unpausing music');
-		my $request = $client->execute(['pause', 0]);
+		my $request = $client->execute(['pause', 0, _fadeInSeconds($client)]);
 		$request->source('ALARM');
-
-		# Fade volume if requested 
-		if ( $prefs->client($client)->get('alarmfadeseconds') ) {
-			$log->debug('Fading volume');
-			$client->fade_volume( $FADE_SECONDS );
-		}
 
 		# Set a callback to check we're playing.  As internet radio
 		# streams have to restart at the end of a snooze they could
@@ -998,6 +1047,7 @@ sub _createSaveable {
 		_enabled => $self->{_enabled},
 		_repeat => $self->{_repeat},
 		_playlist => $self->{_playlist},
+		_title => $self->{_title},
 		_volume => $self->{_volume},
 		_comment => $self->{_comment},
 		_id => $self->{_id},
@@ -1066,19 +1116,21 @@ sub _playFallback {
 	else {	
 		my $server = Slim::Utils::Network::serverAddr();
 		my $port   = $prefs->get('httpport');
+		
+		my $auth = '';
+		if ( $prefs->get('authorize') ) {
+			my $password = Slim::Player::Squeezebox::generate_random_string(10);
+			$client->password($password);
+			$auth = "squeezeboxXXX:${password}@";
+		}
 	
-		$url = "loop://$server:$port/html/slim-backup-alarm.mp3";
+		$url = "loop://${auth}${server}:${port}/html/slim-backup-alarm.mp3";
 	}
 
 	$log->debug("Starting fallback alarm: $url");
 
-	my $request = $client->execute([ 'playlist', 'play', $url, $client->string('BACKUP_ALARM') ]);
+	my $request = $client->execute([ 'playlist', 'play', $url, $client->string('BACKUP_ALARM'), _fadeInSeconds($client) ]);
 	$request->source('ALARM');
-
-	if ( $prefs->client($client)->get('alarmfadeseconds') ) {
-		$log->debug('Fading volume');
-		$client->fade_volume( $FADE_SECONDS );
-	}
 }
 
 # Handle the alarm timeout timer firing
@@ -1233,6 +1285,13 @@ sub loadAlarms {
 
 	$client->alarmData->{alarms} = {};
 
+	if ( main::SLIM_SERVICE ) {
+		# Ignore alarms on disabled players
+		if ( $client->playerData->disabled ) {
+			$prefAlarms = {};
+		}
+	}
+
 	foreach my $prefAlarm (keys %$prefAlarms) {
 		$prefAlarm = $prefAlarms->{$prefAlarm};
 		my $alarm = $class->new($client, $prefAlarm->{_time});
@@ -1240,6 +1299,7 @@ sub loadAlarms {
 		$alarm->{_enabled} = $prefAlarm->{_enabled};
 		$alarm->{_repeat} = $prefAlarm->{_repeat};
 		$alarm->{_playlist} = $prefAlarm->{_playlist};
+		$alarm->{_title} = $prefAlarm->{_title};
 		$alarm->{_volume} = $prefAlarm->{_volume};
 		$alarm->{_comment} = $prefAlarm->{_comment};
 		$alarm->{_id} = $prefAlarm->{_id};
@@ -1354,9 +1414,9 @@ sub setRTCAlarm {
 	my $class = shift;
 	my $client = shift;
 
-	$log->debug('Asked to set rtc alarm for ' . $client->name);
+	return if !$client->hasRTCAlarm;
 
-	return if ! $client->hasRTCAlarm;
+	$log->is_debug && $log->debug( 'Asked to set rtc alarm for ' . $client->name );
 
 	# Clear any existing timer to call this sub
 	my $timerRef = $client->alarmData->{_rtcTimerRef};
@@ -1803,6 +1863,17 @@ sub _timeStr {
 		return "$hour:$min:$sec $mday/" . ($mon + 1) . '/' . ($year + 1900);
 	}
 
+}
+
+# Return the number of seconds over which alarms should fade in for a given client,
+# or undef if client doesn't want a fade
+sub _fadeInSeconds {
+	my $client = shift;
+	
+	if ( $prefs->client($client)->get('alarmfadeseconds') ) {
+		return $FADE_SECONDS;
+	}
+	return undef;
 }
 
 # Callback handlers.  (These have to be package methods as can only take $request as their argument)

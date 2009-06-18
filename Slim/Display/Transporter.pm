@@ -5,7 +5,7 @@ package Slim::Display::Transporter;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Transporter.pm 22939 2008-08-28 16:42:33Z andy $
+# $Id: Transporter.pm 24733 2009-01-22 11:01:35Z michael $
 
 =head1 NAME
 
@@ -69,6 +69,9 @@ my @modes = (
 	# mode 6
 	{ desc => ['SETUP_SHOWBUFFERFULLNESS'],
 	  bar => 1, secs => 0,  width => 320, fullness => 1 },
+	# mode 7
+	{ desc => ['CLOCK'],
+	  bar => 0, secs => 0, width => 320, clock => 1 },
 );
 
 my $nmodes = $#modes;

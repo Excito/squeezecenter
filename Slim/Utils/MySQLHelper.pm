@@ -1,6 +1,6 @@
 package Slim::Utils::MySQLHelper;
 
-# $Id: MySQLHelper.pm 24185 2008-12-02 23:47:28Z mherger $
+# $Id: MySQLHelper.pm 24799 2009-01-28 23:50:50Z andy $
 
 =head1 NAME
 

@@ -1,6 +1,6 @@
 package Slim::Networking::Slimproto;
 
-# $Id: Slimproto.pm 24612 2009-01-10 08:34:53Z ayoung $
+# $Id: Slimproto.pm 25681 2009-03-24 15:03:19Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -54,6 +54,9 @@ my $check_time;                 # time scheduled for next check_all_clients
 if ( main::SLIM_SERVICE ) {
 	# don't check as often on SN
 	$check_all_clients_time = 30;
+	
+	# And forget immediately upon disconnect
+	$forget_disconnected_time = 5;
 }
 
 my $slimproto_socket;
@@ -586,7 +589,23 @@ sub _disco_handler {
 		}
 	}
 
-	if ($reason) {
+	if ($reason
+	
+		# bug 10475
+		# Sometimes the player sends a DSCO with a non-zero reason code
+		# when it would seem that a normal disconnect at the end of the track
+		# is what has really happened. Quite why has not yet been determined.
+		# It would seem, from reports that this problem happens with both ip3k
+		# players and SqueezePlay, so it is probably something triggered by SC.
+		# It does not seem to be confined to a single operating-system platform.
+		#
+		# We ignore this non-zero code if our Controller is already in STREAMOUT
+		# state (which will only be the case for local tracks)
+		
+		&& !$client->controller->isStreamout()
+		
+		)
+	{
 		# Report failure via protocol handler if available
 		my $controller = $client->controller()->songStreamController();
 		if ($controller && $controller->isDirect() ) {
@@ -603,6 +622,11 @@ sub _disco_handler {
 		
 		$client->failedDirectStream( $reasons{$reason} );
 	} else {
+		
+		if ($reason) {
+			$log->warn('Unexpected data stream disconnect type: ', $reasons{$reason});
+		}
+		
 		$client->statHandler('EoS');
 	}
 }
@@ -650,6 +674,7 @@ sub _stat_handler {
 	#        u16_t voltage;
 	#        u32_t elapsed_milliseconds;
 	#        u32_t server_timestamp;
+	#        u16_t error_code;
 	#
 	
 	# event types:
@@ -689,9 +714,14 @@ sub _stat_handler {
 		$status{$client}->{'voltage'},
 		$status{$client}->{'elapsed_milliseconds'},
 		$status{$client}->{'server_timestamp'},
-
-	) = unpack ('a4CCCNNNNnNNNNnNN', $$data_ref);
+		$status{$client}->{'error_code'},
+	) = unpack ('a4CCCNNNNnNNNNnNNn', $$data_ref);
 	
+	if ( length($$data_ref) != 57 ) {
+		# Older firmware that doesn't report error_code
+		$status{$client}->{'error_code'} = 0;
+	}
+		
 	# Track latency if we have a server timestamp
 	if ( $status{$client}->{'server_timestamp'} ) {
 		my $latency = (int($now * 1000 % 0xffffffff) - $status{$client}->{'server_timestamp'}) / 2;
@@ -821,7 +851,7 @@ sub _stat_handler {
 		}
 	}
 	
-	$client->statHandler($status{$client}->{'event_code'});
+	$client->statHandler($status{$client}->{'event_code'}, $status{$client}->{'jiffies'}, $status{$client}->{'error_code'});
 
 	if ( main::SLIM_SERVICE ) {
 		# Bug 8995, Update signal strength on SN

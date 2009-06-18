@@ -1,6 +1,6 @@
 package Slim::Utils::Unicode;
 
-# $Id: Unicode.pm 24497 2009-01-05 10:32:25Z mherger $
+# $Id: Unicode.pm 25825 2009-04-06 10:17:45Z michael $
 
 =head1 NAME
 
@@ -661,11 +661,24 @@ sub encodingFromString {
 
 	# Encode::Detect::Detector is mislead to to return Big5 with some characters
 	# In these cases Encode::Guess does a better job... (bug 9553)
-	if (lc($charset) eq 'big5') {
+	if ($charset =~ /^(?:big5|euc-jp|euc-kr|euc-cn|euc-tw)$/i) {
 
 		eval {
-			$charset = Encode::Guess::guess_encoding($_[0])->name;
+			$charset = Encode::Guess::guess_encoding($_[0]);
+			$charset = $charset->name;
 		};
+
+		# Bug 10671: sometimes Encode::Guess returns ambiguous results like "ascii or utf8"
+		if ($@) {
+			if ($charset =~ /utf8/i) {
+				$charset = 'utf8';
+				logWarning("$@   -> Falling back to: $charset");
+			}
+			else {
+				logError($@);
+				$charset = '';
+			}
+		}
 	}
 
 	$charset =~ s/utf-8/utf8/i;

@@ -1,6 +1,6 @@
 package Slim::Player::Client;
 
-# $Id: Client.pm 24510 2009-01-05 18:54:24Z andy $
+# $Id: Client.pm 25386 2009-03-07 07:10:58Z ayoung $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -109,7 +109,7 @@ use constant KNOB_NOACCELERATION => 0x02;
 								startirhold irtimediff irrepeattime irenable _epochirtime lastActivityTime
 								knobPos knobTime knobSync
 								controller
-								bufferReady readyToStream
+								bufferReady readyToStream streamStartTimestamp
 								streamformat streamingsocket remoteStreamStartTime
 								trackStartTime outputBufferFullness bytesReceived songBytes pauseTime
 								bytesReceivedOffset streamBytes songElapsedSeconds bufferSize bufferStarted
@@ -173,7 +173,7 @@ sub new {
 		uuid                    => $uuid,
 
 		# upgrade management
-		revision                => undef,
+		revision                => $rev,
 		_needsUpgrade           => undef,
 		isUpgrading             => 0,
 
@@ -206,6 +206,7 @@ sub new {
 		controller              => undef,
 		bufferReady             => 0,
 		readyToStream           => 1, 
+		streamStartTimestamp	=> undef,
 
 		# streaming state
 		streamformat            => undef,
@@ -296,6 +297,12 @@ sub new {
 	);
 	
 	$clientHash{$id} = $client;
+	
+	# On SN, we need to fully load all the player's prefs from the database
+	# before going further
+	if ( main::SLIM_SERVICE ) {
+		$client->loadPrefs();
+	}
 
 	$client->controller(Slim::Player::StreamingController->new($client));
 
@@ -703,6 +710,9 @@ sub canLoop { return 0; }
 sub canDoReplayGain { return 0; }
 
 sub canPowerOff { return 1; }
+
+sub maxTransitionInterval { 0 };
+
 =head2 mixerConstant( $client, $feature, $aspect )
 
 Returns the requested aspect of a given mixer feature.
@@ -1292,6 +1302,11 @@ sub nextChunk {
 }
 
 sub closeStream { }
+
+sub isBufferReady {
+	my $client = shift;
+	return $client->bufferReady();
+}
 
 
 ##############################################################

@@ -1,6 +1,6 @@
 package Slim::Web::XMLBrowser;
 
-# $Id: XMLBrowser.pm 24242 2008-12-07 15:44:50Z mherger $
+# $Id: XMLBrowser.pm 25732 2009-03-30 17:41:40Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -22,6 +22,8 @@ use Slim::Utils::Strings qw(string);
 use Slim::Utils::Favorites;
 use Slim::Web::HTTP;
 use Slim::Web::Pages;
+
+use constant CACHE_TIME => 3600; # how long to cache browse sessions
 
 my $log = logger('formats.xml');
 
@@ -106,6 +108,30 @@ sub handleWebIndex {
 		
 		$params->{url} =~ s/{QUERY}/$query/g;
 	}
+	
+	# Lookup this browse session in cache if user is browsing below top-level
+	# This avoids repated lookups to drill down the menu
+	my $index = $params->{args}->[1]->{index};
+	if ( $index && $index =~ /^([a-f0-9]{8})/ ) {
+		my $sid = $1;
+		
+		# Do not use cache if this is a search query
+		if ( $asyncArgs->[1]->{q} ) {
+			# Generate a new sid
+			my $newsid = Slim::Utils::Misc::createUUID();
+			
+			$params->{args}->[1]->{index} =~ s/^$sid/$newsid/;
+		}
+		else {
+			my $cache = Slim::Utils::Cache->new;
+			if ( my $cached = $cache->get("xmlbrowser_$sid") ) {
+				$log->is_debug && $log->debug( "Using cached session $sid" );
+				
+				handleFeed( $cached, $params );
+				return;
+			}
+		}
+	}
 
 	# fetch the remote content
 	Slim::Formats::XML->getFeedAsync(
@@ -120,30 +146,47 @@ sub handleWebIndex {
 sub handleFeed {
 	my ( $feed, $params ) = @_;
 	my ( $client, $stash, $callback, $httpClient, $response ) = @{ $params->{'args'} };
+	
+	my $cache = Slim::Utils::Cache->new;
 
 	$stash->{'pagetitle'} = $feed->{'title'} || Slim::Utils::Strings::getString($params->{'title'});
 	$stash->{'pageicon'}  = $params->{pageicon};
 
 	my $template = 'xmlbrowser.html';
 	
+	# Session ID for this browse session
+	my $sid;
+		
+	# select the proper list of items
+	my @index = ();
+
+	if ( defined $stash->{'index'} && length( $stash->{'index'} ) ) {
+		@index = split /\./, $stash->{'index'};
+		
+		if ( length( $index[0] ) >= 8 ) {
+			# Session ID is first element in index
+			$sid = shift @index;
+		}
+	}
+	else {
+		# Create a new session ID, unless the list has coderefs
+		my $refs = scalar grep { ref $_->{url} } @{ $feed->{items} };
+		
+		if ( !$refs ) {
+			$sid = Slim::Utils::Misc::createUUID();
+		}
+	}
+	
 	# breadcrumb
 	my @crumb = ( {
 		'name'  => $feed->{'title'} || Slim::Utils::Strings::getString($params->{'title'}),
-		'index' => undef,
+		'index' => $sid,
 	} );
 	
 	# Persist search query from top level item
 	if ( $params->{type} eq 'search' ) {
 		$crumb[0]->{index} = '_' . $stash->{q};
 	};
-		
-	# select the proper list of items
-	my @index = ();
-
-	if (defined $stash->{'index'}) {
-
-		@index = split /\./, $stash->{'index'};
-	}
 
 	# favorites class to allow add/del of urls to favorites, but not when browsing favorites list itself
 	my $favs = Slim::Utils::Favorites->new($client) unless $feed->{'favorites'};
@@ -154,20 +197,28 @@ sub handleFeed {
 	if ($stash->{'action'} && $stash->{'action'} =~ /^(favadd|favdel)$/ && @index) {
 		$favsItem = pop @index;
 	}
+	
+	if ( $sid ) {
+		# Cache the feed structure for this session
+		$log->is_debug && $log->debug( "Caching session $sid" );
+		
+		eval { $cache->set( "xmlbrowser_$sid", $feed, CACHE_TIME ) };
+		
+		if ( $@ && $log->is_warn ) {
+			$log->warn("Session not cached: $@");
+		}
+	}
 
 	if ( my $levels = scalar @index ) {
 		
 		# index links for each crumb item
-		my @crumbIndex = ();
+		my @crumbIndex = $sid ? ( $sid ) : ();
 		
 		# descend to the selected item
 		my $depth = 0;
 		
 		my $subFeed = $feed;
 		for my $i ( @index ) {
-			# Ignore top-level search queries
-			next if $i =~ /^_/;
-			
 			$depth++;
 			
 			$subFeed = $subFeed->{'items'}->[$i];
@@ -175,13 +226,26 @@ sub handleFeed {
 			push @crumbIndex, $i;
 			my $crumbText = join '.', @crumbIndex;
 			
+			my $crumbName = $subFeed->{'name'} || $subFeed->{'title'};
+			
 			# Add search query to crumb list
+			my $searchQuery;
+			
 			if ( $subFeed->{'type'} && $subFeed->{'type'} eq 'search' && $stash->{'q'} ) {
 				$crumbText .= '_' . $stash->{'q'};
+				$searchQuery = $stash->{'q'};
+			}
+			elsif ( $i =~ /(?:\d+)?_(.+)/ ) {
+				$searchQuery = $1;
+			}
+			
+			# Add search query to crumbName
+			if ( $searchQuery ) {
+				$crumbName .= ' (' . $searchQuery . ')';
 			}
 			
 			push @crumb, {
-				'name'  => $subFeed->{'name'} || $subFeed->{'title'},
+				'name'  => $crumbName,
 				'index' => $crumbText,
 			};
 
@@ -209,11 +273,6 @@ sub handleFeed {
 			# current cached feed
 			$subFeed->{'type'} ||= '';
 			if ( $subFeed->{'type'} ne 'audio' && defined $subFeed->{'url'} && !$subFeed->{'fetched'} ) {
-				
-				my $searchQuery;
-				if ( $i =~ /(?:\d+)?_(.+)/ ) {
-					$searchQuery = $1;
-				}
 				
 				# Rewrite the URL if it was a search request
 				if ( $subFeed->{'type'} eq 'search' && ( $stash->{'q'} || $searchQuery ) ) {
@@ -294,12 +353,12 @@ sub handleFeed {
 
 			$stash->{'streaminfo'} = {
 				'item'  => $subFeed,
-				'index' => join '.', @index,
+				'index' => $sid ? join( '.', $sid, @index ) : join( '.', @index ),
 			};
 		}
 		
 		# Construct index param for each item in the list
-		my $itemIndex = join( '.', @index );
+		my $itemIndex = $sid ? join( '.', $sid, @index ) : join( '.', @index );
 		if ( $stash->{'q'} ) {
 			$itemIndex .= '_' . $stash->{'q'};
 		}
@@ -316,9 +375,17 @@ sub handleFeed {
 		$stash->{'crumb'}     = \@crumb;
 		$stash->{'items'}     = $feed->{'items'};
 		
+		if ( $sid ) {
+			$stash->{index} = $sid;
+		}
+		
 		# Persist search term from top-level item (i.e. Search Radio)
 		if ( $stash->{q} ) {
-			$stash->{index} = '_' . $stash->{q} . '.';
+			$stash->{index} .= '_' . $stash->{q};
+		}
+		
+		if ( $stash->{index} ) {
+			$stash->{index} .= '.';
 		}
 
 		if (defined $favsItem) {
@@ -637,6 +704,12 @@ sub handleSubFeed {
 	my $parent = $params->{'parent'};
 	my $subFeed = $parent;
 	for my $i ( @{ $params->{'currentIndex'} } ) {
+		# Skip sid and sid + top-level search query
+		next if length($i) >= 8 && $i =~ /^[a-f0-9]{8}/;
+		
+		# If an index contains a search query, strip it out
+		$i =~ s/_.+$//g;
+		
 		$subFeed = $subFeed->{'items'}->[$i];
 	}
 
@@ -654,11 +727,6 @@ sub handleSubFeed {
 	} else {
 		# otherwise insert items as subfeed
 		$subFeed->{'items'} = $feed->{'items'};
-		
-		# Update the title value in case it's different from the previous menu
-		if ( $feed->{'title'} ) {
-			$subFeed->{'name'} = $feed->{'title'};
-		}
 	}
 
 	# set flag to avoid fetching this url again

@@ -1,7 +1,6 @@
 Ext.BLANK_IMAGE_URL = '/html/images/spacer.gif';
 	
 // hack to fake IE8 into IE7 mode - let's consider them the same
-Ext.isIE8 = Ext.isIE && navigator.userAgent.toLowerCase().indexOf("msie 8") > -1;
 Ext.isIE7 = Ext.isIE7 || Ext.isIE8;
 
 var SqueezeJS = {
@@ -30,6 +29,9 @@ function _init() {
 			return;
 		}
 	
+		if (p == p.parent)
+			break;
+
 		p = p.parent;
 	}
 
@@ -63,6 +65,7 @@ function _init() {
 
 			this.addObserver({
 				name : 'playerstatus',
+				timeout : 5000,
 				fn : function(self){
 	
 					if (this.player && this.player != -1) {
@@ -72,7 +75,7 @@ function _init() {
 				
 							// set timer
 							callback: function(){
-								self.timer.delay(5000);
+								self.timer.delay(self.timeout);
 							},
 				
 							success: function(response){
@@ -92,7 +95,7 @@ function _init() {
 										// check whether we need to update our song info & playlist
 										if (this._needUpdate(response.result)){
 											this.getStatus();
-											self.timer.delay(5000);
+											self.timer.delay(self.timeout);
 										}
 
 										// display information if the player needs a firmware upgrade
@@ -103,7 +106,7 @@ function _init() {
 
 									this.showBriefly(response.result);
 
-									if (this.playerStatus.rescan != response.result.rescan) {
+									if ( response.result && (this.playerStatus.rescan != response.result.rescan) ) {
 										this.playerStatus.rescan = response.result.rescan;
 										this.fireEvent('scannerupdate', response.result);
 										
@@ -119,7 +122,7 @@ function _init() {
 					}
 	
 					else {
-						self.timer.delay(5000);
+						self.timer.delay(self.timeout);
 					}
 			
 				}
@@ -127,6 +130,7 @@ function _init() {
 	
 			this.addObserver({
 				name : 'serverstatus',
+				timeout : 10000,
 				fn : function(self){
 	
 					this.request({
@@ -134,7 +138,7 @@ function _init() {
 			
 						// set timer
 						callback: function(){
-							self.timer.delay(this.player && !this.playerStatus.rescan ? 30000 : 10000);
+							self.timer.delay(this.player && !this.playerStatus.rescan ? 30000 : self.timeout);
 						},
 			
 						success: function(response){
@@ -159,6 +163,7 @@ function _init() {
 	
 			this.addObserver({
 				name : 'playtimeticker',
+				timeout : 950,
 				fn : function(self){
 					if (this.playerStatus.duration > 0 
 						&& this.playerStatus.playtime >= this.playerStatus.duration-1
@@ -168,7 +173,7 @@ function _init() {
 					// force 0 for current time when stopped
 					if (this.playerStatus.mode == 'stop')
 						this.playerStatus.playtime = 0;
-
+						
 					this.fireEvent('playtimeupdate', {
 						current: this.playerStatus.playtime,
 						duration: this.playerStatus.duration,
@@ -179,7 +184,7 @@ function _init() {
 					if (this.playerStatus.mode == 'play' && this.playerStatus.rate == 1)
 						this.playerStatus.playtime++;
 	
-					self.timer.delay(950);
+					self.timer.delay(self.timeout);
 				}
 			});
 
@@ -234,6 +239,14 @@ function _init() {
 			config.timer.delay(0);
 			this.observers.add(config.name, config);
 		},
+		
+		updateObserver : function(name, config) {
+			var o = this.observers.get(name);
+			
+			if (o) {
+				Ext.apply(o, config);
+			}
+		},
 	
 		updateAll : function(){
 			if (this.observers){
@@ -273,11 +286,13 @@ function _init() {
 		},
 	
 		playerRequest : function(config){
-			config.params = [
-				this.player,
-				config.params
-			];
-			this.request(config);
+			if (this.getPlayer()) {			
+				config.params = [
+					this.player,
+					config.params
+				];
+				this.request(config);
+			}
 		},
 	
 		// custom playerRequest which requires a controller update
@@ -420,6 +435,7 @@ function _init() {
 				this._firePlayerSelected(playerobj);				
 			}
 			else {
+				this._initPlayerStatus();
 				this.request({
 					params: [ '', [ "serverstatus", 0, 999 ] ],
 	
@@ -441,8 +457,10 @@ function _init() {
 					this.fireEvent('playerselected', playerobj);
 				}
 			}
-			else
+			else {
+				this._initPlayerStatus();
 				this.player = null;
+			}
 		},
 
 		_parseCurrentPlayerInfo : function(response, activeplayer) {
@@ -632,7 +650,7 @@ SqueezeJS.SonginfoParser = {
 	},
 
 	coverart : function(result, noLink, width){
-		var coverart = '/music/0/cover' + (width ? '_' + width + 'x' + width + '_p.' : '.') + SqueezeJS.coverFileSuffix;
+		var coverart = this.defaultCoverart(0, width);
 		var id = 0;
 		var link;
 
@@ -655,7 +673,7 @@ SqueezeJS.SonginfoParser = {
 	},
 
 	coverartUrl : function(result, width){
-		var coverart = '/music/0/cover' + (width ? '_' + width + 'x' + width + '_p.' : '.') + SqueezeJS.coverFileSuffix;
+		var coverart = this.defaultCoverart(0, width);
 		var link;
 
 		if (result.playlist_tracks > 0) {
@@ -663,11 +681,15 @@ SqueezeJS.SonginfoParser = {
 				coverart = result.playlist_loop[0].artwork_url;
 			}
 			else {
-				coverart = '/music/' + (result.playlist_loop[0].id || 0) + '/cover' + (width ? '_' + width + 'x' + width + '_p.' : '.') + SqueezeJS.coverFileSuffix;
+				coverart = this.defaultCoverart(result.playlist_loop[0].id, width);
 			}
 		}
 
 		return coverart;
+	},
+	
+	defaultCoverart : function(id, width) {
+		return '/music/' + (id || 0) + '/cover' + (width ? '_' + width + 'x' + width + '_p.' : '.') + SqueezeJS.coverFileSuffix;
 	}
 };
 

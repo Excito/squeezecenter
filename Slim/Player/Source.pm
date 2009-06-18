@@ -1,6 +1,6 @@
 package Slim::Player::Source;
 
-# $Id: Source.pm 24231 2008-12-06 08:55:31Z andy $
+# $Id: Source.pm 24820 2009-01-30 15:12:23Z ayoung $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -140,7 +140,7 @@ sub _returnPlayMode {
 
 # playmode - start playing, pause or stop
 sub playmode {
-	my ($client, $newmode, $seekdata, $reconnect) = @_;
+	my ($client, $newmode, $seekdata, $reconnect, $fadeIn) = @_;
 	my $controller = $client->controller();
 
 	assert($controller);
@@ -152,12 +152,12 @@ sub playmode {
 		$controller->stop();
 	} elsif ($newmode eq 'play') {
 		if (!$client->power()) {$client->power(1);}
-		$controller->play(undef, $seekdata, $reconnect);
+		$controller->play(undef, $seekdata, $reconnect, $fadeIn);
 	} elsif ($newmode eq 'pause') {
 		$controller->pause();
 	} elsif ($newmode eq 'resume') {
 		if (!$client->power()) {$client->power(1);}
-		$controller->resume();
+		$controller->resume($fadeIn);
 	} else {
 		$log->error($client->id . " unknown playmode: $newmode");
 		bt();

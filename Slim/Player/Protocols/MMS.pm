@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::MMS;
 
-# $Id: MMS.pm 24297 2008-12-14 14:36:02Z andy $
+# $Id: MMS.pm 24831 2009-01-31 14:04:27Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -234,24 +234,33 @@ sub getMMSStreamingParameters {
 	
 	my ($chunked, $audioStream, $metadataStream) = (1, 1, $song->{'wmaMetadataStream'});
 	
+	# Check scanData against both http and mms URLs
+	my $alturl = $url;
+	if ( $alturl =~ /^http/ ) {
+		$alturl =~ s/^http/mms/;
+	}
+	else {
+		$alturl =~ s/^mms/http/;
+	}
+	
 	# Bugs 5631, 7762
 	# Check WMA metadata to see if this remote stream is being served from a
 	# Windows Media server or a normal HTTP server.  WM servers will use MMS chunking
 	# and need a pcmsamplesize value of 1, whereas HTTP servers need pcmsamplesize of 0.
-	my ($scanData, $meta);
-	if ( ($scanData = $song->{'scanData'}) && ($scanData = $scanData->{$url}) ) {
-		if ( ($meta = $scanData->{'metadata'}) )
-		{
-			if ( $meta->info('flags')->{'broadcast'} == 0 ) {
-				if ( $scanData->{'headers'}->content_type ne 'application/vnd.ms.wms-hdr.asfv1' ) {
-					# The server didn't return the expected ASF header content-type,
-					# so we assume it's not a Windows Media server
-					$chunked = 0;
+	if ( my $scanData = $song->{'scanData'} ) {
+		if ( my $streamScanData = ( $scanData->{$url} || $scanData->{$alturl} ) ) {
+			if ( my $meta = $streamScanData->{'metadata'} ) {
+				if ( $meta->info('flags')->{'broadcast'} == 0 ) {
+					if ( $streamScanData->{'headers'}->content_type ne 'application/vnd.ms.wms-hdr.asfv1' ) {
+						# The server didn't return the expected ASF header content-type,
+						# so we assume it's not a Windows Media server
+						$chunked = 0;
+					}
 				}
 			}
+			
+			$audioStream = $streamScanData->{'streamNum'} if defined $streamScanData->{'streamNum'};
 		}
-		
-		$audioStream = $scanData->{'streamNum'} if defined $scanData->{'streamNum'};
 	}
 	
 	$log->is_debug && $log->debug("chunked=$chunked, audio=$audioStream, metadata=", (defined $metadataStream ? $metadataStream : 'undef'));
@@ -568,9 +577,11 @@ sub canSeek {
 		&& ($headers = $scanData->{headers}) )
 	{
 		if ( $headers->content_type eq 'application/vnd.ms.wms-hdr.asfv1' ) {
-			# Stream is from a Windows Media server and we can seek if seekable flag is true
-			if ( $scanData->{metadata}->info('flags')->{seekable} ) {
-				return 1;
+			if ( $scanData->{metadata} && $scanData->{metadata}->info('flags') ) {
+				# Stream is from a Windows Media server and we can seek if seekable flag is true
+				if ( $scanData->{metadata}->info('flags')->{seekable} ) {
+					return 1;
+				}
 			}
 		}
 	}

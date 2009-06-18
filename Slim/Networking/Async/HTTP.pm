@@ -1,6 +1,6 @@
 package Slim::Networking::Async::HTTP;
 
-# $Id: HTTP.pm 24481 2009-01-04 12:54:21Z adrian $
+# $Id: HTTP.pm 24882 2009-02-04 18:36:38Z andy $
 
 # SqueezeCenter Copyright 2003-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -266,6 +266,10 @@ sub _http_socket_error {
 sub _http_error {
 	my ( $self, $error, $args ) = @_;
 	
+	if ( $self->fh ) {
+		$self->fh->close;
+	}
+	
 	$self->disconnect;
 
 	# Bug 8801, Only print an error if the caller doesn't have an onError handler	
@@ -411,12 +415,11 @@ sub _http_read_body {
 	
 	# Are we saving directly to a file?
 	if ( $result && $self->saveAs && !$self->fh ) {
-		open my $fh, '>', $self->saveAs;
-		binmode $fh;
+		open my $fh, '>', $self->saveAs or do {
+			return $self->_http_error( 'Unable to open ' . $self->saveAs . " for writing: $!", $args );
+		};
 
-		if ( !$fh ) {
-			return $self->_http_error( 'Unable to open ' . $self->saveAs . ' for writing', $args );
-		}
+		binmode $fh;
 		
 		if ( $log->is_debug ) {
 			$log->debug("Writing response directly to " . $self->saveAs);
@@ -427,7 +430,9 @@ sub _http_read_body {
 	
 	if ( $result && $self->saveAs ) {
 		# Write directly to a file
-		$self->fh->write( $buf, length $buf );
+		$self->fh->write( $buf, length $buf ) or do {
+			return $self->_http_error( 'Unable to write to ' . $self->saveAs . ": $!", $args );
+		};
 	}
 	elsif ( $args->{onStream} ) {
 		# The caller wants a callback on every chunk of data streamed

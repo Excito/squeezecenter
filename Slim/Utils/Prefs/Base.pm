@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Base;
 
-# $Id: Base.pm 24088 2008-11-25 18:31:35Z andy $
+# $Id: Base.pm 25577 2009-03-17 14:14:06Z andy $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -54,6 +54,9 @@ sub get_SN {
 	if ( main::SLIM_SERVICE ) {
 		# Callers can force retrieval from the database
 		my $force = shift;
+		
+		# Can override the model
+		my $model = shift;
 	
 		if ( !defined $value || $force ) {
 		
@@ -67,7 +70,7 @@ sub get_SN {
 					$nskey = $ns . '_' . $key;
 				}
 				
-				$value = $class->getFromDB($nskey);
+				$value = $class->getFromDB( $nskey, $model );
 
 				$class->{prefs}->{ $key } = $value;
 			}
@@ -100,28 +103,26 @@ SLIM_SERVICE only. Pulls a pref from the database.
 =cut
 
 sub getFromDB {
-	my ( $class, $key ) = ( shift, shift );
+	my ( $class, $key, $model ) = @_;
 	
 	my $client = Slim::Player::Client::getClient( $class->{clientid} ) || return;
 	
-	# First search the player pref table
-	my @prefs = SDI::Service::Model::Pref->search( {
-		player => $client->playerData,
-		name   => $key,
-	} );
+	my @prefs;
 	
-	my $count = scalar @prefs;
-
-	if ( !$count ) {
-		# If not found in player prefs, search user prefs
+	if ( $model && $model eq 'UserPref' ) {
 		@prefs = SDI::Service::Model::UserPref->search( {
 			user => $client->playerData->userid,
-			name => $key
+			name => $key,
 		} );
-		
-		$count = scalar @prefs;
+	}
+	else {
+		@prefs = SDI::Service::Model::PlayerPref->search( {
+			player => $client->playerData,
+			name   => $key,
+		} );
 	}
 	
+	my $count = scalar @prefs;
 	my $value;
 	
 	if ( $count == 1 ) {
@@ -275,23 +276,25 @@ sub set {
 					}
 					
 					if ( ref $new eq 'ARRAY' ) {
-						SDI::Service::Model::Pref->quick_update_array( $client->playerData, $nspref, $new );
+						SDI::Service::Model::PlayerPref->quick_update_array( $client->playerData, $nspref, $new );
 					}
 					elsif ( ref $new eq 'HASH' ) {
-						SDI::Service::Model::Pref->quick_update( $client->playerData, $nspref, 'json:' . to_json( $new ) );
+						SDI::Service::Model::PlayerPref->quick_update( $client->playerData, $nspref, 'json:' . to_json( $new ) );
 					}
 					else {
-						SDI::Service::Model::Pref->quick_update( $client->playerData, $nspref, $new );
+						SDI::Service::Model::PlayerPref->quick_update( $client->playerData, $nspref, $new );
 					}
 				}
 			}
 
-			for my $func ( @{$change} ) {
-				if ( $log->is_debug ) {
-					$log->debug('executing on change function ' . Slim::Utils::PerlRunTime::realNameForCodeRef($func) );
-				}
+			if ( (my $obj = $class->_obj) || !main::SLIM_SERVICE ) {
+				for my $func ( @{$change} ) {
+					if ( $log->is_debug ) {
+						$log->debug('executing on change function ' . Slim::Utils::PerlRunTime::realNameForCodeRef($func) );
+					}
 				
-				$func->($pref, $new, $class->_obj);
+					$func->($pref, $new, $obj);
+				}
 			}
 		}
 
@@ -316,6 +319,75 @@ sub set {
 		}
 
 		return wantarray ? ($old, 0) : $old;
+	}
+}
+
+# SLIM_SERVICE only, the bulkSet method
+# sets all prefs passed in first, then runs all onchange handlers
+# This avoids extra db queries when a change handler uses a pref not yet loaded
+
+sub bulkSet {
+	my ( $class, $prefs ) = @_;
+	
+	my $root = $class->_root;
+	
+	my @handlers;
+	
+	my $set = sub {
+		my ( $pref, $new ) = @_;
+		
+		my $valid = $class->validate($pref, $new);
+		
+		if ( $valid ) {
+			my $old = $class->{prefs}->{ $pref };
+			
+			# If old pref was an array but new is not, force it to stay an array
+			if ( ref $old eq 'ARRAY' && !ref $new ) {
+				$new = [ $new ];
+			}
+			
+			$class->{prefs}->{ $pref } = $new;
+			
+			# Return a change handler callback if necessary
+			if ( !defined $old || !defined $new || $old ne $new || ref $new ) {
+				if ( my $obj = $class->_obj ) {
+					my $change = $root->{onchange}->{ $pref };
+					for my $func ( @{$change} ) {
+						return sub {
+							$log->is_debug && $log->debug(
+								'executing on change function ' . Slim::Utils::PerlRunTime::realNameForCodeRef($func)
+							);
+							
+							$func->( $pref, $new, $obj );
+						};
+					}
+				}
+			}
+		}
+		
+		return;
+	};
+
+	for my $key ( keys %{$prefs} ) {
+		my $cb;
+		if ( scalar @{ $prefs->{$key} } == 1 ) {
+			# scalar pref
+			$cb = $set->( $key, $prefs->{$key}->[0] );
+		}
+		else {
+			# array pref
+			$cb = $set->( $key, $prefs->{$key} );
+		}
+		push @handlers, $cb if $cb;
+	}
+	
+	for my $func ( @handlers ) {
+		eval { $func->(); };
+		if ( $@ && $log->is_debug ) {
+			my $handler = Slim::Utils::PerlRunTime::realNameForCodeRef($func);
+			$log->debug( "Error running bulkSet change handler $handler: $@" );
+			Slim::Utils::Misc::bt();
+		}
 	}
 }
 
@@ -402,7 +474,7 @@ sub remove {
 		if ( main::SLIM_SERVICE && $class->{clientid} ) {
 			# Remove the pref from the database
 			my $client = Slim::Player::Client::getClient( $class->{clientid} );
-			SDI::Service::Model::Pref->sql_clear_array->execute(
+			SDI::Service::Model::PlayerPref->sql_clear_array->execute(
 				$client->playerData->id,
 				$pref,
 			);
@@ -441,20 +513,6 @@ sub clear {
 	
 	for my $pref ( keys %{ $class->{prefs} } ) {
 		delete $class->{prefs}->{$pref};
-	}
-}
-
-=head2 loadHash ( $prefs )
-
-Load all prefs at once from a hashref. SLIM_SERVICE only.
-
-=cut
-
-sub loadHash {
-	my ( $class, $hash ) = @_;
-	
-	while ( my ($pref, $value) = each %{$hash} ) {
-		$class->{prefs}->{ $pref } = $value;
 	}
 }
 

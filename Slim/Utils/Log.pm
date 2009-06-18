@@ -1,6 +1,6 @@
 package Slim::Utils::Log;
 
-# $Id: Log.pm 23709 2008-10-28 06:35:06Z mherger $
+# $Id: Log.pm 25824 2009-04-06 10:16:50Z michael $
 
 # SqueezeCenter Copyright 2001-2007 Dan Sully, Logitech.
 # This program is free software; you can redistribute it and/or
@@ -122,13 +122,19 @@ sub init {
 	if (!$config{'log4perl.rootLogger'} || $config{'log4perl.rootLogger'} !~ /$logtype/) {
 
 		# Add our default root logger
-		my @levels = ('WARN', $logtype);
+		my @levels = ('ERROR', $logtype);
 
 		if ($::daemon || !$::quiet) {
 			push @levels, 'screen';
 		}
 
 		$config{'log4perl.rootLogger'} = join(', ', @levels);
+	}
+	
+	# Make sure recreate option is set if user has an existing log.conf
+	if ( !Slim::Utils::OSDetect::isWindows() && !$ENV{NYTPROF} ) {
+		$config{'log4perl.appender.server.recreate'}              = 1;
+		$config{'log4perl.appender.server.recreate_check_signal'} = 'USR1';
 	}
 
 	# Set so we can access later.
@@ -903,9 +909,9 @@ sub _defaultAppenders {
 		},
 
 		'server' => {
-			'appender' => 'Log::Log4perl::Appender::File',
-			'mode'     => 'sub { Slim::Utils::Log::serverLogMode() }',
-			'filename' => 'sub { Slim::Utils::Log::serverLogFile() }',
+			'appender'              => 'Log::Log4perl::Appender::File',
+			'mode'                  => 'sub { Slim::Utils::Log::serverLogMode() }',
+			'filename'              => 'sub { Slim::Utils::Log::serverLogFile() }',
 		},
 
 		'scanner' => {
@@ -921,6 +927,11 @@ sub _defaultAppenders {
 			'layout'   => 'raw'
 		},
 	);
+
+	if ( !Slim::Utils::OSDetect::isWindows() && !$ENV{NYTPROF} ) {
+		$defaultAppenders{server}->{recreate}              = 1;
+		$defaultAppenders{server}->{recreate_check_signal} = 'USR1';
+	}
 
 	return $class->_fixupAppenders(\%defaultAppenders);
 }

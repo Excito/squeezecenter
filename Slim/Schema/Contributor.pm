@@ -1,6 +1,6 @@
 package Slim::Schema::Contributor;
 
-# $Id: Contributor.pm 12146 2007-05-29 06:30:10Z kdf $
+# $Id: Contributor.pm 24729 2009-01-21 14:21:41Z michael $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -95,7 +95,7 @@ sub displayAsHTML {
 sub url {
 	my $self = shift;
 
-	return sprintf('db:contributor.namesearch=%s', Slim::Utils::Misc::escape($self->namesearch));
+	return sprintf('db:contributor.namesearch=%s', URI::Escape::uri_escape($self->namesearch));
 }
 
 sub add {

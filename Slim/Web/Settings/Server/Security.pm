@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Security;
 
-# $Id: Security.pm 22939 2008-08-28 16:42:33Z andy $
+# $Id: Security.pm 26104 2009-04-20 08:26:16Z michael $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -40,6 +40,7 @@ sub handler {
 		if ($val ne $paramRef->{'pref_password_repeat'}) {
 
 			$paramRef->{'warning'} .= Slim::Utils::Strings::string('SETUP_PASSWORD_MISMATCH');
+			$paramRef->{'pref_authorize'} = 0;
 
 		}
 

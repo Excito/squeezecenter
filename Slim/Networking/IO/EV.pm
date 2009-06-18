@@ -1,6 +1,6 @@
 package Slim::Networking::IO::EV;
 
-# $Id: EV.pm 24637 2009-01-13 13:56:57Z andy $
+# $Id: EV.pm 24646 2009-01-14 16:13:49Z andy $
 
 # SqueezeCenter Copyright 2003-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -164,9 +164,14 @@ sub _io_callback {
 			# This die handler lets us get a correct backtrace if callback crashes
 			local $SIG{__DIE__} = sub {
 				my $msg = shift;
+				
 				if ( main::SLIM_SERVICE ) {
-					my $func = Slim::Utils::PerlRunTime::realNameForCodeRef($callback);
-					SDI::Service::Control->mailError( "IO callback crash: $func", $msg );
+					# Only notify if eval_depth is 2, this avoids emailing for errors inside
+					# nested evals
+					if ( eval_depth() == 2 ) {
+						my $func = Slim::Utils::PerlRunTime::realNameForCodeRef($callback);
+						SDI::Service::Control->mailError( "IO callback crash: $func", $msg );
+					}
 				}
 			};
 			
@@ -186,6 +191,19 @@ sub _io_callback {
 			EV::unloop;
 		}
 	}
+}
+
+sub eval_depth {
+	my $eval_depth = 0;
+	my $frame      = 0;
+	
+	while ( my @caller_info = caller( $frame++ ) ) {
+		if ( $caller_info[3] eq '(eval)' ) {
+			$eval_depth++;
+		}
+	}
+	
+	return $eval_depth;
 }
 
 1;

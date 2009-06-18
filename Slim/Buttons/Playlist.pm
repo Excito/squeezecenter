@@ -1,6 +1,6 @@
 package Slim::Buttons::Playlist;
 
-# $Id: Playlist.pm 24460 2009-01-01 12:10:56Z adrian $
+# $Id: Playlist.pm 24795 2009-01-28 20:22:09Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -405,8 +405,11 @@ sub jump {
 
 sub newTitle {
 	my $url = shift;
+	
+	my @clients = Slim::Player::Client::clients();
 
-	for my $client (Slim::Player::Client::clients()) {
+	for my $client ( @clients ) {
+		next unless $client && $client->controller();
 		if ( (Slim::Player::Playlist::url($client) || '') eq $url ) {
 			jump($client);
 			$client->currentPlaylistChangeTime( Time::HiRes::time() );

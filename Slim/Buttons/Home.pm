@@ -564,9 +564,7 @@ sub createList {
 	# SLIM_SERVICE, user can hide menu items
 	my %disabledMenus = ();
 	if ( main::SLIM_SERVICE ) {
-		my $disabledPref  
-			 = $prefs->client($client)->get('disabledMenus')
-			|| $prefs->client($client)->set( 'disabledMenus', [] );
+		my $disabledPref = $prefs->client($client)->get('disabledMenus') || [];
 		
 		if ( !ref $disabledPref ) {
 			$disabledPref = [ $disabledPref ];
@@ -762,6 +760,10 @@ sub menuOptions {
 
 	$menuChoices{""} = "";
 	
+	# Exclude SN-disabled plugins
+	my $sn_disabled = $prefs->get('sn_disabled_plugins');
+	
+	MENU:
 	for my $menuOption (sort keys %home) {
 
 		if ($menuOption eq 'BROWSE_MUSIC_FOLDER' && !$prefs->get('audiodir')) {
@@ -770,6 +772,12 @@ sub menuOptions {
 
 		if ($menuOption eq 'SAVED_PLAYLISTS' && !$prefs->get('playlistdir')) {
 			next;
+		}
+		
+		if ( $sn_disabled ) {
+			for my $plugin ( @{$sn_disabled} ) {
+				next MENU if $menuOption =~ /$plugin/i;
+			}
 		}
 
 		$menuChoices{$menuOption} = $menuOption;
@@ -855,9 +863,7 @@ sub updateMenu {
 			$hasSpecialMenu = 1;
 		}
 		
-		my $disabledPref  
-			 = $prefs->client($client)->get('disabledMenus')
-			|| $prefs->client($client)->set( 'disabledMenus', [] );
+		my $disabledPref = $prefs->client($client)->get('disabledMenus') || [];
 	
 		if ( !ref $disabledPref ) {
 			$disabledPref = [ $disabledPref ];

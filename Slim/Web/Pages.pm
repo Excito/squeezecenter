@@ -1,6 +1,6 @@
 package Slim::Web::Pages;
 
-# $Id: Pages.pm 23855 2008-11-08 16:09:44Z andy $
+# $Id: Pages.pm 26670 2009-05-18 16:49:53Z michael $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -689,7 +689,7 @@ sub firmware {
 sub update_firmware {
 	my ($client, $params) = @_;
 
-	$params->{'warning'} = Slim::Player::Squeezebox::upgradeFirmware($params->{'ipaddress'}, 10) 
+	$params->{'warning'} = Slim::Player::Squeezebox1::upgradeFirmware($params->{'ipaddress'}, 10) 
 		|| string('UPGRADE_COMPLETE_DETAILS');
 	
 	return Slim::Web::HTTP::filltemplatefile("update_firmware.html", $params);
