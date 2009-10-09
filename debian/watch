@@ -1,0 +1,5 @@
+
+version=3
+
+http://downloads.slimdevices.com/SqueezeboxServer_v([\d\.]+)/squeezeboxserver-([\d\.]+)-(?:\d+)-noCPAN.tgz debian debian/make_dpkg_source
+

@@ -1,27 +1,18 @@
 package Slim::Networking::Select;
 
-# $Id: Select.pm 21790 2008-07-15 20:18:07Z andy $
+# $Id: Select.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2003-2007 Logitech.
+# Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
 
 use strict;
 
+use Slim::Networking::IO::Select;
 use Slim::Utils::Errno;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
-
-# load EV backend on SN
-if ( main::SLIM_SERVICE ) {
-	require Slim::Networking::IO::EV;
-	import Slim::Networking::IO::EV;
-}
-else {
-	require Slim::Networking::IO::Select;
-	import Slim::Networking::IO::Select;
-}
 
 =head1 NAME
 
@@ -33,7 +24,7 @@ Slim::Utils::Select::addRead( $socket, \&callback )
 
 =head1 DESCRIPTION
 
-This module encapsulates all select() related code, handled by SqueezeCenter's main loop.
+This module encapsulates all select() related code, handled by Squeezebox Server's main loop.
 
 Usually, you'll want to use higher such as L<Slim::Networking::Async::HTTP>.
 
@@ -79,7 +70,7 @@ sub _writeNoBlock {
 		return;
 	}
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf("fileno: [%d] Wrote $segment->{'length'} bytes", fileno($socket)));
 	}
 
@@ -87,7 +78,7 @@ sub _writeNoBlock {
 
 	if ($! == EWOULDBLOCK) {
 
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(sprintf("fileno: [%d] Would block while sending.", fileno($socket)));
 		}
 
@@ -96,7 +87,7 @@ sub _writeNoBlock {
 
 	if (!defined($sentbytes)) {
 
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(sprintf("fileno: [%d] Send to socket had error, aborting.", fileno($socket)));
 		}
 
@@ -108,7 +99,7 @@ sub _writeNoBlock {
 	# sent incomplete message
 	if ($sentbytes < $segment->{'length'}) {
 
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(sprintf("fileno: [%d] Incomplete message, sent only: $sentbytes", fileno($socket)));
 		}
 
@@ -152,7 +143,7 @@ sub removeWriteNoBlockQ {
 	
 	if ( exists($writeQueue{$socket}) ) {
 		
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(sprintf("fileno: [%d] removing writeNoBlock queue", fileno($socket)));
 		}
 

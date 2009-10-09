@@ -1,24 +1,23 @@
 #! /bin/sh /usr/share/dpatch/dpatch-run
-## remove_dbix_migration.dpatch by Carl Fürstenberg <azatoth@gmail.com>
+## remove_dbix_migration.dpatch by Carl Fürstenberg <carl@excito.com>
 ##
 ## All lines beginning with `## DP:' are a description of the patch.
-## DP: As we allways know that we will have a functional database on 
-## DP: installation, and that all database installation/upgrading is handled 
-## DP: by dbconfig-common, we won't need DBIx::Migration.
+## DP: Remove the DBIx::Migration, as it's not anything we want, 
+## DP: we take care of the migration at packager level instead
 
 @DPATCH@
 diff -urNad squeezecenter~/Slim/Schema.pm squeezecenter/Slim/Schema.pm
---- squeezecenter~/Slim/Schema.pm	2009-01-21 13:20:33.000000000 +0100
-+++ squeezecenter/Slim/Schema.pm	2009-01-21 13:58:48.000000000 +0100
-@@ -29,7 +29,6 @@
+--- squeezecenter~/Slim/Schema.pm	2009-10-07 14:46:41.000000000 +0200
++++ squeezecenter/Slim/Schema.pm	2009-10-08 17:53:09.000000000 +0200
+@@ -28,7 +28,6 @@
+ 
  use base qw(DBIx::Class::Schema);
  
- use Data::Dump;
 -use DBIx::Migration;
- use File::Basename qw(dirname);
+ use File::Basename qw(basename dirname);
+ use File::Copy qw(move);
  use File::Spec::Functions qw(:ALL);
- use List::Util qw(max);
-@@ -393,67 +392,7 @@
+@@ -451,76 +450,7 @@
  =cut
  
  sub migrateDB {
@@ -28,15 +27,24 @@ diff -urNad squeezecenter~/Slim/Schema.pm squeezecenter/Slim/Schema.pm
 -		return;
 -	}
 -
+-	my $dbh = $class->storage->dbh;
 -	my ($driver, $source, $username, $password) = $class->sourceInformation;
 -
 -	# Migrate to the latest schema version - see SQL/$driver/schema_\d+_up.sql
 -	my $dbix = DBIx::Migration->new({
--		'dsn'      => $source,
--		'username' => $username,
--		'password' => $password,
--		'dir'      => catdir(Slim::Utils::OSDetect::dirsFor('SQL'), $driver),
+-		dbh   => $dbh,  
+-		dir   => catdir(Slim::Utils::OSDetect::dirsFor('SQL'), $driver),
+-		debug => $log->is_debug,
 -	});
+-	
+-	# Hide errors that aren't really errors
+-	my $cur_handler = $dbh->{HandleError};
+-	my $new_handler = sub {
+-		return 1 if $_[0] =~ /no such table/;
+-		goto $cur_handler;
+-	};
+-	
+-	local $dbh->{HandleError} = $new_handler;
 -
 -	my $old = $dbix->version || 0;
 -
@@ -44,7 +52,7 @@ diff -urNad squeezecenter~/Slim/Schema.pm squeezecenter/Slim/Schema.pm
 -
 -		my $new = $dbix->version || 0;
 -
--		if ( $log->is_info ) {
+-		if ( main::INFOLOG && $log->is_info ) {
 -			$log->info(sprintf("Connected to database $source - schema version: [%d]", $new));
 -		}
 -
@@ -60,7 +68,7 @@ diff -urNad squeezecenter~/Slim/Schema.pm squeezecenter/Slim/Schema.pm
 -
 -	} else {
 -
--		# this occurs if a user downgrades SqueezeCenter to a version with an older schema and which does not include
+-		# this occurs if a user downgrades Squeezebox Server to a version with an older schema and which does not include
 -		# the required downgrade sql scripts - attempt to drop and create the database at current schema version
 -
 -		if ( $log->is_warn ) {
@@ -83,7 +91,7 @@ diff -urNad squeezecenter~/Slim/Schema.pm squeezecenter/Slim/Schema.pm
 -
 -	}
 -
-+	# Stubbed as we don't want to try migrate the DB
++# Stubbed as we don't want to try migrate the DB
  	return 0;
  }
  

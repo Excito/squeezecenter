@@ -1,8 +1,8 @@
 package Slim::Web::Pages::Status;
 
-# $Id: Status.pm 23724 2008-10-28 20:08:47Z awy $
+# $Id: Status.pm 28561 2009-09-18 08:02:45Z ayoung $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -15,7 +15,6 @@ use Scalar::Util qw(blessed);
 
 use Slim::Player::Playlist;
 use Slim::Player::Source;
-use Slim::Player::TranscodingHelper;
 use Slim::Utils::Strings qw(string);
 use Slim::Web::HTTP;
 use Slim::Web::Pages;
@@ -25,8 +24,8 @@ my $prefs = preferences('server');
 
 sub init {
 	
-	Slim::Web::HTTP::addPageFunction(qr/^status_header\.(?:htm|xml)/,\&status_header);
-	Slim::Web::HTTP::addPageFunction(qr/^status\.(?:htm|xml)/,\&status);
+	Slim::Web::Pages->addPageFunction(qr/^status_header\.(?:htm|xml)/,\&status_header);
+	Slim::Web::Pages->addPageFunction(qr/^status\.(?:htm|xml)/,\&status);
 }
 
 # Send the status page (what we're currently playing, contents of the playlist)
@@ -41,7 +40,7 @@ sub status_header {
 sub status {
 	my ($client, $params, $callback, $httpClient, $response) = @_;
 
-	Slim::Web::Pages->addPlayerList($client, $params);
+	Slim::Web::Pages::Common->addPlayerList($client, $params);
 
 	$params->{'refresh'} = $prefs->get('refreshRate');
 	
@@ -71,8 +70,8 @@ sub status {
 	
 		$params->{'songtime'} = int(Slim::Player::Source::songTime($client));
 
-		if (Slim::Player::Source::playingSong($client)) { 
-			my $dur = Slim::Player::Source::playingSongDuration($client);
+		if ($client->controller()->playingSong()) { 
+			my $dur = $client->controller()->playingSongDuration();
 			if ($dur) { $dur = int($dur); }
 			$params->{'durationseconds'} = $dur; 
 		}
@@ -129,7 +128,7 @@ sub status {
 		$params->{'songcount'}   = $songcount;
 		Slim::Player::Playlist::song($client)->displayAsHTML($params);
 		
-		Slim::Web::Pages->addSongInfo($client, $params, 1);
+		Slim::Web::Pages::Common->addSongInfo($client, $params, 1);
 
 		my ($song, $sourcebitrate, $streambitrate);
 		

@@ -1,8 +1,8 @@
 package Slim::Web::Pages::BrowseDB;
 
-# $Id: BrowseDB.pm 23663 2008-10-23 11:47:52Z mherger $
+# $Id: BrowseDB.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -21,9 +21,9 @@ my $prefs = preferences('server');
 
 sub init {
 
-	Slim::Web::HTTP::addPageFunction( qr/^browsedb\.(?:htm|xml)/, \&browsedb );
-	Slim::Web::HTTP::addPageFunction( qr/^browseid3\.(?:htm|xml)/, \&browseid3 );
-	Slim::Web::HTTP::addPageFunction( qr/^(?:songinfo|trackinfo)\.(?:htm|xml)/, \&trackinfo);
+	Slim::Web::Pages->addPageFunction( qr/^browsedb\.(?:htm|xml)/, \&browsedb );
+	Slim::Web::Pages->addPageFunction( qr/^browseid3\.(?:htm|xml)/, \&browseid3 );
+	Slim::Web::Pages->addPageFunction( qr/^(?:songinfo|trackinfo)\.(?:htm|xml)/, \&trackinfo);
 
 	Slim::Web::Pages->addPageLinks("browse", {'BROWSE_BY_ARTIST' => "browsedb.html?hierarchy=contributor,album,track&level=0" });
 	Slim::Web::Pages->addPageLinks("browse", {'BROWSE_BY_GENRE'  => "browsedb.html?hierarchy=genre,contributor,album,track&level=0" });
@@ -37,7 +37,7 @@ sub browsedb {
 
 	my $hierarchy = $params->{'hierarchy'} || 'track';
 	my $level     = $params->{'level'} || 0;
-	my $orderBy   = $params->{'orderBy'};
+	my $orderBy   = $params->{'orderBy'} || '';
 	my $player    = $params->{'player'};
 	my $artwork   = $params->{'artwork'};
 
@@ -50,10 +50,10 @@ sub browsedb {
 
 		$hierarchy = 'track';
 
-		$log->debug("Invalid hierarchy: $hierarchy");
+		main::DEBUGLOG && $log->debug("Invalid hierarchy: $hierarchy");
 	}
 
-	$log->debug("Hierarchy: $hierarchy level: $level");
+	main::DEBUGLOG && $log->debug("Hierarchy: $hierarchy level: $level");
 
 	# code further down expects the lcfirst version of the levels
 	my @levels = map { lcfirst($_) } split(',', $validHierarchies->{lc($hierarchy)});
@@ -139,11 +139,11 @@ sub browsedb {
 
 				$attrs{'album.compilation'} = 1;
 
-				$log->debug("Adding VA for breadcrumb");
+				main::DEBUGLOG && $log->debug("Adding VA for breadcrumb");
 			}
 		}
 
-		$log->debug("Breadcrumb level: [$i] attr: [$attr]");
+		main::DEBUGLOG && $log->debug("Breadcrumb level: [$i] attr: [$attr]");
 
 		for my $levelKey (grep { /^$attr/ } keys %{$params}) {
 
@@ -167,7 +167,7 @@ sub browsedb {
 				next;
 			}
 
-			$log->debug("Breadcrumb levelKey: [$levelKey] value: [$value]");
+			main::DEBUGLOG && $log->debug("Breadcrumb levelKey: [$levelKey] value: [$value]");
 
 			my $obj = $rs->search({ $searchKey => $value })->single;
 
@@ -278,7 +278,7 @@ sub browsedb {
 			$alphaitems = $browseRS->pageBarResults($orderBy);
 		}
 
-		$params->{'pageinfo'} = Slim::Web::Pages->pageInfo({
+		$params->{'pageinfo'} = Slim::Web::Pages::Common->pageInfo({
 			'results'      => $alphaitems ? $alphaitems : $browseRS,
 			'addAlpha'     => defined $alphaitems,
 			'path'         => $params->{'path'},
@@ -365,7 +365,7 @@ sub browsedb {
 
 		if (Slim::Schema->variousArtistsAlbumCount(\%attrs)) {
 
-			$log->debug("VA Added");
+			main::DEBUGLOG && $log->debug("VA Added");
 
 			my $vaObj = Slim::Schema->variousArtistsObject;
 
@@ -401,10 +401,7 @@ sub browsedb {
 			main::idleStreams();
 
 			# The track might have been deleted out from under us.
-			# XXX - should we have some sort of error message here?
-			if (!$item->in_storage) {
-				next;
-			}
+			# Not sure what we should do about it.
 
 			my $itemid = $item->id;
 
@@ -435,7 +432,7 @@ sub browsedb {
 				$form{'attributes'} = _attributesToKeyValuePair(\%attrs);
 			}
 
-			elsif (my $secs = $item->durationSeconds) {
+			elsif (my $secs = $item->secs) {
 
 				$albumDuration += $secs;
 			}
@@ -468,13 +465,14 @@ sub browsedb {
 		if ($level == $maxLevel && $levelName eq 'track' && defined $firstItem 
 			&& (defined $params->{'album.id'} || defined $params->{'age.id'})
 		) {
-
+			my $album = $firstItem->album;
+			
 			if ($firstItem->can('coverArtExists') && $firstItem->coverArtExists) {
 
 				$params->{'coverArt'} = $firstItem->id;
-				if (!$firstItem->album->artwork) {
-					$firstItem->album->artwork($firstItem->id);
-					$firstItem->album->update;
+				if (!$album->artwork) {
+					$album->artwork($firstItem->id);
+					$album->update;
 				}
 			}
 
@@ -487,15 +485,15 @@ sub browsedb {
 	
 				if (defined $Imports->{$mixer}->{'mixerlink'}) {
 	
-					&{$Imports->{$mixer}->{'mixerlink'}}($firstItem->album, $params->{mixeritems}, 1);
+					&{$Imports->{$mixer}->{'mixerlink'}}($album, $params->{mixeritems}, 1);
 	
 				}
 			}
 			$params->{mixerlinks} = $params->{mixeritems}->{mixerlinks};
 
 			# additional information for the album favorite button on the track list view
-			$params->{isFavorite} = defined Slim::Utils::Favorites->new($client)->findUrl($firstItem->album->url);
-			$params->{itemUrl}    = $firstItem->album->url;
+			$params->{isFavorite} = defined Slim::Utils::Favorites->new($client)->findUrl($album->url);
+			$params->{itemUrl}    = $album->url;
 		}
 
 	}
@@ -514,7 +512,7 @@ sub browsedb {
 	# Pass in the current result set, and the previous level.
 	if (!grep { /playlist/ } @levels) {
 
-		Slim::Web::Pages->addLibraryStats($params, $browseRS, $levels[$level-1]);
+		Slim::Web::Pages::Common->addLibraryStats($params, $browseRS, $levels[$level-1]);
 	}
 
 	# override the template for the playlist case.
@@ -589,7 +587,7 @@ sub trackinfo {
 	my $id    = $params->{sess} || $params->{item};
 	my $track = Slim::Schema->find( Track => $id );
 	
-	my $menu = Slim::Menu::TrackInfo->menu( $client, $track->url, $track );
+	my $menu = Slim::Menu::TrackInfo->menu( $client, $track->url, $track ) if $track;
 	
 	# some additional parameters for the nice favorites button at the top
 	$params->{isFavorite} = defined Slim::Utils::Favorites->new($client)->findUrl($track->url);

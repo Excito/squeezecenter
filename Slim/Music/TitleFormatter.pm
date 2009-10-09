@@ -1,8 +1,8 @@
 package Slim::Music::TitleFormatter;
 
-# $Id: TitleFormatter.pm 23867 2008-11-09 20:10:26Z andy $
+# $Id: TitleFormatter.pm 28177 2009-08-13 09:46:35Z michael $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -19,8 +19,8 @@ L<Slim::Music::TitleFormatter>
 
 use strict;
 
-use File::Spec::Functions qw(:ALL);
 use Scalar::Util qw(blessed);
+use File::Spec::Functions qw(splitpath);
 
 use Slim::Music::Info;
 use Slim::Utils::DateTime;
@@ -38,6 +38,8 @@ sub init {
 
 	# for relating track attributes to album/artist attributes
 	my @trackAttrs = ();
+	
+	require Slim::Schema::Track;
 
 	# Subs for all regular track attributes
 	for my $attr (keys %{Slim::Schema::Track->attributes}) {
@@ -61,11 +63,9 @@ sub init {
 		}
 
 		my $output = '';
-		my $album = $_[0]->album();
-		if ($album) {
-			$output = $album->title();
-			$output = '' if $output eq string('NO_ALBUM');
-		}
+		$output = $_[0]->albumname();
+		$output = '' if $output eq string('NO_ALBUM');
+
 		return (defined $output ? $output : '');
 	};
 
@@ -136,15 +136,22 @@ sub init {
 		}
 
 		my @output  = ();
-		my @artists = $_[0]->artists;
 
-		for my $artist (@artists) {
+		for my $artist ($_[0]->artists) {
 
 			my $name = $artist->get_column('name');
 
 			next if $name eq string('NO_ARTIST');
 
 			push @output, $name;
+		}
+		
+		# Bug 12162: cope with objects that only have artistName and no artists
+		if (!(scalar @output) && $_[0]->can('artistName')) {
+			my $name = $_[0]->artistName();
+			if ($name && $name ne string('NO_ARTIST')) {
+				push @output, $name;
+			}
 		}
 
 		return (scalar @output ? join(' & ', @output) : '');
@@ -366,7 +373,7 @@ sub init {
 	return 1;
 }
 
-# This does not currently have any callers in the SqueezeCenter tree.
+# This does not currently have any callers in the Squeezebox Server tree.
 sub addFormat {
 	my $format = shift;
 	my $formatSubRef = shift;
@@ -377,7 +384,7 @@ sub addFormat {
 
 		$parsedFormats{$format} = $formatSubRef;
 
-		$log->debug("Format $format added.");
+		main::DEBUGLOG && $log->debug("Format $format added.");
 
 		if ($format !~ /\W/) {
 			# format is a single word, so make it an element
@@ -395,7 +402,7 @@ sub addFormat {
 
 	} else {
 
-		$log->debug("Format $format already exists.");
+		main::DEBUGLOG && $log->debug("Format $format already exists.");
 	}
 
 	return 1;
@@ -577,8 +584,8 @@ sub infoFormat {
 	if ($str && $] > 5.007) {
 
 		eval {
-			Encode::from_to($str, Slim::Utils::Unicode::currentLocale(), 'utf8');
-			Encode::_utf8_on($str);
+			Encode::from_to($str, Slim::Utils::Unicode::currentLocale(), 'UTF-8');
+			$str = Encode::decode('UTF-8', $str);
 		};
 
 	} elsif (!defined $str) {
@@ -595,12 +602,11 @@ sub infoFormat {
 	}
 	else {
 		# Optimize calls out to objectForUrl
-		my $blessed   = blessed($fileOrObj);
 		my $track     = $fileOrObj;
 
-		if (!$blessed || !($blessed eq 'Slim::Schema::Track' || $blessed eq 'Slim::Schema::Playlist')) {
+		if (!Slim::Schema::isaTrack($fileOrObj)) {
 
-			$track = Slim::Schema->rs('Track')->objectForUrl({
+			$track = Slim::Schema->objectForUrl({
 				'url'    => $fileOrObj,
 				'create' => 1,
 			});

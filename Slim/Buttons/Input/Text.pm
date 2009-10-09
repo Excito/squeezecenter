@@ -1,8 +1,8 @@
 package Slim::Buttons::Input::Text;
 
-# $Id: Text.pm 23257 2008-09-23 17:46:29Z andy $
+# $Id: Text.pm 27822 2009-07-25 17:29:09Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -25,7 +25,7 @@ Slim::Buttons::Common::pushModeLeft($client, 'INPUT.Text', \%params);
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Input::Text> is a reusable SqueezeCenter module for creating a standard UI
+L<Slim::Buttons::Input::Text> is a reusable Squeezebox Server module for creating a standard UI
 for inputting Text. Client parameters may determine the character sets available, and set
 any actions done on the resulting text. Callers include Slim::Buttons::Search.
 
@@ -95,6 +95,23 @@ our @numberLettersUpper = (
 	['W','X','Y','Z','9'],			# 9
 );
 
+# Chars allowed in email addresses:
+# Uppercase and lowercase English letters (a-z, A-Z)
+# Digits 0 through 9
+# Characters ! # $ % & ' * + - / = ? ^ _ ` { | } ~
+our @numberLettersEmail = (
+	['0','@','.'], # 0
+	['1','-','_','+'], # 1
+	['a','b','c','2'], 	   # 2
+	['d','e','f','3'], 	   # 3
+	['g','h','i','4'], 	   # 4
+	['j','k','l','5'], 	   # 5
+	['m','n','o','6'], 	   # 6
+	['p','q','r','s','7'], 	# 7
+	['t','u','v','8'], 		# 8
+	['w','x','y','z','9']   # 9
+);
+
 # default arrays for charRef
 
 our @UpperChars = (
@@ -119,6 +136,16 @@ our @BothChars = (
 	'(', ')', '{', '}', '[', ']', '\\','|', ';', ':', '"', '<', '>',
 	'*', '=', '+', '`', '/',
 	'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+);
+
+our @EmailChars = (
+	undef, # represents rightarrow
+	'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+	'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+ 	'@',
+	'.', '-', '_', '+',
+	'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+	'!', '&', "'", '/', '`', '|', '~', '#', '$', '%', '*', '=', '?', '^', '{', '}',
 );
 
 Slim::Buttons::Common::addMode('INPUT.Text',getFunctions(),\&setMode);
@@ -388,7 +415,10 @@ sub init {
 
 		} elsif (uc($charsRef) eq 'BOTH') {
 			$client->modeParam('charsRef',\@BothChars);
-
+		
+		} elsif (uc($charsRef) eq 'EMAIL') {
+			$client->modeParam('charsRef',\@EmailChars);
+			
 		} else {
 			$client->modeParam('charsRef',\@UpperChars);
 		}
@@ -407,7 +437,10 @@ sub init {
 
 		if (uc($numberLetterRef) eq 'UPPER') {
 			$client->modeParam('numberLetterRef',\@numberLettersUpper);
-
+		
+		} elsif (uc($numberLetterRef) eq 'EMAIL') {
+			$client->modeParam('numberLetterRef',\@numberLettersEmail);
+			
 		} else {
 			$client->modeParam('numberLetterRef',\@numberLettersMixed);
 		}
@@ -428,10 +461,11 @@ sub init {
 	}
 
 	# create a hash for char to index mapping from the charsRef array
-	my $charsInd;
+	my $charsInd = {};
 	my $index = 0;
 
 	for my $char (@{$client->modeParam('charsRef')}) {
+		no warnings;
 		$charsInd->{ $char } = $index++;
 	}
 

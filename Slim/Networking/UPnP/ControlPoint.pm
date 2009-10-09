@@ -1,13 +1,13 @@
 package Slim::Networking::UPnP::ControlPoint;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
 # An asynchronous UPnP Control Point 
 
-# $Id: ControlPoint.pm 21790 2008-07-15 20:18:07Z andy $
+# $Id: ControlPoint.pm 27975 2009-08-01 03:28:30Z andy $
 
 use strict;
 use warnings;
@@ -80,7 +80,7 @@ MX: $mx
 	$sock->set( args => $args );
 	
 	# This socket will continue to live and receive events as
-	# long as SqueezeCenter is running
+	# long as Squeezebox Server is running
 	Slim::Networking::Select::addRead( $sock, \&_readResult );
 	
 	# send the search query
@@ -116,7 +116,7 @@ sub shutdown {
 sub removeDevice {
 	my ( $device, $callback ) = @_;
 	
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug("Device went away: " . $device->getfriendlyname);
 	}
 
@@ -161,7 +161,7 @@ sub _readResult {
 		if ( my $retry = $failedDevices->{ $dev_location } ) {
 			if ( time < $retry ) {
 
-				if ( $log->is_debug ) {
+				if ( main::DEBUGLOG && $log->is_debug ) {
 					$log->debug(sprintf("Notify from previously failed device at %s, ignoring for %s seconds",
 						$dev_location,
 						$retry - time,
@@ -193,7 +193,7 @@ sub _readResult {
 					my $device = Net::UPnP::Device->new();
 					$device->setssdp( $ssdp_res_msg );
 					
-					if ( $log->is_debug ) {
+					if ( main::DEBUGLOG && $log->is_debug ) {
 						$log->debug(sprintf("Notify from new device [%s at %s]", $USN, $dev_location));
 					}
 		
@@ -260,7 +260,7 @@ sub _gotDeviceDescription {
 	# is it new?
 	if ( !$devices->{ $udn } ) {
 		
-		if ( $log->is_debug ) {
+		if ( main::DEBUGLOG && $log->is_debug ) {
 			$log->debug(sprintf("New device found: %s [%s]",
 				$device->getfriendlyname,
 				$device->getlocation,

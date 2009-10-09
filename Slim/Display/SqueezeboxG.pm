@@ -1,11 +1,11 @@
 package Slim::Display::SqueezeboxG;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: SqueezeboxG.pm 23271 2008-09-24 07:39:11Z mherger $
+# $Id: SqueezeboxG.pm 28242 2009-08-21 21:06:22Z adrian $
 
 =head1 NAME
 
@@ -188,6 +188,10 @@ sub pushLeft {
 
 	$display->killAnimation();
 	$display->pushUpdate([\$allbits, 0, $display->screenBytes() / 8, $display->screenBytes(),  0.025]);
+
+	if ($display->notifyLevel == 2) {
+		$display->notify('update');
+	}
 }
 
 sub pushRight {
@@ -202,6 +206,10 @@ sub pushRight {
 	
 	$display->killAnimation();
 	$display->pushUpdate([\$allbits, $display->screenBytes(), 0 - $display->screenBytes() / 8, 0, 0.025]);
+
+	if ($display->notifyLevel == 2) {
+		$display->notify('update');
+	}
 }
 
 sub pushUp {

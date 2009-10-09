@@ -2,7 +2,7 @@ package Slim::Web::Settings::Server::Status;
 
 # $Id: Basic.pm 13299 2007-09-27 08:59:36Z mherger $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -51,12 +51,14 @@ sub handler {
 
 	$paramRef->{'scanning'} = Slim::Music::Import->stillScanning();
 
-	# skeleton for the progress update
-	$paramRef->{progress} = ${ Slim::Web::Pages::Progress::progress($client, {
-		ajaxUpdate => 1,
-		type       => 'importer',
-		webroot    => $paramRef->{webroot}
-	}) };
+	if (Slim::Schema::hasLibrary()) {
+		# skeleton for the progress update
+		$paramRef->{progress} = ${ Slim::Web::Pages::Progress::progress($client, {
+			ajaxUpdate => 1,
+			type       => 'importer',
+			webroot    => $paramRef->{webroot}
+		}) };
+	}
 
 	return $class->SUPER::handler($client, $paramRef);
 }

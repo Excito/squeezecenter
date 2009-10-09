@@ -1,8 +1,8 @@
 package Slim::Player::ReplayGain;
 
-# $Id: ReplayGain.pm 24330 2008-12-17 14:42:03Z andy $
+# $Id: ReplayGain.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -108,10 +108,10 @@ sub trackAlbumMatch {
 
 	# Get the track objects
 	my $current_url   = Slim::Player::Playlist::song($client, $current_index);
-	my $current_track = Slim::Schema->rs('Track')->objectForUrl({ 'url' => $current_url, 'create' => 1, 'readTags' => 1 });
+	my $current_track = Slim::Schema->objectForUrl({ 'url' => $current_url, 'create' => 1, 'readTags' => 1 });
 	
 	my $compare_url   = Slim::Player::Playlist::song($client, $compare_index);
-	my $compare_track = Slim::Schema->rs('Track')->objectForUrl({ 'url' => $compare_url, 'create' => 1, 'readTags' => 1 });
+	my $compare_track = Slim::Schema->objectForUrl({ 'url' => $compare_url, 'create' => 1, 'readTags' => 1 });
 
 	if (!blessed($current_track) || !blessed($compare_track)) {
 
@@ -162,8 +162,9 @@ sub trackAlbumMatch {
 	}
 	
 	# Check for album and tracknum matches as expected
-	if ($compare_track->album && $current_track->album &&
-		$compare_track->album->id && ($compare_track->album->id == $current_track->album->id) && 
+	if ($compare_track->albumid && $current_track->albumid &&
+		($compare_track->albumid == $current_track->albumid) && 
+		defined $current_track->tracknum && defined $compare_track->tracknum &&
 		(($current_track->tracknum + $offset) == $compare_track->tracknum)) {
 
 		return 1;

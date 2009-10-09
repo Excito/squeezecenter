@@ -1,8 +1,8 @@
 package Slim::Utils::OSDetect;
 
-# $Id: OSDetect.pm 25316 2009-03-04 12:16:46Z michael $
+# $Id: OSDetect.pm 28215 2009-08-18 17:05:11Z mwise $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -17,29 +17,20 @@ L<Slim::Utils::OSDetect> handles Operating System Specific details.
 
 =head1 SYNOPSIS
 
-	for my $baseDir (Slim::Utils::OSDetect::dirsFor('types')) {
-
-		push @typesFiles, catdir($baseDir, 'types.conf');
-		push @typesFiles, catdir($baseDir, 'custom-types.conf');
-	}
-	
 	if (Slim::Utils::OSDetect::isWindows()) {
 
 =cut
 
 use strict;
-use Config;
-use File::Path;
-use File::Spec::Functions qw(:ALL);
 use FindBin qw($Bin);
 
-my ($os, $isWindows, $isMac);
+my ($os, $isWindows, $isMac, $isLinux);
 
 =head1 METHODS
 
 =head2 OS( )
 
-returns a string to indicate the detected operating system currently running SqueezeCenter.
+returns a string to indicate the detected operating system currently running Squeezebox Server.
 
 =cut
 
@@ -101,20 +92,30 @@ sub init {
 				$os = Slim::Utils::OS::ReadyNAS->new();
 				
 			# we only differentiate Debian/Suse/Red Hat if they've been installed from a package
-			} elsif ($os =~ /debian/i && $0 =~ m{^/usr/sbin/squeezecenter}) {
+			} elsif ($os =~ /debian/i && $0 =~ m{^/usr/sbin/squeezeboxserver}) {
 		
 				require Slim::Utils::OS::Debian;
 				$os = Slim::Utils::OS::Debian->new();
 		
-			} elsif ($os =~ /red hat/i && $0 =~ m{^/usr/libexec/squeezecenter}) {
+			} elsif ($os =~ /red hat/i && $0 =~ m{^/usr/libexec/squeezeboxserver}) {
 		
 				require Slim::Utils::OS::RedHat;
 				$os = Slim::Utils::OS::RedHat->new();
 		
-			} elsif ($os =~ /suse/i && $0 =~ m{^/usr/libexec/squeezecenter}) {
+			} elsif ($os =~ /suse/i && $0 =~ m{^/usr/libexec/squeezeboxserver}) {
 				
 				require Slim::Utils::OS::Suse;
 				$os = Slim::Utils::OS::Suse->new();
+
+            } elsif ($os =~ /Synology/i) {
+
+                require Slim::Utils::OS::Synology;
+                $os = Slim::Utils::OS::Synology->new();
+
+			} elsif ($os =~ /squeezeos/i) {
+				
+				require Slim::Utils::OS::SqueezeOS;
+				$os = Slim::Utils::OS::SqueezeOS->new();
 				
 			} else {
 	
@@ -132,6 +133,7 @@ sub init {
 	$os->initDetails();
 	$isWindows = $os->name eq 'win';
 	$isMac     = $os->name eq 'mac';
+	$isLinux   = $os->get('os') eq 'Linux';
 }
 
 sub getOS {
@@ -156,6 +158,10 @@ sub getProxy {
 	return $os->getProxy();
 }
 
+sub skipPlugins {
+	return $os->skipPlugins();
+}
+
 =head2 isDebian( )
 
  The Debian package has some specific differences for file locations.
@@ -172,12 +178,20 @@ sub isRHorSUSE {
 	return $os->get('isRedHat', 'isSuse');
 }
 
+sub isSqueezeOS {
+	return $os->get('isSqueezeOS');
+}
+
 sub isWindows {
 	return $isWindows;
 }
 
 sub isMac {
 	return $isMac;
+}
+
+sub isLinux {
+	return $isLinux;
 }
 
 1;

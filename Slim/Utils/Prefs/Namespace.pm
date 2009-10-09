@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Namespace;
 
-# $Id: Namespace.pm 24088 2008-11-25 18:31:35Z andy $
+# $Id: Namespace.pm 28124 2009-08-09 21:11:45Z andy $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -42,8 +42,8 @@ my $simpleValidators = {
 	'hash'     => sub { ref $_[1] eq 'HASH' },
 	'defined'  => sub { defined $_[1] },
 	'false'    => sub { 0 },
-	'file'     => sub { !$_[1] || -e $_[1] || -d Slim::Utils::Unicode::utf8encode_locale($_[1]) },
-	'dir'      => sub {	!$_[1] || -d $_[1] || -d $_[1] || -d Slim::Utils::Unicode::utf8encode_locale($_[1]) },
+	'file'     => sub { !$_[1] || -f $_[1] || -f Slim::Utils::Unicode::utf8encode_locale($_[1]) },
+	'dir'      => sub { !$_[1] || -d $_[1] || -d Slim::Utils::Unicode::utf8encode_locale($_[1]) },
 	'intlimit' => sub { $_[1] =~ /^-?\d+$/ &&
 						(!defined $_[2]->{'low'}  || $_[1] >= $_[2]->{'low'} ) &&
 						(!defined $_[2]->{'high'} || $_[1] <= $_[2]->{'high'}) },
@@ -128,7 +128,7 @@ sub setValidate {
 
 	while (my $pref = shift) {
 
-		if ( $log->isInitialized && $log->is_debug ) {
+		if ( main::DEBUGLOG && $log->isInitialized && $log->is_debug ) {
 			$log->debug(sprintf "registering %s for $class->{'namespace'}:$pref", Slim::Utils::PerlRunTime::realNameForCodeRef($validator));
 		}
 
@@ -148,18 +148,22 @@ prefname, new value, undef or $client
 =cut
 
 sub setChange {
-	my $class  = shift;
-	my $change = shift;
+	my ($class, $change, $first) = @_;
 
 	while (my $pref = shift) {
 
-		if ( $log->isInitialized && $log->is_debug ) {
+		if ( main::DEBUGLOG && $log->isInitialized && $log->is_debug ) {
 			$log->debug(sprintf "registering %s for $class->{'namespace'}:$pref", Slim::Utils::PerlRunTime::realNameForCodeRef($change));
 		}
 		
 		$class->{'onchange'}->{ $pref } ||= [];
 
-		push @{ $class->{'onchange'}->{ $pref } }, $change;
+		if ($first) {
+			# (Trys to) insist to be called first
+			unshift @{ $class->{'onchange'}->{ $pref } }, $change;
+		} else {
+			push @{ $class->{'onchange'}->{ $pref } }, $change;
+		}
 	}
 }
 
@@ -183,7 +187,7 @@ sub setUtf8Off {
 
 	while (my $pref = shift) {
 
-		if ( $log->isInitialized && $log->is_debug ) {
+		if ( main::DEBUGLOG && $log->isInitialized && $log->is_debug ) {
 			$log->debug("setting utf8off for $class->{'namespace'}:$pref");
 		}
 
@@ -207,7 +211,19 @@ $prefs->client($client)->get('pref1');
 sub client {
 	# opimised due to frequency of being called
 	return unless $_[1];
-	return $_[0]->{'clients'}->{ $_[1]->id } ||= Slim::Utils::Prefs::Client->new($_[0], $_[1]);
+	
+	if ( $_[0]->{'clients'}->{ $_[1]->id } ) {
+		return $_[0]->{'clients'}->{ $_[1]->id };
+	}
+	
+	my $cprefs = Slim::Utils::Prefs::Client->new($_[0], $_[1]);
+	
+	# This avoids an infinite loop if migration callbacks happen to call $prefs->client($client)
+	$_[0]->{'clients'}->{ $_[1]->id } = $cprefs;
+	
+	$cprefs->migrate($_[1]);
+	
+	return $cprefs;
 }
 
 =head2 allClients()
@@ -245,7 +261,7 @@ sub _load {
 		$prefs = eval { LoadFile($class->{'file'}) };
 
 		if ($@) {
-			$log->info("can't read $class->{'file'} : $@");
+			main::INFOLOG && $log->info("can't read $class->{'file'} : $@");
 		}
 
 		foreach ( keys %{$class->{'utf8off'}} ) {
@@ -301,7 +317,7 @@ sub savenow {
 
 	return unless ($class->{'writepending'});
 
-	$log->info("saving prefs for $class->{'namespace'} to $class->{'file'}");
+	main::INFOLOG && $log->info("saving prefs for $class->{'namespace'} to $class->{'file'}");
 
 	eval {
 		my $path = $class->{'file'} . '.tmp';
@@ -344,7 +360,7 @@ sub migrate {
 
 		if ($callback->($class)) {
 
-			$log->info("migrated prefs for $class->{'namespace'} to version $version");
+			main::INFOLOG && $log->info("migrated prefs for $class->{'namespace'} to version $version");
 
 			$class->{'prefs'}->{'_version'} = $version;
 
@@ -378,7 +394,7 @@ sub migrateClient {
 	my $version  = shift;
 	my $callback = shift;
 
-	$log->isInitialized && $log->info("registering client migrate function for $class->{'namespace'} to version $version");
+	main::INFOLOG && $log->isInitialized && $log->info("registering client migrate function for $class->{'namespace'} to version $version");
 
 	$class->{'migratecb'}->{ $version } = $callback;
 }

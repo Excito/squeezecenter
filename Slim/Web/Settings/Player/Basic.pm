@@ -2,7 +2,7 @@ package Slim::Web::Settings::Player::Basic;
 
 # $Id: Basic.pm 10633 2006-11-09 04:26:27Z kdf $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -17,11 +17,11 @@ use Slim::Utils::Strings qw(string cstring);
 my $prefs = preferences('server');
 
 sub name {
-	return Slim::Web::HTTP::protectName('BASIC_PLAYER_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('BASIC_PLAYER_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/player/basic.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/player/basic.html');
 }
 
 sub needsClient {
@@ -39,7 +39,7 @@ sub prefs {
 
 		push @prefs, qw(titleFormatCurr playingDisplayMode);
 
-		push @prefs, qw(screensaver idlesaver offsaver screensavertimeout);
+		push @prefs, qw(screensaver alarmsaver idlesaver offsaver screensavertimeout);
 
 		if ($client->display->isa('Slim::Display::Transporter')) {
 

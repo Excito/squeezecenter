@@ -1,13 +1,14 @@
 package Slim::Web::Settings::Server::Security;
 
-# $Id: Security.pm 26104 2009-04-20 08:26:16Z michael $
+# $Id: Security.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
 use strict;
+use Digest::SHA1 qw(sha1_base64);
 use base qw(Slim::Web::Settings);
 
 use Slim::Utils::Prefs;
@@ -15,11 +16,11 @@ use Slim::Utils::Prefs;
 my $prefs = preferences('server');
 
 sub name {
-	return Slim::Web::HTTP::protectName('SECURITY_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('SECURITY_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/server/security.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/server/security.html');
 }
 
 sub prefs {
@@ -47,13 +48,9 @@ sub handler {
 		else {
 
 			my $currentPassword = preferences('server')->get('password');
-			my $salt = substr($currentPassword, 0, 2);
 		
-			if (defined($val) && $val ne '' && ($currentPassword eq '' || crypt($val, $salt) ne $currentPassword)) {
-				srand (time());
-				my $randletter = "(int (rand (26)) + (int (rand (1) + .5) % 2 ? 65 : 97))";
-				my $salt = sprintf ("%c%c", eval $randletter, eval $randletter);
-				$prefs->set('password', crypt($val, $salt));
+			if (defined($val) && $val ne '' && ($currentPassword eq '' || sha1_base64($val) ne $currentPassword)) {
+				$prefs->set('password', sha1_base64($val));
 			}
 			
 		}

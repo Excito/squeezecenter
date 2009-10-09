@@ -1,8 +1,8 @@
 package Slim::Hardware::IR;
 
-# $Id: IR.pm 24535 2009-01-06 22:42:18Z andy $
+# $Id: IR.pm 28568 2009-09-18 21:25:29Z adrian $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -64,8 +64,6 @@ our $IRSINGLETIME = 0.256;
 # Max time an IR key code is queued for before being discarded [if server is busy]
 my $maxIRQTime = 3.0;
 
-our $irPerf = Slim::Utils::PerfMon->new('IR Delay', [0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 1, 5]);
-
 my $log = logger('player.ir');
 
 my $prefs = preferences('server');
@@ -120,7 +118,7 @@ sub idle {
 
 	my $now = Time::HiRes::time();
 	
-	$::perfmon && $irPerf->log($now - $entry->{'estTime'});
+	main::PERFMON && Slim::Utils::PerfMon->check('ir', $now - $entry->{'estTime'});
 
 	if (($now - $entry->{'estTime'}) < $maxIRQTime) {
 
@@ -132,7 +130,7 @@ sub idle {
 		# discard all queued IR for this client as they are potentially stale
 		forgetQueuedIR($client);
 
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(sprintf("Discarded stale IR for client: %s", $client->id));
 		}
 
@@ -191,7 +189,7 @@ sub irfiles {
 				next;
 			}
 
-			$log->info("Found IR file $file");
+			main::INFOLOG && $log->info("Found IR file $file");
 
 			$files{$file} = $1;
 		}
@@ -241,7 +239,7 @@ sub mapfiles {
 				next;
 			}
 
-			$log->info("Found key mapping file: $file");
+			main::INFOLOG && $log->info("Found key mapping file: $file");
 
 			if ($1 eq defaultMap()) {
 
@@ -268,7 +266,7 @@ sub addModeDefaultMapping {
 				$log->warn("ignoring [$mode] $key => $value");
 			}
 			else {
-				$log->info("mapping [$mode] $key => $value");
+				main::INFOLOG && $log->info("mapping [$mode] $key => $value");
 				$irMap{$defaultMapFile}{$mode}->{$key} = $value;
 			}
 		}
@@ -276,7 +274,7 @@ sub addModeDefaultMapping {
 	}
 
 	if ( ref $mapRef eq 'HASH' ) {
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			while ( my ($key, $value) = each %{$mapRef} ) {
 				$log->info("mapping [$mode] $key => $value");
 			}
@@ -303,13 +301,13 @@ sub loadMapFile {
 	my $file = shift;
 	my $mode;
 
-	$log->info("Key mapping file entry: $file");
+	main::INFOLOG && $log->info("Key mapping file entry: $file");
 
 	if (!-r $file) {
 		$file = IRPath($file);
 	}
 
-	$log->info("Opening map file [$file]");
+	main::INFOLOG && $log->info("Opening map file [$file]");
 
 	if (!-r $file) {
 
@@ -365,7 +363,7 @@ sub loadIRFile {
 		$file = IRPath($file);
 	}
 
-	$log->info("Opening IR file [$file]");
+	main::INFOLOG && $log->info("Opening IR file [$file]");
 
 	if (!-r $file) {
 
@@ -409,7 +407,7 @@ sub initClient {
 
 	for my $code (keys %irCodes) {
 		if (!$disabled{$code}) {
-			$log->info("Client: " . $client->id . " IR code set: $code");
+			main::INFOLOG && $log->info("Client: " . $client->id . " IR code set: $code");
 			push @codes, \%{ $irCodes{$code} };
 		}
 	}
@@ -429,7 +427,7 @@ sub initClient {
 	my @maps = ( \%{ $irMap{$defaultMapFile} } );
 
 	if ( $map && $map ne $defaultMapFile ) {
-		$log->info("Client: " . $client->id . " Using mapfile: $map");
+		main::INFOLOG && $log->info("Client: " . $client->id . " Using mapfile: $map");
 		unshift @maps, \%{ $irMap{$map} };
 	}
 
@@ -449,14 +447,14 @@ sub lookupCodeBytes {
 
 			if (defined (my $code = $irset->{$irCodeBytes})) {
 
-				$log->info("$irCodeBytes -> code: $code");
+				main::INFOLOG && $log->info("$irCodeBytes -> code: $code");
 
 				return $code;
 			}
 		}
 	}
 	
-	$log->info("$irCodeBytes -> unknown");
+	main::INFOLOG && $log->info("$irCodeBytes -> unknown");
 
 	return undef;
 }
@@ -478,7 +476,7 @@ sub lookup {
 
 		if (defined (my $found = $irset->{$code})) {
 
-			$log->info("Found button $found for $code");
+			main::INFOLOG && $log->info("Found button $found for $code");
 
 			$code = $found;
 
@@ -522,14 +520,14 @@ sub lookupFunction {
 
 			if (my $function = $map->{$search}{$code}) {
 
-				$log->info("Found function: $function for button $code in mode $search");
+				main::INFOLOG && $log->info("Found function: $function for button $code in mode $search");
 
 				return $function;
 			}
 		}
 	}
 
-	$log->info("irCode not defined: [$code] for mode: [$mode]");
+	main::INFOLOG && $log->info("irCode not defined: [$code] for mode: [$mode]");
 
 	return undef;
 }
@@ -634,7 +632,7 @@ sub processIR {
 
 	if ($irCodeBytes eq '00000000') {
 
-		$log->debug("Ignoring spurious null repeat code.");
+		main::DEBUGLOG && $log->debug("Ignoring spurious null repeat code.");
 		return;
 	}
 
@@ -689,7 +687,7 @@ sub processIR {
 		$knobData->{'_acceleration'} = 0;
 		$knobData->{'_knobEvent'} = 0;
 	}
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info("$irCodeBytes\t$irTime\t" . Time::HiRes::time());
 	}
 
@@ -697,7 +695,7 @@ sub processIR {
 
 		my $dir = $2;
 
-		$log->info("Front panel code detected, processing $code");
+		main::INFOLOG && $log->info("Front panel code detected, processing $code");
 
 		if ($dir eq 'down' && $irCodeBytes eq $client->lastircodebytes) {
 			$dir = 'repeat';
@@ -710,7 +708,7 @@ sub processIR {
 
 	} elsif ($code =~ /^knob/) {
 
-		$log->info("Knob code detected, processing $code");
+		main::INFOLOG && $log->info("Knob code detected, processing $code");
 		$knobData->{'_knobEvent'} = 1;
 		$knobData->{'_time'} = $irTime;
 		$knobData->{'_lasttime'} = $client->lastirtime();
@@ -783,7 +781,7 @@ sub processIR {
 
 		my $irCode = lookup($client, $irCodeBytes);
 
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(sprintf("irCode = [%s] timer = [%s] timediff = [%s] last = [%s]",
 				(defined $irCode ? $irCode : 'undef'), 
 				$irTime,
@@ -809,7 +807,7 @@ sub processFrontPanel {
 
 		$code .= '.repeat';
 
-		$log->info("IR: Front panel button press: $code");
+		main::INFOLOG && $log->info("IR: Front panel button press: $code");
 
 		# we don't restart the hold timers as we also want to generate .hold events
 
@@ -821,7 +819,7 @@ sub processFrontPanel {
 
 	} elsif ($dir eq 'down') {
 
-		$log->info("IR: Front panel button press: $code");
+		main::INFOLOG && $log->info("IR: Front panel button press: $code");
 		
 		# kill any previous hold timers
 		Slim::Utils::Timers::killTimers($client, \&fireHold);
@@ -848,7 +846,7 @@ sub processFrontPanel {
 
 		my $timediff = $irTime - $client->startirhold;
 
-		$log->info("IR: Front panel button release after $timediff: $code");
+		main::INFOLOG && $log->info("IR: Front panel button release after $timediff: $code");
 
 		# kill any previous hold timers
 		Slim::Utils::Timers::killTimers($client, \&fireHold);
@@ -891,7 +889,7 @@ sub fireHold {
 		return;
 	}
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info("Hold Time Expired - irCode = [$irCode] timer = [$irTime] timediff = [" . $client->irtimediff . "]");
 	}
 
@@ -969,7 +967,7 @@ sub repeatCode {
 
 	my $irCode = lookup($client, $irCodeBytes, 'repeat');
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf("irCode = [%s] timer = [%s] timediff = [%s] last = [%s]",
 			($irCode || 'undef'),
 			($client->lastirtime || 'undef'),
@@ -1063,7 +1061,7 @@ sub executeButton {
 		$irCode = $button;
 	}
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf("Trying to execute button [%s] for irCode: [%s]",
 			$button, defined $irCode ? $irCode : 'undef',
 		));
@@ -1094,7 +1092,7 @@ sub executeButton {
 
 		no strict 'refs';
 
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(sprintf("Executing button [%s] for irCode: [%s] %s",
 				$button, defined $irCode ? $irCode : 'undef',
 				Slim::Utils::PerlRunTime::realNameForCodeRef($subref),
@@ -1116,7 +1114,7 @@ sub executeButton {
 sub processCode {
 	my ($client, $irCode, $irTime) = @_;
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info("irCode: $irCode, " . $client->id);
 	}
 

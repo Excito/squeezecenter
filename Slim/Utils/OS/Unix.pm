@@ -1,5 +1,10 @@
 package Slim::Utils::OS::Unix;
 
+# Squeezebox Server Copyright 2001-2009 Logitech.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License, 
+# version 2.
+
 use strict;
 use Config;
 use File::Spec::Functions qw(:ALL);
@@ -27,7 +32,7 @@ sub initSearchPath {
 
 	$class->SUPER::initSearchPath();
 
-	my @paths = (split(/:/, $ENV{'PATH'}), qw(/usr/bin /usr/local/bin /usr/libexec /sw/bin /usr/sbin));
+	my @paths = (split(/:/, ($ENV{'PATH'} || '/sbin:/usr/sbin:/bin:/usr/bin')), qw(/usr/bin /usr/local/bin /usr/libexec /sw/bin /usr/sbin /opt/bin));
 	
 	Slim::Utils::Misc::addFindBinPaths(@paths);
 }
@@ -36,7 +41,7 @@ sub initSearchPath {
 
 Return OS Specific directories.
 
-Argument $dir is a string to indicate which of the SqueezeCenter directories we
+Argument $dir is a string to indicate which of the Squeezebox Server directories we
 need information for.
 
 =cut
@@ -63,13 +68,21 @@ sub dirsFor {
 
 		push @dirs, '';
 
-	# we don't want these values to return a value
-	} elsif ($dir =~ /^(?:libpath|mysql-language)$/) {
+	# we don't want these values to return a(nother) value
+	} elsif ($dir =~ /^(?:libpath|mysql-language|updates)$/) {
 
 	} elsif ($dir eq 'prefs' && $::prefsdir) {
 		
 		push @dirs, $::prefsdir;
 		
+	# SqueezeCenter <= 7.3 prefs
+	} elsif ($dir eq 'scprefs') {
+
+		my $oldpath = $class->dirsFor('prefs');
+		$oldpath =~ s/squeezebox(?:server)?/squeezecenter/i;
+
+		@dirs = ( $oldpath );
+
 	} elsif ($dir eq 'oldprefs') {
 	
 		if ($::prefsfile && -r $::prefsfile) {
@@ -96,6 +109,20 @@ sub dirsFor {
 	}
 
 	return wantarray() ? @dirs : $dirs[0];
+}
+
+sub migratePrefsFolder {
+	my ($class, $newdir) = @_;
+	
+	return if -d $newdir && -r _;
+	
+	# we only care about SqueezeCenter -> Squeezebox Server for now
+	my $olddir = $class->dirsFor('scprefs');	
+
+	return unless -d $olddir && -r _;
+
+	require File::Copy::Recursive;
+	File::Copy::Recursive::dircopy($olddir, $newdir);
 }
 
 # leave log rotation to the system

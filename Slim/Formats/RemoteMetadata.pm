@@ -1,8 +1,8 @@
 package Slim::Formats::RemoteMetadata;
 
-# $Id: RemoteMetadata.pm 23867 2008-11-09 20:10:26Z andy $
+# $Id: RemoteMetadata.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2008 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -82,7 +82,7 @@ sub registerProvider {
 	
 	$providers{ $params{match} } = $params{func};
 	
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		my $name = Slim::Utils::PerlRunTime::realNameForCodeRef( $params{func} );
 		$log->debug( "Registered new metadata provider for " . $params{match} . ": $name" );
 	}
@@ -137,7 +137,7 @@ sub registerParser {
 	
 	$parsers{ $params{match} } = $params{func};
 	
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		my $name = Slim::Utils::PerlRunTime::realNameForCodeRef( $params{func} );
 		$log->debug( "Registered new metadata parser for " . $params{match} . ": $name" );
 	}

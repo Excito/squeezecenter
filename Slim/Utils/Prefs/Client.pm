@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Client;
 
-# $Id: Client.pm 22939 2008-08-28 16:42:33Z andy $
+# $Id: Client.pm 28124 2009-08-09 21:11:45Z andy $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
@@ -34,7 +34,6 @@ sub new {
 	my $ref    = shift;
 	my $parent = shift;
 	my $client = shift;
-	my $nomigrate = shift;
 
 	my $clientid = blessed($client) ? $client->id : $client;
 
@@ -45,37 +44,38 @@ sub new {
 
 	$class->{'prefs'} = $parent->{'prefs'}->{"$clientPreferenceTag:$clientid"} ||= {
 		'_version' => 0,
-	};
-
-	if (!$nomigrate) {
-		
-		my $cversion = $class->get( '_version', 'force' ); # On SN, force _version to come from the DB
-
-		for my $version (sort keys %{$parent->{'migratecb'}}) {
-			
-			if ( $cversion < $version ) {
-				
-				if ($parent->{'migratecb'}->{ $version }->($class, $client)) {
-					
-					$log->info("migrating client prefs $parent->{'namespace'}:$class->{'clientid'} to version $version");
-					
-					if ( main::SLIM_SERVICE ) {
-						# Store _version in the database on SN
-						$class->set( '_version' => $version );
-					}
-					else {
-						$class->{'prefs'}->{'_version'} = $version;
-					}
-					
-				} else {
-					
-					$log->warn("failed to migrate client prefs for $parent->{'namespace'}:$class->{'clientid'} to version $version");
-				}
-			}
-		}
-	}		
+	};		
 
 	return $class;
+}
+
+sub migrate {
+	my $self   = shift;
+	my $client = shift;
+	
+	my $cversion = $self->get( '_version', 'force' ) || 0; # On SN, force _version to come from the DB
+
+	for my $version (sort keys %{ $self->{parent}->{'migratecb'}}) {
+		
+		if ( $cversion < $version ) {
+			
+			if ( $self->{parent}->{'migratecb'}->{ $version }->($self, $client)) {
+				
+				main::INFOLOG && $log->info("migrating client prefs $self->{parent}->{'namespace'}:$self->{'clientid'} to version $version");
+				
+				if ( main::SLIM_SERVICE ) {
+					# Store _version in the database on SN
+					$self->set( '_version' => $version );
+				}
+
+				$self->{'prefs'}->{'_version'} = $version;
+				
+			} else {
+				
+				$log->warn("failed to migrate client prefs for $self->{parent}->{'namespace'}:$self->{'clientid'} to version $version");
+			}
+		}
+	}
 }
 
 sub _root { shift->{'parent'} }

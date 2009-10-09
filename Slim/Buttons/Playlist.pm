@@ -1,8 +1,8 @@
 package Slim::Buttons::Playlist;
 
-# $Id: Playlist.pm 24795 2009-01-28 20:22:09Z andy $
+# $Id: Playlist.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -23,8 +23,6 @@ on a player display.
 =cut
 
 use strict;
-use File::Spec::Functions qw(:ALL);
-use File::Spec::Functions qw(updir);
 use Slim::Buttons::Common;
 use Slim::Control::Request;
 use Slim::Utils::Log;
@@ -43,7 +41,7 @@ my %playlistParams = ();
 
 =head2 init( )
 
-This method registers the playlist mode with SqueezeCenter, and defines any functions for interaction
+This method registers the playlist mode with Squeezebox Server, and defines any functions for interaction
  while a player is operating in this mode..
 
 Generally only called from L<Slim::Buttons::Common>
@@ -75,7 +73,7 @@ sub init {
 					playlistNowPlaying($client, 0);
 				}
 
-				if ( $log->is_debug ) {
+				if ( main::DEBUGLOG && $log->is_debug ) {
 					$log->debug(
 						"funct: [$funct] old: $oldindex new: $newindex is after setting: [%s]",
 						browseplaylistindex($client)
@@ -158,22 +156,7 @@ sub init {
 		'left' => sub  {
 			my $client = shift;
 
-			my $oldlines = $client->curLines();
-
-			Slim::Buttons::Home::jump($client, 'NOW_PLAYING');
-
-			while (Slim::Buttons::Common::popMode($client, 1)) {};
-
-			Slim::Buttons::Common::pushMode($client, 'home');
-
-			if ($client->display->showExtendedText()) {
-
-				$client->pushRight($oldlines, Slim::Buttons::Common::pushpopScreen2($client, 'playlist', $client->curLines({ trans => 'pushModeRight' })));
-
-			} else {
-
-				$client->pushRight($oldlines, $client->curLines({ trans => 'pushModeRight' }));
-			}
+			Slim::Buttons::Common::popModeRight($client);
 		},
 
 		'right' => sub  {
@@ -329,7 +312,7 @@ sub getFunctions {
 
 =head2 setMode( $client, [ $how ])
 
-setMode() is a required function for any SqueezeCenter player mode.  This is the entry point for a mode and defines any parameters required for 
+setMode() is a required function for any Squeezebox Server player mode.  This is the entry point for a mode and defines any parameters required for 
 a clean starting point. The function may also set up the reference to the applicable lines function for the player display.
 
 Requires: $client
@@ -397,7 +380,7 @@ sub jump {
 			$pos = Slim::Player::Source::playingSongIndex($client);
 		}
 	
-		$playlistlog->info("Jumping to song index: $pos");
+		main::INFOLOG && $playlistlog->info("Jumping to song index: $pos");
 	
 		browseplaylistindex($client,$pos);
 	}
@@ -442,7 +425,7 @@ sub lines {
 			browseplaylistindex($client,Slim::Player::Playlist::count($client)-1)
 		}
 
-		my $line1 = $client->string('PLAYLIST');
+		my $line1 = $client->string('CURRENT_PLAYLIST');
 		my $overlay1;
 
 		if ($args->{'trans'} || $prefs->client($client)->get('alwaysShowCount')) {
@@ -576,8 +559,7 @@ The optional argument, $playlistindex sets the zero-based position for browsing 
 sub browseplaylistindex {
 	my $client = shift;
 
-	if ( @_ && $playlistlog->is_debug ) {
-
+	if ( main::DEBUGLOG && @_ && $playlistlog->is_debug ) {
 		$log->debug("New playlistindex: $_[0]");
 	}
 	

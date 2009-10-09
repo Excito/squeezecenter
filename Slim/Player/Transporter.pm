@@ -2,7 +2,7 @@ package Slim::Player::Transporter;
 
 # $Id$
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -27,12 +27,8 @@ BEGIN {
 	}
 }
 
-use File::Spec::Functions qw(:ALL);
-use FindBin qw($Bin);
-use IO::Socket;
 use MIME::Base64;
 
-use Slim::Player::Player;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Utils::Unicode;
@@ -53,8 +49,8 @@ our $defaultPrefs = {
 		NOW_PLAYING
 		BROWSE_MUSIC
 		RADIO
-		MUSIC_SERVICES
-		MUSIC_STORES
+		PLUGIN_MY_APPS_MODULE_NAME
+		PLUGIN_APP_GALLERY_MODULE_NAME
 		FAVORITES
 		PLUGIN_DIGITAL_INPUT
 		PLUGINS
@@ -121,7 +117,7 @@ sub play {
 
 		}
 		else {
-			logger('player.source')->info("Setting DigitalInput to 0 for [$url]");
+			main::INFOLOG && logger('player.source')->info("Setting DigitalInput to 0 for [$url]");
 
 			$client->setDigitalInput(0);
 		}
@@ -193,15 +189,18 @@ sub setDigitalInput {
 	# convert a source: url to a number, otherwise, just use the number
 	if (Slim::Music::Info::isDigitalInput($input)) {
 	
-		$log->info("Got source: url: [$input]");
+		main::INFOLOG && $log->info("Got source: url: [$input]");
 
 		if ($INC{'Slim/Plugin/DigitalInput/Plugin.pm'}) {
 
 			$input = Slim::Plugin::DigitalInput::Plugin::valueForSourceName($input);
+
+			# make sure volume is set, without changing temp setting
+			$client->volume( abs($prefs->client($client)->get("volume")), defined($client->tempVolume()));
 		}
 	}
 
-	$log->info("Switching to digital input $input");
+	main::INFOLOG && $log->info("Switching to digital input $input");
 
 	$prefs->client($client)->set('digitalInput', $input);
 	$client->sendFrame('audp', \pack('C', $input));
@@ -260,7 +259,7 @@ sub updateKnob {
 
 			$parambytes = pack "NNCcncc", $listIndex, $listLen, $knobSync, $flags, $width, $height, $backForce;
 
-			if ( $log->is_debug ) {
+			if ( main::DEBUGLOG && $log->is_debug ) {
 				$log->debug(sprintf("Sending new knob position- listIndex: %d with knobPos: %d of %d sync: %d flags: %d",
 					$listIndex, $knobPos, $listLen, $knobSync, $flags,
 				));
@@ -270,7 +269,7 @@ sub updateKnob {
 
 			$parambytes = pack "N", $listIndex;
 
-			$log->debug("Sending new knob position- listIndex: $listIndex");
+			main::DEBUGLOG && $log->debug("Sending new knob position- listIndex: $listIndex");
 		}
 
 		$client->sendFrame('knob', \$parambytes);
@@ -279,7 +278,7 @@ sub updateKnob {
 
 	} else {
 
-		$log->debug("Skipping sending redundant knob position");
+		main::DEBUGLOG && $log->debug("Skipping sending redundant knob position");
 	}
 }
 

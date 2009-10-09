@@ -1,8 +1,8 @@
 package Slim::Menu::TrackInfo;
 
-# $Id: TrackInfo.pm 25030 2009-02-16 17:13:26Z andy $
+# $Id: TrackInfo.pm 28376 2009-08-31 07:15:54Z michael $
 
-# SqueezeCenter Copyright 2001-2008 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -60,16 +60,22 @@ sub registerDefaultInfoProviders {
 	
 	$class->SUPER::registerDefaultInfoProviders();
 
-	$class->registerInfoProvider( playtrack => (
-		menuMode  => 1,
-		before    => 'addtrack',
-		func      => \&playTrack,
-	) );
-
 	$class->registerInfoProvider( addtrack => (
 		menuMode  => 1,
+		after     => 'top',
+		func      => \&addTrackEnd,
+	) );
+
+	$class->registerInfoProvider( addtracknext => (
+		menuMode  => 1,
+		before    => 'playitem',
+		func      => \&addTrackNext,
+	) );
+
+	$class->registerInfoProvider( playitem => (
+		menuMode  => 1,
 		before    => 'contributors',
-		func      => \&addTrack,
+		func      => \&playTrack,
 	) );
 
 	$class->registerInfoProvider( artwork => (
@@ -215,7 +221,7 @@ sub menu {
 	
 	# Get track object if necessary
 	if ( !blessed($track) ) {
-		$track = Slim::Schema->rs('Track')->objectForUrl( {
+		$track = Slim::Schema->objectForUrl( {
 			url => $url,
 		} );
 		if ( !blessed($track) ) {
@@ -336,7 +342,7 @@ sub infoContributors {
 					},
 					selectionCriteria => {
 						'track.id'       => $track->id,
-						'album.id'       => ( blessed $track->album ) ? $track->album->id : undef,
+						'album.id'       => $track->albumid,
 						'contributor.id' => $id,
 					},
 				};
@@ -427,7 +433,7 @@ sub showArtwork {
 
 	push @{$items}, {
 		type => 'text',
-		name => cstring($client, 'SHOW_ARTWORK'),
+		name => cstring($client, 'SHOW_ARTWORK_SINGLE'),
 		jive => $jive, 
 	};
 	
@@ -436,118 +442,162 @@ sub showArtwork {
 
 sub playTrack {
 	my ( $client, $url, $track, $remoteMeta, $tags ) = @_;
-	playAddTrack( $client, $url, $track, $remoteMeta, $tags, 'play');
-}
-	
-sub addTrack {
-	my ( $client, $url, $track, $remoteMeta, $tags ) = @_;
-	playAddTrack( $client, $url, $track, $remoteMeta, $tags, 'add');
-}
-
-sub playAddTrack {
-	my ( $client, $url, $track, $remoteMeta, $tags, $action ) = @_;
 	my $items = [];
 	my $jive;
 	
-	my ($play_string, $add_string, $delete_string, $jump_string);
-	if ( $track->remote ) {
-		$play_string   = cstring($client, 'PLAY');
-		$add_string    = cstring($client, 'ADD');
-		$delete_string = cstring($client, 'REMOVE_FROM_PLAYLIST');
-		$jump_string   = cstring($client, 'PLAY');
-	} else {
-		$play_string   = cstring($client, 'JIVE_PLAY_THIS_SONG');
-		$add_string    = cstring($client, 'JIVE_ADD_THIS_SONG');
-		$delete_string = cstring($client, 'REMOVE_FROM_PLAYLIST');
-		$jump_string   = cstring($client, 'JIVE_PLAY_THIS_SONG');
-	}	
+	my $play_string = cstring($client, 'PLAY');
 
-	# setup hash for different items between play and add
-	my $menuItems = {
-		play => {
-			string  => $play_string,
-			style   => 'itemplay',
-			command => [ 'playlistcontrol' ],
-			cmd     => 'load',
-		},
-		add => {
-			string  => $add_string,
-			style   => 'itemadd',
-			command => [ 'playlistcontrol' ],
-			cmd     => 'add',
-		},
-		'add-hold' => {
-			string  => $add_string,
-			style   => 'itemadd',
-			command => [ 'playlistcontrol' ],
-			cmd     => 'insert',
-		},
-		delete => {
-			string  => $delete_string,
-			style   => 'item',
-			command => [ 'playlist', 'delete', $tags->{playlistIndex} ],
-		},
-		jump => {
-			string  => $jump_string,
-			style   => 'itemplay',
-			command => [ 'playlist', 'jump', $tags->{playlistIndex} ],
-		},
-	};
-
+	my $actions;
+	# "Play Song" in current playlist context is 'jump'
 	if ( $tags->{menuContext} eq 'playlist' ) {
-		if ( $action eq 'play' ) {
-			$action = 'jump';
-		} elsif ( $action eq 'add' ) {
-			$action = 'delete';
-		}
+		$actions = {
+			go => {
+				player => 0,
+				cmd => [ 'playlist', 'jump', $tags->{playlistIndex} ],
+				nextWindow => 'parent',
+			},
+		};
+		# play, add and add-hold all have the same behavior for this item
+		$actions->{play} = $actions->{go};
+		$actions->{add} = $actions->{go};
+		$actions->{'add-hold'} = $actions->{go};
+
+	# typical "Play Song" item
+	} else {
+
+		$actions = {
+			go => {
+				player => 0,
+				cmd => [ 'playlistcontrol' ],
+				params => {
+					cmd => 'load',
+					track_id => $track->id,
+				},
+				nextWindow => 'nowPlaying',
+			},
+			add => {
+				player => 0,
+				cmd => [ 'playlistcontrol' ],
+				params => {
+					cmd => 'add',
+					track_id => $track->id,
+				},
+				nextWindow => 'parent',
+			},
+			'add-hold' => {
+				player => 0,
+				cmd => [ 'playlistcontrol' ],
+				params => {
+					cmd => 'insert',
+					track_id => $track->id,
+				},
+				nextWindow => 'parent',
+			},
+		};
+		# play is go
+		$actions->{play} = $actions->{go};
 	}
 
-	my $actions = {
-		do => {
-			player => 0,
-			cmd => $menuItems->{$action}{command},
-		},
-		play => {
-			player => 0,
-			cmd => $menuItems->{$action}{command},
-		},
-		add => {
-			player => 0,
-			cmd    => $menuItems->{add}{command},
-		},
-	};
-	# tagged params are sent for play and add, not delete/jump
-	if ($action ne 'delete' && $action ne 'jump') {
-		$actions->{'add-hold'} = {
-			player => 0,
-			cmd => $menuItems->{'add-hold'}{command},
-		};
-		$actions->{'add'}{'params'} = {
-			cmd => $menuItems->{add}{cmd},
-			track_id => $track->id,
-		};
-		$actions->{'add-hold'}{'params'} = {
-			cmd => $menuItems->{'add-hold'}{cmd},
-			track_id => $track->id,
-		};
-		$actions->{'do'}{'params'} = {
-			cmd => $menuItems->{$action}{cmd},
-			track_id => $track->id,
-		};
-		$actions->{'play'}{'params'} = {
-			cmd => $menuItems->{$action}{cmd},
-			track_id => $track->id,
-		};
-	
-	} else {
-		$jive->{nextWindow} = 'playlist';
-	}
 	$jive->{actions} = $actions;
-	$jive->{style} = $menuItems->{$action}{style};
 
 	push @{$items}, {
 		type => 'text',
-		name => $menuItems->{$action}{string},
+		name => $play_string,
+		jive => $jive, 
+	};
+	
+	return $items;
+}
+
+sub addTrackNext {
+	my ( $client, $url, $track, $remoteMeta, $tags ) = @_;
+	my $string = cstring($client, 'PLAY_NEXT');
+	my $cmd = 'insert';
+	if ( $tags->{menuContext} eq 'playlist' ) {
+		$cmd = 'playlistnext';
+	}
+	addTrack( $client, $url, $track, $remoteMeta, $tags, $string, $cmd );
+}
+
+sub addTrackEnd {
+	my ( $client, $url, $track, $remoteMeta, $tags ) = @_;
+
+	my $string = cstring($client, 'ADD_TO_END');
+	my $cmd = 'add';
+
+	# "Add Song" in current playlist context is 'delete'
+	if ( $tags->{menuContext} eq 'playlist' ) {
+		$string = cstring($client, 'REMOVE_FROM_PLAYLIST');
+		$cmd = 'delete';
+	}
+	addTrack( $client, $url, $track, $remoteMeta, $tags, $string, $cmd );
+}
+
+sub addTrack {
+	my ( $client, $url, $track, $remoteMeta, $tags , $string, $cmd ) = @_;
+
+	my $items = [];
+	my $jive;
+	
+	my $actions;
+	# remove from playlist
+	if ( $cmd eq 'delete' ) {
+		$string  = cstring($client, 'REMOVE_FROM_PLAYLIST');
+		$actions = {
+			go => {
+				player     => 0,
+				cmd        => [ 'playlist', 'delete', $tags->{playlistIndex} ],
+				nextWindow => 'parent',
+			},
+		};
+		# play, add and add-hold all have the same behavior for this item
+		$actions->{play} = $actions->{go};
+		$actions->{add} = $actions->{go};
+		$actions->{'add-hold'} = $actions->{go};
+
+	# play next in the playlist context
+	} elsif ( $cmd eq 'playlistnext' ) {
+		my $moveTo = Slim::Player::Source::playingSongIndex($client) || 0;
+		if ( $tags->{playlistIndex} > $moveTo ) {
+			$moveTo = $moveTo + 1;
+		}
+		$actions = {
+			go => {
+				player     => 0,
+				cmd        => [ 'playlist', 'move', $tags->{playlistIndex}, $moveTo ],
+				nextWindow => 'parent',
+			},
+		};
+		# play, add and add-hold all have the same behavior for this item
+		$actions->{play} = $actions->{go};
+		$actions->{add} = $actions->{go};
+		$actions->{'add-hold'} = $actions->{go};
+
+
+	# typical "Add Song" item
+	} else {
+
+		$actions = {
+			add => {
+				player => 0,
+				cmd => [ 'playlistcontrol' ],
+				params => {
+					cmd => $cmd,
+					track_id => $track->id,
+				},
+				nextWindow => 'parent',
+			},
+		};
+		# play and go have same behavior as go here
+		$actions->{play} = $actions->{add};
+		$actions->{go} = $actions->{add};
+	}
+
+	$jive->{actions} = $actions;
+
+	push @{$items}, {
+		type => 'text',
+		name => $string,
 		jive => $jive, 
 	};
 	
@@ -572,18 +622,19 @@ sub infoAlbum {
 	}
 	elsif ( my $album = $track->album ) {
 		my $id = $album->id;
+		my $artist = $track->artist;
 
 		my $db = {
 			hierarchy         => 'album,track',
 			level             => 1,
 			findCriteria      => { 
 				'album.id'       => $id,
-				'contributor.id' => ( blessed $track->artist ) ? $track->artist->id : undef,
+				'contributor.id' => ( blessed $artist ) ? $artist->id : undef,
 			},
 			selectionCriteria => {
 				'track.id'       => $track->id,
 				'album.id'       => $id,
-				'contributor.id' => ( blessed $track->artist ) ? $track->artist->id : undef,
+				'contributor.id' => ( blessed $artist ) ? $artist->id : undef,
 			},
 		};
 		
@@ -672,8 +723,8 @@ sub infoGenres {
 			},
 			selectionCriteria => {
 				'track.id'       => $track->id,
-				'album.id'       => ( blessed $track->album ) ? $track->album->id : undef,
-				'contributor.id' => ( blessed $track->artist ) ? $track->artist->id : undef,
+				'album.id'       => $track->albumid,
+				'contributor.id' => $track->artistid,
 			},
 		};
 		
@@ -741,6 +792,7 @@ sub infoYear {
 	my $item;
 	
 	if ( my $year = $track->year ) {
+		
 		my $db = {
 			hierarchy         => 'year,album,track',
 			level             => 1,
@@ -749,8 +801,8 @@ sub infoYear {
 			},
 			selectionCriteria => {
 				'track.id'       => $track->id,
-				'album.id'       => ( blessed $track->album ) ? $track->album->id : undef,
-				'contributor.id' => ( blessed $track->artist ) ? $track->artist->id : undef,
+				'album.id'       => $track->albumid,
+				'contributor.id' => $track->artistid,
 			},
 		};
 
@@ -903,7 +955,7 @@ sub infoMoreInfo {
 	
 	return {
 		name => cstring($client, 'MOREINFO'),
-
+		isContextMenu => 1,
 		web  => {
 			group  => 'moreinfo',
 			unfold => 1,
@@ -1285,7 +1337,15 @@ sub cliQuery {
 	my $menuContext    = $request->getParam('context') || 'normal';
 	my $playlist_index = defined( $request->getParam('playlist_index') ) ?  $request->getParam('playlist_index') : undef;
 	
-
+	# special case-- playlist_index given but no trackId
+	if (defined($playlist_index) && ! $trackId ) {
+		my $song = Slim::Player::Playlist::song( $client, $playlist_index );
+		$trackId = $song->id;
+		$url     = $song->url;
+		$request->addParam('track_id', $trackId);
+		$request->addParam('url', $url);
+	}
+		
 	my $tags = {
 		menuMode      => $menuMode,
 		menuContext   => $menuContext,

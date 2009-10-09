@@ -1,11 +1,11 @@
 package Slim::Display::NoDisplay;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: NoDisplay.pm 22943 2008-08-28 17:56:34Z andy $
+# $Id: NoDisplay.pm 27975 2009-08-01 03:28:30Z andy $
 
 =head1 NAME
 
@@ -28,7 +28,7 @@ use Slim::Utils::Log;
 sub showBriefly {
 	my $display = shift;
 
-	if (logger('player.display')->is_info) {
+	if (main::INFOLOG && logger('player.display')->is_info) {
 		my ($line, $subr) = (caller(1))[2,3];
 		($line, $subr) = (caller(2))[2,3] if $subr eq 'Slim::Player::Player::showBriefly';
 		logger('player.display')->info(sprintf "caller %s (%d) notifyLevel=%d ", $subr, $line, $display->notifyLevel);

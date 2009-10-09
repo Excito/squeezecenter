@@ -1,6 +1,6 @@
 package Slim::Buttons::Home;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -22,13 +22,12 @@ Slim::Buttons::Home
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Home> is a SqueezeCenter module for creating and
+L<Slim::Buttons::Home> is a Squeezebox Server module for creating and
 navigating a configurable multilevel menu structure.
 
 =cut
 
 use strict;
-use File::Spec::Functions qw(:ALL);
 
 use Slim::Buttons::BrowseDB;
 use Slim::Buttons::BrowseTree;
@@ -103,8 +102,10 @@ sub init {
 					}
 					return $client->string($string) . $append;
 				}
-				elsif ( $string eq 'SQUEEZENETWORK_PIN' ) {
-					return sprintf $client->string($string), $client->pin;
+				elsif ( $string eq 'MESSAGE_COUNT' ) {
+					my $count = $client->playerData->userid->messageCount;
+					
+					return $client->string( $string, $count );
 				}
 			}
 
@@ -138,10 +139,6 @@ sub init {
 			'useMode'   => 'alarm',
 			'externRef' => sub {return 'test';},
 		};
-		
-		$home{SQUEEZENETWORK_PIN} = {
-			'useMode' => 'setup.pinhelp',
-		},
 	}
 
 	# Align actions as per Bug 8929 - in home menu add and play just go right.
@@ -168,6 +165,15 @@ sub init {
 			Slim::Buttons::Input::List::exitInput($client, 'right');		
 		},
 	);
+
+	Slim::Control::Request::subscribe(\&_libraryChanged, [['library'], ['changed']]);
+}
+
+sub _libraryChanged {
+	foreach ( Slim::Player::Client::clients() ) {
+		updateMenu($_);
+		$_->update();
+	}
 }
 
 =head2 forgetClient ( $client )
@@ -201,7 +207,7 @@ sub addSubMenu {
 
 	if (!exists $home{$menu} && defined $submenuref) {
 
-		$log->info("$menu does not exist. creating...");
+		main::INFOLOG && $log->info("$menu does not exist. creating...");
 
 		addMenuOption($menu);
 	}
@@ -231,7 +237,7 @@ Takes two strings, deleting the menu indicated by $submenuname from the menu nam
 sub delSubMenu {
 	my ($menu, $name) = @_;
 	
-	$log->info("Deleting $name from $menu");
+	main::INFOLOG && $log->info("Deleting $name from $menu");
 	
 	if (!exists $home{$menu}{'submenus'}) {
 
@@ -322,9 +328,22 @@ sub setMode {
 	}
 	
 	if ( main::SLIM_SERVICE ) {
-		# if player not yet linked to an account, or unauthorized, force client to register PIN
+		# if player not yet linked to an account, or unauthorized, force client to signup/login
 		if ( $client->playerData->userid == 1 || !$client->playerData->authorized ) {
-			Slim::Buttons::Common::pushMode( $client, 'setup.finish', undef );
+			# Push into registration menu
+			my $name  = 'SB_ACCOUNT';
+						
+			my %params = (
+				header   => $name,
+				modeName => $name,
+				url      => Slim::Networking::SqueezeNetwork->url('/api/register/v1/opml'),
+				title    => '',
+				timeout  => 35,
+				blockPop => 1, # don't allow user to exit the menu
+			);
+			
+			Slim::Buttons::Common::setMode( $client, 'xmlbrowser', \%params );
+			
 			return;
 		}
 	}
@@ -882,6 +901,10 @@ sub updateMenu {
 	}
 	
 	for my $menuItem ( @{$menuItem} ) {
+		if ($menuItem eq 'BROWSE_MUSIC' && !Slim::Schema::hasLibrary()) {
+			next;
+		}
+		
 		# more leakage of the LineIn plugin..
 		if ($menuItem eq 'PLUGIN_LINE_IN' && !($client->hasLineIn && $client->lineInConnected)) {
 			next;
@@ -914,14 +937,6 @@ sub updateMenu {
 			next if $hasSpecialMenu;
 			
 			next if exists $disabledMenus{$menuItem};
-			
-			if ( $menuItem eq 'PLUGIN_CHOOSESERVER' ) {
-				# Bug 3157, add PIN to main menu if the player isn't linked to a
-				# SN account
-				if ( $client->playerData->userid == 1 ) {
-					push @home, 'SQUEEZENETWORK_PIN';
-				}
-			}
 		}
 		
 		push @home, $menuItem;
@@ -931,12 +946,109 @@ sub updateMenu {
 
 		push @home, 'NOW_PLAYING';
 	}
+	
+	# Add home menu apps between Internet Radio and My Apps
+	my $apps    = $client->apps;
+	my $appMenu = [];
+	
+	for my $app ( keys %{$apps} ) {
+		# Skip non home-menu apps
+		next unless $apps->{$app}->{home_menu} == 1;
+		
+		my $title = $apps->{$app}->{title};
+		if ( $title eq uc($title) ) {
+			$title = $client->string($title);
+		}
+		
+		# Is this app supported by a built-in plugin?
+		if ( my $plugin = $apps->{$app}->{plugin} ) {
+			# Make sure it's enabled
+			if ( my $pluginInfo = Slim::Utils::PluginManager->isEnabled($plugin) ) {
+				push @{$appMenu}, {
+					mode => $pluginInfo->{name},
+					text => $title,
+				};
+			}
+		}
+		elsif ( $apps->{$app}->{type} eq 'opml' ) {
+			# for type=opml without a mode, use generic OPML plugin
+			push @{$appMenu}, {
+				mode => $title,
+				text => $title,
+			};
+			
+			my $url = $apps->{$app}->{url} =~ /^http/
+				? $apps->{$app}->{url} 
+				: Slim::Networking::SqueezeNetwork->url( $apps->{$app}->{url} );
+			
+			# Create new XMLBrowser mode for this item
+			if ( !exists $home{$title} ) {
+				addMenuOption( $title => {
+					useMode => sub {
+						my $client = shift;
+					
+						my %params = (
+							header   => $title,
+							modeName => $title,
+							url      => $url,
+							title    => $title,
+							timeout  => 35,
+						);
+					
+						Slim::Buttons::Common::pushMode( $client, 'xmlbrowser', \%params );
+					
+						$client->modeParam( handledTransition => 1 );
+					},
+				} );
+			}
+		}
+	}
+	
+	# Sort app menu after localization
+	my @sorted =
+	 	map { $_->{mode} } 
+		sort { $a->{text} cmp $b->{text} }
+		@{$appMenu};
+	
+	# Insert app menu after radio
+	splice @home, 3, 0, @sorted;
+	
+	if ( main::SLIM_SERVICE && !$hasSpecialMenu ) {
+		# Bug 13230, display a one-time message to users about this menu change
+		# Not shown for users with a special menu
+		my $mode = 'MESSAGE_COUNT';
+		if ( !exists $home{$mode} ) {
+			my $url = Slim::Networking::SqueezeNetwork->url('/api/messages/v1/opml');
+			
+			addMenuOption( $mode => sub {
+				my $client = shift;
+		
+				my %params = (
+					header   => $mode,
+					modeName => $mode,
+					url      => $url,
+					title    => $mode,
+					timeout  => 35,
+				);
+		
+				Slim::Buttons::Common::pushMode( $client, 'xmlbrowser', \%params );
+		
+				$client->modeParam( handledTransition => 1 );
+			} );
+		}
+		
+		if ( $client->playerData->userid->messageCount ) {
+			unshift @home, 'MESSAGE_COUNT';
+		}
+	}
 
 	$homeChoices{$client} = \@home;
 
 	# this is only for top level, so shortcut out if player is not at top level
-	if ($client->curDepth()) {
-	
+	# Bug 14134, this used to check $client->curDepth() but it does not really return the current depth
+	# modeStack is a better way to determine where you are.  This checks for > 2 because on the home
+	# menu the modeStack is ["home", "INPUT.List"]
+	if ( scalar @{ $client->modeStack || [] } > 2 ) {
 		$client->update();
 		return;
 	}

@@ -1,8 +1,8 @@
 package Slim::Buttons::Common;
 
-# $Id: Common.pm 25903 2009-04-09 19:00:45Z andy $
+# $Id: Common.pm 28451 2009-09-06 15:32:00Z tom $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -50,11 +50,6 @@ use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Buttons::Block;
 use Slim::Utils::Prefs;
-
-if ( main::SLIM_SERVICE ) {
-	# intro mode for SN
-	require SDI::Service::Buttons::SetupWizard;
-}
 
 # hash of references to functions to call when we leave a mode
 our %leaveMode = ();
@@ -106,7 +101,7 @@ my $prefs = preferences('server');
 =head2 init( )
 
 This method must be called before all other Slim::Buttons::* modules.  It
-initialises all other SqueezeCenter core button modules and registers the "Now
+initialises all other Squeezebox Server core button modules and registers the "Now
 Playing" screensaver.
 
 =cut
@@ -136,10 +131,6 @@ sub init {
 	Slim::Buttons::TrackInfo::init();
 	Slim::Buttons::RemoteTrackInfo::init();
 	Slim::Buttons::Volume::init();
-	
-	if ( main::SLIM_SERVICE ) {
-		SDI::Service::Buttons::SetupWizard::init();
-	}
 
 	addSaver('playlist', undef, undef, undef, 'SCREENSAVER_JUMP_TO_NOW_PLAYING', 'PLAY');
 }
@@ -187,10 +178,10 @@ sub addSaver {
 	my $setModeFunction = shift;
 	my $leaveModeFunction = shift;
 	my $displayName = shift;
-	my $type = shift || 'PLAY-IDLE-OFF';
+	my $type = shift || 'PLAY-IDLE-OFF-ALARM';
 	my $valid = shift;
 
-	logger('player.ui')->info("Registering screensaver $displayName $type");
+	main::INFOLOG && logger('player.ui')->info("Registering screensaver $displayName $type");
 
 	$savers->{$name} = {
 		'name'  => $displayName,
@@ -229,7 +220,7 @@ Called from settings routines in Slim::Web::Setup and Slim::Buttons::Settings
 sub validSavers {
 	my $client = shift;
 
-	my $ret = { 'screensaver' => {}, 'idlesaver' => {}, 'offsaver' => {} };
+	my $ret = { 'screensaver' => {}, 'idlesaver' => {}, 'offsaver' => {}, 'alarmsaver' => {} };
 
 	for my $name (keys %$savers) {
 
@@ -238,6 +229,7 @@ sub validSavers {
 		if ( (!defined($client)) || !$saver->{'valid'} || $saver->{'valid'}->($client) ) {
 
 			$ret->{'screensaver'}->{$name} = $saver->{'name'} if $saver->{'type'} =~ /PLAY/;
+			$ret->{'alarmsaver'}->{$name}  = $saver->{'name'} if $saver->{'type'} =~ /ALARM/;
 			$ret->{'idlesaver'}->{$name}   = $saver->{'name'} if $saver->{'type'} =~ /IDLE/;
 			$ret->{'offsaver'}->{$name}    = $saver->{'name'} if $saver->{'type'} =~ /OFF/;
 		}
@@ -571,7 +563,7 @@ our %functions = (
 			}
 		}
 
-		$log->info("Brightness using $brightmode during mode: $mode");
+		main::INFOLOG && $log->info("Brightness using $brightmode during mode: $mode");
 
 		my $newBrightness;
 
@@ -628,7 +620,7 @@ our %functions = (
 
 		if ($buttonarg eq 'toggle') {
 
-			$log->info("Switching to playlist view.");
+			main::INFOLOG && $log->info("Switching to playlist view.");
 
 			Slim::Buttons::Common::setMode($client, 'home');
 			Slim::Buttons::Home::jump($client, 'playlist');
@@ -678,14 +670,20 @@ our %functions = (
 		my $buttonarg = shift;
 		my $playdisp = undef;
 
-		# Repeat presses of 'search' will step through search menu
-		if ($client->curSelection($client->curDepth) eq 'SEARCH' && mode($client) eq 'INPUT.List') {
+		if (!Slim::Schema::hasLibrary()) {
+			$client->bumpRight();
+			return;
+		}
+
+		# Repeat presses of 'search' will step through search menu while in the top level search menu
+		if (($client->modeParam('header') eq 'SEARCH' || 
+				$client->curSelection($client->curDepth) eq 'SEARCH') && mode($client) eq 'INPUT.List') {
 
 			(Slim::Buttons::Input::List::getFunctions())->{'down'}($client);
 
 		} elsif (mode($client) ne 'search') {
 
-			Slim::Buttons::Home::jumpToMenu($client, "SEARCH");
+			Slim::Buttons::Common::pushModeLeft($client, 'search');
 
 			$client->update();
 		}
@@ -696,6 +694,11 @@ our %functions = (
 		my $button = shift;
 		my $buttonarg = shift;
 		my $playdisp = undef;
+		
+		if (!Slim::Schema::hasLibrary()) {
+			$client->bumpRight();
+			return;
+		}
 
 		# Repeat presses of 'browse' will step through browse menu
 		if ($client->curDepth eq '-BROWSE_MUSIC' && mode($client) eq 'INPUT.List') {
@@ -720,7 +723,7 @@ our %functions = (
 
 		if (defined $buttonarg && $buttonarg =~ /^add$|^add(\d+)/) {
 
-			my $hotkey = $1;
+			my $preset = $1;
 
 			# First lets try for a listRef from INPUT.*
 			my $list = $client->modeParam('listRef');
@@ -801,24 +804,27 @@ our %functions = (
 
 			if ($url && $title && $favs) {
 
-				if (defined $hotkey) {
+				if (defined $preset) {
+					# Add/overwrite preset for this slot
+					$client->setPreset( {
+						slot   => $preset,
+						URL    => $url,
+						text   => $title,
+						type   => $type || 'audio',
+						parser => $parser,
+					} );
 					
-					my $oldindex = $favs->hasHotkey($hotkey);
-
-					$favs->setHotkey($oldindex, undef) if defined $oldindex;
-
-					my $newindex = $favs->add($url, $title, $type || 'audio', $parser);
-
-					$favs->setHotkey($newindex, $hotkey);
-
-				} else {
-
-					my (undef, $hotkey) = $favs->add($url, $title, $type || 'audio', $parser, 'hotkey', $icon);
+					$client->showBriefly( {
+						'line' => [ $client->string('PRESET_ADDING', $preset), $title ]
+					} );
 				}
-
-				$client->showBriefly( {
-					'line' => [ $client->string('FAVORITES_ADDING'), $title ]
-				} );
+				else {
+					$favs->add($url, $title, $type || 'audio', $parser, undef, $icon);
+					
+					$client->showBriefly( {
+						'line' => [ $client->string('FAVORITES_ADDING'), $title ]
+					} );
+				}
 
 			# if all of that fails, send the debug with a best guess helper for tracing back
 			} else {
@@ -827,7 +833,7 @@ our %functions = (
 
 					$log->error("Error: No valid url found, not adding favorite!");
 
-					if ($obj) {
+					if (main::DEBUGLOG && $obj) {
 						$log->error(Data::Dump::dump($obj));
 					} else {
 						$log->logBacktrace;
@@ -841,6 +847,87 @@ our %functions = (
 			Slim::Buttons::Home::jump($client, 'FAVORITES');
 			Slim::Buttons::Common::pushModeLeft($client, 'FAVORITES');
 		}
+	},
+	
+	# Play preset
+	'playPreset' => sub {
+		my ( $client, $button, $digit ) = @_;
+		
+		if ( $digit == 0 ) {
+			$digit = 10;
+		}
+		
+		my $preset = $prefs->client($client)->get('presets')->[ $digit - 1 ];
+		
+		if ( $preset && $preset->{type} =~ /audio|playlist/ ) {
+			my $url   = $preset->{URL};
+			my $title = $preset->{text};
+
+			if ( $preset->{parser} || $preset->{type} eq 'playlist' ) {
+
+				main::INFOLOG && $log->info("Playing preset number $digit $title $url via xmlbrowser");
+
+				my $item = {
+					url    => $url,
+					title  => $title,
+					type   => $preset->{type},
+					parser => $preset->{parser},
+				};
+
+				Slim::Buttons::XMLBrowser::playItem($client, $item);
+			}
+			else {
+				main::INFOLOG && $log->info("Playing preset number $digit $title $url");
+
+				Slim::Music::Info::setTitle($url, $title);
+
+				$client->showBriefly($client->currentSongLines({ suppressDisplay => Slim::Buttons::Common::suppressStatus($client) }));
+
+				$client->execute(['playlist', 'play', $url]);
+			}
+		}
+		else {
+			main::INFOLOG && $log->info("Can't play preset number $digit - not an audio entry");
+
+			$client->showBriefly( {
+				 line => [ sprintf($client->string('PRESETS_NOT_DEFINED'), $digit) ],
+			} );
+		}
+	},
+
+	# preset - IR remote (play or store depending on how long the button is held for)
+	'preset' => sub {
+		my ( $client, $button, $digit ) = @_;
+
+		my $release = $digit =~ /release/;
+		$digit =~ s/release//;
+		my $num = $digit ? $digit : 10;
+
+		if (!$release) {
+
+			my $display = $client->curLines;
+
+			if ($client->linesPerScreen == 1) {
+				$display->{'line'}[1] = sprintf($client->string('PRESET'), $digit) ;
+			} else {
+				$display->{'line'}[0] = sprintf($client->string('PRESET_HOLD_TO_SAVE'), $digit) ;
+			}
+			$display->{'jive'} = undef;
+
+			$client->showBriefly($display, { duration => 5, callback => sub {
+				if (Slim::Hardware::IR::holdTime($client) > 5 ) {
+					# do this on a timer so it happens after showBriefly ends and we can see any screen updates which result
+					Slim::Utils::Timers::setTimer($client, Time::HiRes::time(), \&Slim::Hardware::IR::executeButton, "favorites_add$digit", $client->lastirtime, undef, 1);
+				}
+			} });
+
+		} else {
+
+			if (Slim::Hardware::IR::holdTime($client) < 5 ) {
+				Slim::Hardware::IR::executeButton($client, "playPreset_$digit", $client->lastirtime, undef, 1);
+			}
+		}
+
 	},
 
 	# pressing recall toggles the repeat.
@@ -857,25 +944,26 @@ our %functions = (
 		$client->execute(["playlist", "repeat", $repeat]);
 
 		# display the fact that we are (not) repeating
-
+		my $line;
 		if (Slim::Player::Playlist::repeat($client) == 0) {
-
-			$client->showBriefly( {
-				'line' => [ "", $client->string('REPEAT_OFF') ]
-			});
+			$line = $client->string('REPEAT_OFF');
 
 		} elsif (Slim::Player::Playlist::repeat($client) == 1) {
-
-			$client->showBriefly( {
-				'line' =>  [ "", $client->string('REPEAT_ONE') ]
-			});
+			$line = $client->string('REPEAT_ONE');
 
 		} elsif (Slim::Player::Playlist::repeat($client) == 2) {
-
-			$client->showBriefly( {
-				'line' => [ "", $client->string('REPEAT_ALL') ]
-			});
+			$line = $client->string('REPEAT_ALL');
 		}
+
+		$client->showBriefly( {
+			'line' => [ "", $line ],
+			jive => {
+				text => [ "", $line ],
+				type => 'icon',
+				style => 'repeat' . Slim::Player::Playlist::repeat($client),
+			}
+		});
+		
 	},
 
 	# Volume always pushes into Slim::Buttons::Volume to allow Transporter and Boom knobs to be used
@@ -970,7 +1058,7 @@ our %functions = (
 		my $currentAlarm = Slim::Utils::Alarm->getCurrentAlarm($client);
 		if (defined $currentAlarm) {
 			
-			$log->info("Alarm Active: sleep function override for snooze");
+			main::INFOLOG && $log->info("Alarm Active: sleep function override for snooze");
 			$currentAlarm->snooze;
 			return;
 		}
@@ -1072,24 +1160,27 @@ our %functions = (
 
 		$client->execute(["playlist", "shuffle" , $shuffle]);
 		
+		my $line;
 		if (Slim::Player::Playlist::shuffle($client) == 2) {
-
-			$client->showBriefly( {
-				'line' => [ "", $client->string('SHUFFLE_ON_ALBUMS') ]
-			});
+			$line = $client->string('SHUFFLE_ON_ALBUMS');
 
 		} elsif (Slim::Player::Playlist::shuffle($client) == 1) {
-
-			$client->showBriefly( {
-				'line' => [ "", $client->string('SHUFFLE_ON_SONGS') ]
-			});
+			$line = $client->string('SHUFFLE_ON_SONGS');
 
 		} else {
+			$line = $client->string('SHUFFLE_OFF');
 
-			$client->showBriefly( {
-				'line' => [ "", $client->string('SHUFFLE_OFF') ]
-			});
 		}
+
+		$client->showBriefly( {
+			'line' => [ '', $line ],
+			jive => {
+				text  => [ '', $line ],
+				type  => 'icon',
+				style => 'shuffle' . Slim::Player::Playlist::shuffle($client),
+			}
+		});
+
 	},
 
 	'titleFormat' => sub  {
@@ -1203,18 +1294,42 @@ our %functions = (
 	'home' => sub {
 		my ($client, $funct, $functarg) = @_;
 
+		my $display    = $client->display;
+		my $oldscreen2 = $client->modeParam('screen2active');
+		my $oldlines   = $client->curLines;
+
 		if ($client->modeParam('HOME-MENU')) {
 
-			$log->info("Switching to playlist view.");
+			main::INFOLOG && $log->info("Switching to playlist view.");
+
 			Slim::Buttons::Common::setMode($client, 'home');
 			Slim::Buttons::Home::jump($client, 'NOW_PLAYING');
-			Slim::Buttons::Common::pushModeLeft($client, 'playlist');
+
+			pushMode($client, 'playlist');
+
+			unless ($display->hasScreen2) {
+
+				$display->pushLeft($oldlines, $display->curLines({ trans => 'pushModeLeft' }));
+
+			} else {
+
+				$client->pushLeft($oldlines, pushpopScreen2($client, $oldscreen2, $display->curLines({ trans => 'pushModeLeft' })));
+			}
 
 		} else {
 
-			$log->info("Switching to home menu.");
+			main::INFOLOG && $log->info("Switching to home menu.");
+
 			Slim::Buttons::Common::setMode($client, 'home');
-			$client->pushRight();
+
+			unless ($display->hasScreen2) {
+
+				$display->pushRight($oldlines, $display->curLines({ trans => 'pushModeRight'}));
+
+			} else {
+
+				$display->pushRight($oldlines, pushpopScreen2($client, $oldscreen2, $display->curLines({ trans => 'pushModeRight' })));
+			}
 		}
 	},
 
@@ -1911,7 +2026,7 @@ sub pushMode {
 	my $setmode = shift;
 	my $paramHashRef = shift;
 
-	$log->info("Pushing button mode: $setmode");
+	main::INFOLOG && $log->info("Pushing button mode: $setmode");
 
 	my $oldscreen2 = $client->modeParam('screen2active');
 
@@ -2014,7 +2129,7 @@ sub popMode {
 
 		$client->updateKnob(1);
 
-		$log->info("Nothing on the modeStack - updatingKnob & returning.");
+		main::INFOLOG && $log->info("Nothing on the modeStack - updatingKnob & returning.");
 
 		return undef;
 	}
@@ -2066,7 +2181,7 @@ sub popMode {
 		}
 	}
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info("Popped to button mode: " . (mode($client) || 'empty!'));
 	}
 

@@ -2,13 +2,14 @@ package Slim::Networking::SqueezeNetwork;
 
 # $Id: SqueezeNetwork.pm 11768 2007-04-16 18:14:55Z andy $
 
-# Async interface to SqueezeNetwork API
+# Async interface to mysqueezebox.com API
 
 use strict;
 use base qw(Slim::Networking::SimpleAsyncHTTP);
 
 use Digest::SHA1 qw(sha1_base64);
 use JSON::XS::VersionOneAndTwo;
+use MIME::Base64 qw(encode_base64);
 use URI::Escape qw(uri_escape);
 
 if ( !main::SLIM_SERVICE && !main::SCANNER ) {
@@ -28,14 +29,13 @@ my $log   = logger('network.squeezenetwork');
 
 my $prefs = preferences('server');
 
-# This is a hashref of SqueezeNetwork server types
+# This is a hashref of mysqueezebox.com server types
 #   and names.
 
 my $_Servers = {
-	sn      => 'www.squeezenetwork.com',
-	content => 'content.squeezenetwork.com',
-	update  => 'update.squeezenetwork.com',
-	test    => 'www.test.squeezenetwork.com',
+	sn      => 'www.mysqueezebox.com',
+	update  => 'update.mysqueezebox.com',
+	test    => 'www.test.mysqueezebox.com',
 };
 
 # Used only on SN
@@ -46,9 +46,15 @@ my $_sn_hosts_re;
 if ( main::SLIM_SERVICE ) {
 	$internal_http_host = SDI::Util::SNConfig::get_config_value('internal_http_host');
 	
+	my $sn_server = __PACKAGE__->get_server('sn');
+	my $old_sn_server = $sn_server =~ /test/
+		? 'www.test.squeezenetwork.com'
+		: 'www.squeezenetwork.com';
+	
 	$_sn_hosts = join(q{|},
 	        map { qr/\Q$_\E/ } (
-			__PACKAGE__->get_server('sn'),
+			$sn_server,
+			$old_sn_server,
 			$internal_http_host,
 			($ENV{SN_DEV} ? '127.0.0.1' : ())
 		)
@@ -77,7 +83,7 @@ sub get_server {
 sub init {
 	my $class = shift;
 	
-	$log->info('SqueezeNetwork Init');
+	main::INFOLOG && $log->info('SqueezeNetwork Init');
 	
 	# Convert old non-hashed password
 	if ( my $password = $prefs->get('sn_password') ) {
@@ -85,7 +91,7 @@ sub init {
 		$prefs->set( sn_password_sha => $password );
 		$prefs->remove('sn_password');
 			
-		$log->debug('Converted SN password to hashed version');
+		main::DEBUGLOG && $log->debug('Converted SN password to hashed version');
 	}
 	
 	Slim::Utils::Timers::setTimer(
@@ -99,15 +105,6 @@ sub init {
 					ecb => \&_init_error,
 				);
 			}
-			else {
-				# Initialize radio menu for non-SN user
-				my $http = $class->new(
-					\&_gotRadio,
-					\&_gotRadioError,
-				);
-				
-				$http->get( $class->url('/api/v1/radio') );
-			}
 		},
 	);
 }
@@ -118,13 +115,13 @@ sub _init_done {
 	my $snTime = $json->{time};
 	
 	if ( $snTime !~ /^\d+$/ ) {
-		$http->error( "Invalid SqueezeNetwork server timestamp" );
+		$http->error( "Invalid mysqueezebox.com server timestamp" );
 		return _init_error( $http );
 	}
 	
 	my $diff = $snTime - time();
 	
-	$log->info("Got SqueezeNetwork server time: $snTime, diff: $diff");
+	main::INFOLOG && $log->info("Got SqueezeNetwork server time: $snTime, diff: $diff");
 	
 	$prefs->set( sn_timediff => $diff );
 	
@@ -139,23 +136,19 @@ sub _init_done {
 			# Remove disabled plugins from player UI and web UI
 			for my $plugin ( @{ $json->{disabled_plugins} } ) {
 				my $pclass = "Slim::Plugin::${plugin}::Plugin";
-				if ( $pclass->can('setMode') ) {
+				if ( $pclass->can('setMode') && $pclass->playerMenu) {
 					Slim::Buttons::Home::delSubMenu( $pclass->playerMenu, $pclass->getDisplayName );
-					$log->debug( "Removing $plugin from player UI, service not allowed in country" );
+					main::DEBUGLOG && $log->debug( "Removing $plugin from player UI, service not allowed in country" );
 				}
 				
 				if ( $pclass->can('webPages') && $pclass->can('menu') ) {
 					Slim::Web::Pages->delPageLinks( $pclass->menu, $pclass->getDisplayName );
-					$log->debug( "Removing $plugin from web UI, service not allowed in country" );
+					main::DEBUGLOG && $log->debug( "Removing $plugin from web UI, service not allowed in country" );
 				}
 			}
 		}
 		
 		$prefs->set( sn_disabled_plugins => $json->{disabled_plugins} || [] );
-	}
-	
-	if ( $json->{active_services} ) {
-		$prefs->set( sn_active_services => $json->{active_services} );
 	}
 	
 	# Init the Internet Radio menu
@@ -179,7 +172,7 @@ sub _init_error {
 	my $http  = shift;
 	my $error = $http->error;
 	
-	$log->error( "Unable to login to SqueezeNetwork, sync is disabled: $error" );
+	$log->error( "Unable to login to mysqueezebox.com, sync is disabled: $error" );
 	
 	$prefs->remove('sn_timediff');
 	
@@ -189,7 +182,7 @@ sub _init_error {
 	
 	my $retry = 300 * ( $count + 1 );
 	
-	$log->error( "SqueezeNetwork sync init failed: $error, will retry in $retry" );
+	$log->error( "mysqueezebox.com sync init failed: $error, will retry in $retry" );
 	
 	Slim::Utils::Timers::setTimer(
 		undef,
@@ -198,28 +191,6 @@ sub _init_error {
 			__PACKAGE__->init();
 		}
 	);
-}
-
-sub _gotRadio {
-	my $http = shift;
-	
-	my $json = eval { from_json( $http->content ) };
-	
-	if ( $@ ) {
-		$http->error( $@ );
-		return _gotRadioError($http);
-	}
-	
-	if ( Slim::Utils::PluginManager->isEnabled('Slim::Plugin::InternetRadio::Plugin') ) {
-		Slim::Plugin::InternetRadio::Plugin->buildMenus( $json->{radio_menu} );
-	}
-}
-
-sub _gotRadioError {
-	my $http  = shift;
-	my $error = $http->error;
-	
-	$log->error( "Unable to retrieve radio directory from SN: $error" );
 }
 
 # Stop all communication with SN, if the user removed their login info for example
@@ -241,7 +212,7 @@ sub shutdown {
 	Slim::Networking::SqueezeNetwork::Stats->shutdown();
 }
 
-# Return a correct URL for SqueezeNetwork
+# Return a correct URL for mysqueezebox.com
 sub url {
 	my ( $class, $path, $external ) = @_;
 	
@@ -277,7 +248,11 @@ sub isSNURL {
 	
 	my $snBase = $class->url();
 	
-	return $url =~ /^$snBase/;
+	# Allow old SN hostname to be seen as SN
+	my $oldBase = $snBase;
+	$oldBase =~ s/mysqueezebox/squeezenetwork/;
+	
+	return $url =~ /^$snBase/ || $url =~ /^$oldBase/;
 }
 
 # Login to SN and obtain a session ID
@@ -302,11 +277,11 @@ sub login {
 			? $client->string('SQUEEZENETWORK_NO_LOGIN')
 			: Slim::Utils::Strings::string('SQUEEZENETWORK_NO_LOGIN');
 			
-		$log->info( $error );
+		main::INFOLOG && $log->info( $error );
 		return $params{ecb}->( undef, $error );
 	}
 	
-	$log->info("Logging in to SN as $username");
+	main::INFOLOG && $log->is_info && $log->info("Logging in to " . $_Servers->{sn} . " as $username");
 	
 	my $self = $class->new(
 		\&_login_done,
@@ -347,6 +322,16 @@ sub getHeaders {
 		# Add device id/firmware info
 		if ( $client->deviceid ) {
 			push @headers, 'X-Player-DeviceInfo', $client->deviceid . ':' . $client->revision;
+		}
+		
+		# Add player name
+		my $name = $client->name;
+		utf8::encode($name);
+		push @headers, 'X-Player-Name', encode_base64( $name, '' );
+		
+		# Bug 13963, Add "controlled by" string so SN knows what kind of menu to return
+		if ( my $controller = $client->controlledBy ) {
+			push @headers, 'X-Controlled-By', $controller;
 		}
 		
 		# Request JSON instead of XML, it is much faster to parse
@@ -398,7 +383,7 @@ sub _createHTTPRequest {
 	}
 	
 	if ( !$cookie && $url !~ m{api/v1/(login|radio)|public|update} ) {
-		$log->info("Logging in to SqueezeNetwork to obtain session ID");
+		main::INFOLOG && $log->info("Logging in to SqueezeNetwork to obtain session ID");
 	
 		# Login and get a session ID
 		$self->login(
@@ -407,7 +392,7 @@ sub _createHTTPRequest {
 				if ( my $cookie = $self->getCookie( $self->params('client') ) ) {
 					unshift @args, 'Cookie', $cookie;
 		
-					$log->info('Got SqueezeNetwork session ID');
+					main::INFOLOG && $log->info('Got SqueezeNetwork session ID');
 				}
 		
 				$self->SUPER::_createHTTPRequest( $type, $url, @args );
@@ -415,7 +400,7 @@ sub _createHTTPRequest {
 			ecb    => sub {
 				my ( $http, $error ) = @_;
 				$self->error( $error ); 
-				$self->{ecb}->( $self, $error );
+				$self->ecb->( $self, $error );
 			},
 		);
 		
@@ -443,7 +428,7 @@ sub _login_done {
 		$prefs->set( sn_session => $sid );
 	}
 	
-	$log->debug("Logged into SN OK");
+	main::DEBUGLOG && $log->debug("Logged into SN OK");
 	
 	$params->{cb}->( $self, $json );
 }
@@ -475,42 +460,6 @@ sub _construct_url {
 	}
 	
 	return $url;
-}
-
-sub hasAccount {
-	my ( $class, $client, $type ) = @_;
-		
-	if ( main::SLIM_SERVICE ) {
-		my $type_pref = {
-			pandora  => 'pandora_username',
-			rhapsody => 'plugin_rhapsody_direct_accounts',
-			lfm      => 'plugin_audioscrobbler_accounts',
-			slacker  => 'plugin_slacker_username',
-		};
-		
-		return $prefs->client($client)->get( $type_pref->{$type} );
-	}
-	else {
-		my $services = $prefs->get('sn_active_services') || {};
-		
-		return $services->{$type};
-	}
-}
-
-sub isServiceEnabled {
-	my ( $class, $client, $service ) = @_;
-	
-	if ( main::SLIM_SERVICE ) {
-		return $client->playerData->userid->isAllowedService($service);
-	}
-	
-	my $disabled = $prefs->get('sn_disabled_plugins') || [];
-	
-	if ( grep { lc($_) eq lc($service) } @{$disabled} ) {
-		return 0;
-	}
-	
-	return 1;
 }
 
 1;

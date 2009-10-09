@@ -1,8 +1,8 @@
 package Slim::Player::SongStreamController;
 
-# $Id: SongStreamController.pm 23986 2008-11-20 21:35:28Z andy $
+# $Id: SongStreamController.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -23,13 +23,13 @@ sub new {
 	my $self = {
 		song => $song,
 		streamHandler => $streamHandler,
-		protocolHandler => my $handler = Slim::Player::ProtocolHandlers->handlerForURL($song->{'streamUrl'}),
+		protocolHandler => my $handler = Slim::Player::ProtocolHandlers->handlerForURL($song->streamUrl()),
 	};
 
 	bless $self, $class;
 	
 	$_liveCount++;
-	if ($log->is_debug) {
+	if (main::DEBUGLOG && $log->is_debug) {
 		$log->debug("live=$_liveCount");	
 	}
 	
@@ -42,7 +42,7 @@ sub DESTROY {
 	$self->close();
 	
 	$_liveCount--;
-	if ($log->is_debug)	{
+	if (main::DEBUGLOG && $log->is_debug)	{
 		$log->debug("DESTROY($self) live=$_liveCount");
 	}
 }
@@ -51,7 +51,7 @@ sub song {return shift->{'song'};}
 sub streamHandler {return shift->{'streamHandler'};}
 sub protocolHandler {return shift->{'protocolHandler'};}
 
-sub songProtocolHandler {return shift->song()->{'handler'};}
+sub songProtocolHandler {return shift->song()->handler();}
 
 sub close {
 	my $self = shift;
@@ -67,11 +67,11 @@ sub close {
 }
 
 sub isDirect {
-	return shift->{'song'}->{'directstream'} || 0;
+	return shift->{'song'}->directstream() || 0;
 }
 
 sub streamUrl {
-	return shift->{'song'}->{'streamUrl'};
+	return shift->{'song'}->streamUrl();
 }
 
 sub track {

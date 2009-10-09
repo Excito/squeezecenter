@@ -1,9 +1,9 @@
 package Slim::Utils::MemoryUsage;
 
-# $Id: MemoryUsage.pm 25335 2009-03-04 23:05:23Z blblack $ 
+# $Id: MemoryUsage.pm 27975 2009-08-01 03:28:30Z andy $ 
 #
 # This module is a merging of B::TerseSize and Apache::Status 
-# put together to work with SqueezeCenter by Dan Sully
+# put together to work with Squeezebox Server by Dan Sully
 #
 # These are not the droids you're looking for.
 #
@@ -57,6 +57,27 @@ my %b_terse_exp = ('slow' => 'syntax', 'exec' => 'execution');
 
 # for catching stdout/stderr
 my ($out, $err, $oldout, $olderr);
+
+sub init {
+	Slim::Web::Pages->addPageFunction(qr/^memoryusage\.html.*/, sub {
+		my ($client, $params) = @_;
+	
+		my $item    = $params->{'item'};
+		my $type    = $params->{'type'};
+		my $command = $params->{'command'};
+	
+		unless ($item && $command) {
+	
+			return Slim::Utils::MemoryUsage->status_memory_usage();
+		}
+	
+		if (defined $item && defined $command && Slim::Utils::MemoryUsage->can($command)) {
+	
+			return Slim::Utils::MemoryUsage->$command($item, $type);
+		}
+	});
+}
+		
 
 sub UNIVERSAL::op_size {
 	$opcount++;

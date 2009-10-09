@@ -2,15 +2,18 @@ package Slim::Utils::OS;
 
 # $Id: Base.pm 21790 2008-07-15 20:18:07Z andy $
 
+# Squeezebox Server Copyright 2001-2009 Logitech.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License, 
+# version 2.
+
 # Base class for OS specific code
 
 use strict;
 use Config;
 use File::Path;
-use File::Copy;
 use File::Spec::Functions qw(:ALL);
 use FindBin qw($Bin);
-use POSIX qw(LC_CTYPE LC_TIME);
 
 use constant MAX_LOGSIZE => 1024 * 1024 * 100;
 
@@ -33,6 +36,21 @@ sub details {
 }
 
 sub initPrefs {};
+
+=head2 migratePrefsFolder()
+
+Use this sub to migrate complete prefs files before they are read.
+To be used during product migrations like eg. SqueezeCenter -> Squeezebox Server
+Windows & OSX handle this in the installer
+
+=cut
+
+sub migratePrefsFolder {};
+
+sub sqlHelperClass { 'Slim::Utils::MySQLHelper' }
+
+# Skip obsolete plugins, they should be deleted by installers
+sub skipPlugins {return (qw(Picks RadioIO ShoutcastBrowser Webcasters));}
 
 =head2 initSearchPath( )
 
@@ -59,11 +77,41 @@ sub initSearchPath {
 	}
 }
 
+=head2 initMySQL( )
+
+Provide a hook to do system specific MySQL initialization. This allows to eg. use a locally installed
+MySQL server instead of the instance installed with SC
+
+=cut
+
+sub initMySQL {
+	my ($class, $dbclass) = @_;
+	
+	require File::Which;
+	
+	# try to figure out whether we have a locally running MySQL
+	# which we can connect to using a socket file
+	my $mysql_config = File::Which::which('mysql_config');
+
+	# The user might have a socket file in a non-standard
+	# location. See bug 3443
+	if ($mysql_config && -x $mysql_config) {
+
+		my $socket = `$mysql_config --socket`;
+		chomp($socket);
+
+		if ($socket && -S $socket) {
+			$dbclass->socketFile($socket);
+		}
+		
+	}
+}
+
 =head2 dirsFor( $dir )
 
 Return OS Specific directories.
 
-Argument $dir is a string to indicate which of the SqueezeCenter directories we
+Argument $dir is a string to indicate which of the Squeezebox Server directories we
 need information for.
 
 =cut
@@ -79,9 +127,26 @@ sub dirsFor {
 		push @dirs, catdir($Bin, 'Slim', 'Plugin');
 
 		# add on path to plugins installed by Extension installer, NB this can only be called after Prefs is loaded
-		push @dirs, catdir(Slim::Utils::Prefs::preferences('server')->get('cachedir'), 'InstalledPlugins', 'Plugins');
+		push @dirs, catdir( Slim::Utils::Prefs::preferences('server')->get('cachedir'), 'InstalledPlugins', 'Plugins' );
 	}
 
+	elsif ($dir eq 'updates') {
+
+		my $updateDir;
+		eval {
+			$updateDir = catdir( Slim::Utils::Prefs::preferences('server')->get('cachedir'), $dir );
+		};
+		
+		if ($@) {
+			eval {
+				$updateDir = catdir( Slim::Utils::Light::getPref('cachedir'), $dir );
+			};
+		}
+		
+		mkdir $updateDir unless -d $updateDir;
+		push @dirs, $updateDir;
+	}
+	
 	return wantarray() ? @dirs : $dirs[0];
 }
 
@@ -94,6 +159,9 @@ Simple log rotation for systems which don't do this automatically (OSX/Windows).
 sub logRotate {
 	my $class   = shift;
 	my $dir     = shift || Slim::Utils::OSDetect::dirsFor('log');
+    my $maxSize = shift || MAX_LOGSIZE;
+
+	require File::Copy;
 
 	opendir(DIR, $dir) or return;
 
@@ -103,14 +171,14 @@ sub logRotate {
 		
 		$file = catdir($dir, $file);
 
-		# max. log size 10MB
-		if (-s $file > MAX_LOGSIZE) {
+		# max. log size (default: 10MB)
+		if (-s $file > $maxSize) {
 
 			# keep one old copy		
 			my $oldfile = "$file.0";
 			unlink $oldfile if -e $oldfile;
 			
-			move($file, $oldfile);
+			File::Copy::move($file, $oldfile);
 		}
 	}
 	
@@ -166,7 +234,6 @@ sub ignoredItems {
 	return (
 		# Items we should ignore on a linux volume
 		'lost+found' => 1,
-		'@eaDir'     => 1,
 	);
 }
 
@@ -177,12 +244,15 @@ Get details about the locale, system language etc.
 =cut
 
 sub localeDetails {
-	my $lc_time  = POSIX::setlocale(LC_TIME)  || 'C';
-	my $lc_ctype = POSIX::setlocale(LC_CTYPE) || 'C';
+	require POSIX;
+	
+	my $lc_time  = POSIX::setlocale(POSIX::LC_TIME())  || 'C';
+	my $lc_ctype = POSIX::setlocale(POSIX::LC_CTYPE()) || 'C';
 
 	# If the locale is C or POSIX, that's ASCII - we'll set to iso-8859-1
 	# Otherwise, normalize the codeset part of the locale.
 	if ($lc_ctype eq 'C' || $lc_ctype eq 'POSIX') {
+		warn "Your locale was detected as $lc_ctype, you may have problems with non-Latin filenames.  Consider changing your LANG variable to the correct locale, i.e. en_US.utf8\n";
 		$lc_ctype = 'iso-8859-1';
 	} else {
 		$lc_ctype = lc((split(/\./, $lc_ctype))[1]);
@@ -222,8 +292,10 @@ Return the system's language or 'EN' as default value
 =cut
 
 sub getSystemLanguage {
+	require POSIX;
+
 	my $class = shift;
-	$class->_parseLanguage(POSIX::setlocale(LC_CTYPE)); 
+	$class->_parseLanguage(POSIX::setlocale(POSIX::LC_CTYPE())); 
 }
 
 sub _parseLanguage {
@@ -245,8 +317,13 @@ Get a list of values from the osDetails list
 sub get {
 	my $class = shift;
 	
-	return map { $class->{osDetails}->{$_} } 
-	       grep { $class->{osDetails}->{$_} } @_;
+	if ( wantarray ) {	
+		return map { $class->{osDetails}->{$_} } 
+		       grep { $class->{osDetails}->{$_} } @_;
+	}
+	else {
+		return $class->{osDetails}->{+shift};
+	}
 }
 
 
@@ -262,7 +339,7 @@ sub setPriority {
 	return unless defined $priority && $priority =~ /^-?\d+$/;
 
 	# For *nix, including OSX, set whatever priority the user gives us.
-	Slim::Utils::Log::logger('server')->info("SqueezeCenter changing process priority to $priority");
+	Slim::Utils::Log::logger('server')->info("Squeezebox Server changing process priority to $priority");
 
 	eval { setpriority (0, 0, $priority); };
 
@@ -287,4 +364,33 @@ sub getPriority {
 
 	return $priority;
 }
+
+
+=head2 initUpdate( )
+
+Initialize download of a potential updated Squeezebox Server version. 
+Not needed on Linux distributions which do manage the update through their repositories.
+
+=cut
+
+sub initUpdate {};
+sub getUpdateParams { 0 };
+sub canAutoUpdate { 0 };
+sub installerExtension { '' };
+sub installerOS { '' };
+
+=head2 restartServer( )
+
+Squeezebox Server can initiate a restart on some systems. 
+This should call main::cleanup() or stopServer() to cleanly shut down before restarting
+
+=cut
+
+sub restartServer {
+	my $class = shift;
+	main::stopServer(1) if $class->canRestartServer();
+}
+
+sub canRestartServer { 1 }
+
 1;

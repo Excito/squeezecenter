@@ -1,6 +1,6 @@
 package Slim::Schema::ResultSet::Genre;
 
-# $Id: Genre.pm 11770 2007-04-16 22:26:59Z adrian $
+# $Id: Genre.pm 27975 2009-08-01 03:28:30Z andy $
 
 use strict;
 use base qw(Slim::Schema::ResultSet::Base);
@@ -14,9 +14,9 @@ sub pageBarResults {
 	my $name  = "$table.namesort";
 
 	$self->search(undef, {
-		'select'     => [ \"LEFT($name, 1)", { count => \"DISTINCT($table.id)" } ],
+		'select'     => [ \"SUBSTR($name, 1, 1)", { count => \"DISTINCT($table.id)" } ],
 		as           => [ 'letter', 'count' ],
-		group_by     => \"LEFT($name, 1)",
+		group_by     => \"SUBSTR($name, 1, 1)",
 		result_class => 'Slim::Schema::PageBar',
 	});
 }

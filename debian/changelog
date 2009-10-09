@@ -1,3 +1,15 @@
+squeezecenter (7.4.0.dfsg1-2) claire; urgency=low
+
+  * update fixtures 
+
+ -- Carl Fürstenberg <carl@excito.com>  Fri, 09 Oct 2009 13:39:25 +0200
+
+squeezecenter (7.4.0.dfsg1-1) claire; urgency=low
+
+  * New upstream release
+
+ -- Carl Fürstenberg <carl@excito.com>  Thu, 08 Oct 2009 11:07:19 +0200
+
 squeezecenter (7.3.3.dfsg-1) estelle; urgency=low
 
   * New upstream release

@@ -1,8 +1,33 @@
+[% extJsScripts = BLOCK %]
+	<script TYPE="text/javascript">
+		Ext.onReady(function(){
+			var reload;
+			if (reload = Ext.get('restartWarning')) {
+				Ext.MessageBox.show({
+					title: '[% "SETTINGS" | string %]',
+					msg: Ext.util.Format.stripTags(
+						reload.dom.innerHTML.replace(/<br\/?>/ig, ' ')
+					),
+					buttons: {
+						ok: '[% "RESTART_NOW" | string %]',
+						cancel: '[% "RESTART_LATER" | string %]'
+					},
+					fn: function(btn, text) {
+						if (btn == 'ok') {
+							location = '[% restartUrl %]';
+						}
+					}
+				});
+				reload.update('');
+			}
+		});
+	</script>
+[% END %]
 [% PROCESS settings/header.html %]
 
 	<div class="settingSection">
 		<div class="prefHead">[% "SETUP_GROUP_PLUGINS" | string %]</div>
-		<div class="prefDesc"><br/>[% "SETUP_GROUP_PLUGINS_DESC" | string %]</div>
+		<div class="prefDesc"><br/>[% (failsafe ? "SETUP_PLUGINS_SAFEMODE" : "SETUP_GROUP_PLUGINS_DESC") | string %]</div>
 	</div>
 
 	<div class="pluginSection">
@@ -11,7 +36,7 @@
 		[% name     = plugins.$plugin.name %]
 		[% version  = plugins.$plugin.version %]
 		[% enforce  = plugins.$plugin.enforce || plugins.$plugin.errorDesc %]
-		[% settings = plugins.$plugin.optionsURL %]
+		[% settings = failsafe && !enforce ? '' : plugins.$plugin.optionsURL %]
 		[% enabled  = pluginState.$plugin %]
 
 		[% title = BLOCK %]

@@ -1,6 +1,6 @@
 package Slim::Player::SoftSqueeze;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -43,10 +43,10 @@ sub formats {
 	my $client = shift;
 
 	if ($client->revision() == 2) {
-		return qw(ogg flc aif wav mp3);
+		return qw(ogg flc aif pcm mp3);
 	}
 	else {
-		return qw(flc aif wav mp3);
+		return qw(flc aif pcm mp3);
 	}
 }
 
@@ -93,6 +93,8 @@ sub hasRTCAlarm {
 sub hasLineIn() {
 	return 0;
 }
+
+sub canDecodeRhapsody { 0 };
 
 sub canDirectStream {
 	my $client = shift;

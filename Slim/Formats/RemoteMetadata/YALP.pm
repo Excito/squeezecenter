@@ -1,6 +1,6 @@
 package Slim::Formats::RemoteMetadata::YALP;
 
-# $Id: YALP.pm 24173 2008-12-01 23:58:52Z andy $
+# $Id: YALP.pm 27975 2009-08-01 03:28:30Z andy $
 #
 # WMA metadata parser for YALP radio
 # /tilive1.alice.cdn.interbusiness.it/
@@ -45,7 +45,7 @@ sub parser {
 	# This metadata is read by HTTP's getMetadataFor
 	$client->playingSong->pluginData( wmaMeta => $meta );
 	
-	$log->is_debug && $log->debug( "YALP metadata: " . Data::Dump::dump($meta) );
+	main::DEBUGLOG && $log->is_debug && $log->debug( "YALP metadata: " . Data::Dump::dump($meta) );
 	
 	return 1;
 }

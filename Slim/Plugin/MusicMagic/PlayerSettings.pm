@@ -1,12 +1,13 @@
 package Slim::Plugin::MusicMagic::PlayerSettings;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
 use strict;
 
+use Slim::Plugin::MusicMagic::Common;
 use Slim::Utils::Prefs;
 
 # button functions for browse directory
@@ -252,7 +253,7 @@ sub settingsExitHandler {
 			}
 
 			if ($nextmenu eq 'MMMsettings/mix_filter') {
-				my $filters = Slim::Plugin::MusicMagic::Settings->getFilterList();
+				my $filters = Slim::Plugin::MusicMagic::Common->getFilterList();
 				
 				$nextParams{'listRef'} = [keys %{$filters}];
 				$nextParams{'externRef'} = $filters;

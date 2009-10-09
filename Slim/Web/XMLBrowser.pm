@@ -1,8 +1,8 @@
 package Slim::Web::XMLBrowser;
 
-# $Id: XMLBrowser.pm 25732 2009-03-30 17:41:40Z andy $
+# $Id: XMLBrowser.pm 28569 2009-09-18 21:28:30Z adrian $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -12,6 +12,7 @@ package Slim::Web::XMLBrowser;
 use strict;
 
 use URI::Escape qw(uri_unescape);
+use List::Util qw(min);
 
 use Slim::Formats::XML;
 use Slim::Player::ProtocolHandlers;
@@ -89,7 +90,7 @@ sub handleWebIndex {
 		# get passthrough params if supplied
 		my $pt = $item->{'passthrough'} || [];
 		
-		if ( $log->is_debug ) {
+		if ( main::DEBUGLOG && $log->is_debug ) {
 			my $cbname = Slim::Utils::PerlRunTime::realNameForCodeRef($feed);
 			$log->debug( "Fetching OPML from coderef $cbname" );
 		}
@@ -125,7 +126,7 @@ sub handleWebIndex {
 		else {
 			my $cache = Slim::Utils::Cache->new;
 			if ( my $cached = $cache->get("xmlbrowser_$sid") ) {
-				$log->is_debug && $log->debug( "Using cached session $sid" );
+				main::DEBUGLOG && $log->is_debug && $log->debug( "Using cached session $sid" );
 				
 				handleFeed( $cached, $params );
 				return;
@@ -184,7 +185,7 @@ sub handleFeed {
 	} );
 	
 	# Persist search query from top level item
-	if ( $params->{type} eq 'search' ) {
+	if ( $params->{type} && $params->{type} eq 'search' ) {
 		$crumb[0]->{index} = '_' . $stash->{q};
 	};
 
@@ -200,9 +201,14 @@ sub handleFeed {
 	
 	if ( $sid ) {
 		# Cache the feed structure for this session
-		$log->is_debug && $log->debug( "Caching session $sid" );
-		
-		eval { $cache->set( "xmlbrowser_$sid", $feed, CACHE_TIME ) };
+
+		# cachetime is only set by parsers which known the content is dynamic and so can't be cached
+		# for all other cases we always cache for CACHE_TIME to ensure the menu stays the same throughout the session
+		my $cachetime = defined $feed->{'cachetime'} ? $feed->{'cachetime'} : CACHE_TIME;
+
+		main::DEBUGLOG && $log->is_debug && $log->debug( "Caching session $sid for $cachetime" );
+
+		eval { $cache->set( "xmlbrowser_$sid", $feed, $cachetime ) };
 		
 		if ( $@ && $log->is_warn ) {
 			$log->warn("Session not cached: $@");
@@ -272,7 +278,8 @@ sub handleFeed {
 			# If the feed is another URL, fetch it and insert it into the
 			# current cached feed
 			$subFeed->{'type'} ||= '';
-			if ( $subFeed->{'type'} ne 'audio' && defined $subFeed->{'url'} && !$subFeed->{'fetched'} ) {
+			if ( $subFeed->{'type'} ne 'audio' && defined $subFeed->{'url'} && !$subFeed->{'fetched'} &&
+					 !( $stash->{'action'} && $stash->{'action'} =~ /favadd|favdel/ && $depth == $levels ) ) {
 				
 				# Rewrite the URL if it was a search request
 				if ( $subFeed->{'type'} eq 'search' && ( $stash->{'q'} || $searchQuery ) ) {
@@ -317,7 +324,7 @@ sub handleFeed {
 					# get passthrough params if supplied
 					my $pt = $subFeed->{'passthrough'} || [];
 
-					if ( $log->is_debug ) {
+					if ( main::DEBUGLOG && $log->is_debug ) {
 						my $cbname = Slim::Utils::PerlRunTime::realNameForCodeRef( $subFeed->{url} );
 						$log->debug( "Fetching OPML from coderef $cbname" );
 					}
@@ -328,7 +335,7 @@ sub handleFeed {
 				
 				# Check for a cached version of this subfeed URL
 				if ( my $cached = Slim::Formats::XML->getCachedFeed( $subFeed->{'url'} ) ) {
-					$log->debug( "Using previously cached subfeed data for $subFeed->{url}" );
+					main::DEBUGLOG && $log->debug( "Using previously cached subfeed data for $subFeed->{url}" );
 					handleSubFeed( $cached, $args );
 				}
 				else {
@@ -412,7 +419,7 @@ sub handleFeed {
 		
 		if ( $url ) {
 
-			$log->info("Playing/adding $url");
+			main::INFOLOG && $log->info("Playing/adding $url");
 			
 			# Set metadata about this URL
 			Slim::Music::Info::setRemoteMetadata( $url, {
@@ -469,7 +476,7 @@ sub handleFeed {
 		
 		if ( @urls ) {
 
-			if ( $log->is_info ) {
+			if ( main::INFOLOG && $log->is_info ) {
 				$log->info(sprintf("Playing/adding all items:\n%s", join("\n", @urls)));
 			}
 			
@@ -507,7 +514,7 @@ sub handleFeed {
 			$otherParams = '&query=' . $stash->{'query'} . $otherParams;
 		}
 			
-		$stash->{'pageinfo'} = Slim::Web::Pages->pageInfo({
+		$stash->{'pageinfo'} = Slim::Web::Pages::Common->pageInfo({
 				'itemCount'   => $itemCount,
 				'path'        => $params->{'path'} || 'index.html',
 				'otherParams' => $otherParams,
@@ -646,8 +653,8 @@ sub handleFeed {
 					$item->{'name'}, 
 					$type, 
 					$item->{'parser'}, 
-					undef, 
-					$item->{'image'} || Slim::Player::ProtocolHandlers->iconForURL($item->{'play'} || $item->{'url'}) 
+					1, 
+					$item->{'image'} || $item->{'icon'} || Slim::Player::ProtocolHandlers->iconForURL($item->{'play'} || $item->{'url'}) 
 				);
 			} elsif ($stash->{'action'} eq 'favdel') {
 				$favs->deleteUrl( $item->{'play'} || $item->{'url'} );
@@ -696,7 +703,7 @@ sub handleSubFeed {
 	# a new Pandora radio station
 	if ( $feed->{'command'} && $client ) {
 		my @p = map { uri_unescape($_) } split / /, $feed->{command};
-		$log->is_debug && $log->debug( "Executing command: " . Data::Dump::dump(\@p) );
+		main::DEBUGLOG && $log->is_debug && $log->debug( "Executing command: " . Data::Dump::dump(\@p) );
 		$client->execute( \@p );
 	}
 	
@@ -731,6 +738,11 @@ sub handleSubFeed {
 
 	# set flag to avoid fetching this url again
 	$subFeed->{'fetched'} = 1;
+
+	# cachetime will only be set by parsers which know their content is dynamic
+	if (defined $feed->{'cachetime'}) {
+		$parent->{'cachetime'} = min( $parent->{'cachetime'} || CACHE_TIME, $feed->{'cachetime'} );
+	}
 
 	# No caching for callback-based plugins
 	# XXX: this is a bit slow as it has to re-fetch each level

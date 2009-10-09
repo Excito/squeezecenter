@@ -1,8 +1,8 @@
 package Slim::Plugin::LastFM::Plugin;
 
-# $Id: Plugin.pm 24564 2009-01-08 15:01:38Z mherger $
+# $Id: Plugin.pm 28550 2009-09-17 15:42:43Z andy $
 
-# Play Last.fm Radio via SqueezeNetwork
+# Play Last.fm Radio via mysqueezebox.com
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -52,6 +52,7 @@ sub initPlugin {
 		tag    => 'lfm',
 		menu   => 'music_services',
 		weight => 40,
+		is_app => 1,
 	);
 	
 	if ( main::SLIM_SERVICE ) {
@@ -67,9 +68,9 @@ sub initPlugin {
 		);
 	}
 	
-	if ( !main::SLIM_SERVICE ) {
+	if ( !$::noweb && !main::SLIM_SERVICE ) {
 		# Add a function to view trackinfo in the web
-		Slim::Web::HTTP::addPageFunction( 
+		Slim::Web::Pages->addPageFunction( 
 			'plugins/lastfm/trackinfo.html',
 			sub {
 				my $client = $_[0];
@@ -91,6 +92,9 @@ sub initPlugin {
 sub getDisplayName () {
 	return 'PLUGIN_LFM_MODULE_NAME';
 }
+
+# Don't add this item to any menu
+sub playerMenu { }
 
 sub feed {
 	my ( $class, $client ) = @_;
@@ -125,12 +129,12 @@ sub rateTrack {
 	my $rating = $request->getParam('_rating');
 	
 	if ( $rating !~ /^[LB]$/ ) {
-		$log->debug('Invalid Last.fm rating, must be L or B');
+		main::DEBUGLOG && $log->debug('Invalid Last.fm rating, must be L or B');
 		return;
 	}
 	
 	# Get the current track
-	my $currentTrack = $song->{'pluginData'} || return;
+	my $currentTrack = $song->pluginData() || return;
 	
 	my ($station) = $url =~ m{^lfm://(.+)};
 	
@@ -145,7 +149,7 @@ sub rateTrack {
 		. '&rating='  . $rating
 	);
 	
-	$log->debug("Last.fm: rateTrack: $rating ($ratingURL)");
+	main::DEBUGLOG && $log->debug("Last.fm: rateTrack: $rating ($ratingURL)");
 	
 	my $http = Slim::Networking::SqueezeNetwork->new(
 		\&_rateTrackOK,
@@ -173,15 +177,15 @@ sub _rateTrackOK {
 	my $currentTrack = $http->params('currentTrack');
 	my $url          = $http->params('url');
 	
-	$log->debug('Rating submit OK');
+	main::DEBUGLOG && $log->debug('Rating submit OK');
 	
 	# If rating was ban and skip is allowed, skip the track
 	if ( $rating eq 'B' ) {
-		$log->debug('Rating was ban, passing to AudioScrobbler');
+		main::DEBUGLOG && $log->debug('Rating was ban, passing to AudioScrobbler');
 		$client->execute( [ 'audioscrobbler', 'banTrack', $url, $currentTrack->{canSkip} ] );
 	}
 	else {
-		$log->debug('Rating was love, passing to AudioScrobbler');
+		main::DEBUGLOG && $log->debug('Rating was love, passing to AudioScrobbler');
 		$client->execute( [ 'audioscrobbler', 'loveTrack', $url ] );
 	}
 	
@@ -198,7 +202,7 @@ sub _rateTrackError {
 	my $client  = $http->params('client');
 	my $request = $http->params('request');
 	
-	$log->debug( "Rating submit error: $error" );
+	main::DEBUGLOG && $log->debug( "Rating submit error: $error" );
 	
 	# Not sure what status to use here
 	$request->setStatusBadParams();
@@ -215,7 +219,7 @@ sub skipTrack {
 	my $url = $song->currentTrack()->url;
 	return unless $url =~ /^lfm/;
 		
-	$log->debug("Last.fm: Skip requested");
+	main::DEBUGLOG && $log->debug("Last.fm: Skip requested");
 		
 	$client->execute( [ "playlist", "jump", "+1" ] );
 }
@@ -225,11 +229,10 @@ sub trackInfoMenu {
 	
 	return unless $client;
 	
-	return unless Slim::Networking::SqueezeNetwork->isServiceEnabled( $client, 'LFM' );
+	# Only show if in the app list
+	return unless $client->isAppEnabled('lastfm');
 	
-	return unless Slim::Networking::SqueezeNetwork->hasAccount( $client, 'lfm' );
-	
-	my $artist = $track->remote ? $remoteMeta->{artist} : ( $track->artist ? $track->artist->name : undef );
+	my $artist = $track->remote ? $remoteMeta->{artist} : $track->artistName;
 	
 	my $snURL = Slim::Networking::SqueezeNetwork->url(
 		'/api/lastfm/v1/opml/search_artist?q=' . uri_escape_utf8($artist)

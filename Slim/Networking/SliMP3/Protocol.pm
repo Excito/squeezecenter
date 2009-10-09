@@ -1,6 +1,6 @@
 package Slim::Networking::SliMP3::Protocol;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -44,7 +44,7 @@ sub processMessage {
 		# extract the IR code and the timestamp for the IR message
 		my ($irTime, $irCodeBytes) = unpack 'xxNxxH8', $msg;
 		
-		$client->trackJiffiesEpoch($irTime, $msgTimeStamp);	
+		$client->trackJiffiesEpoch($irTime, $msgTimeStamp);
 		
 		Slim::Hardware::IR::enqueue($client, $irCodeBytes, $irTime);
 
@@ -95,7 +95,7 @@ sub getUdpClient {
 			if ($revision >= 2.2)  { $id = $mac }
 			if ($deviceid != 0x01) { return undef }
 
-			if ( $log->is_info ) {
+			if ( main::INFOLOG && $log->is_info ) {
 				$log->info("$id ($msgtype) deviceid: $deviceid revision: $revision address: ",
 					Slim::Utils::Network::paddr2ipaddress($clientpaddr)
 				);

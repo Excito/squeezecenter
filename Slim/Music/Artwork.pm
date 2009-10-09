@@ -1,8 +1,8 @@
 package Slim::Music::Artwork;
 
-# $Id: Artwork.pm 23698 2008-10-27 15:34:14Z mherger $
+# $Id: Artwork.pm 28225 2009-08-19 08:47:37Z michael $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -21,7 +21,6 @@ use strict;
 
 use File::Basename qw(dirname);
 use File::Slurp;
-use File::Spec::Functions qw(:ALL);
 use Path::Class;
 use Scalar::Util qw(blessed);
 use Tie::Cache::LRU;
@@ -92,9 +91,9 @@ sub findArtwork {
 
 	while (my $track = $tracks->next) {
 
-		if ($track->coverArtExists) {
+		my $album = $track->album;
 
-			my $album = $track->album;
+		if ($track->coverArtExists) {
 
 			if ( !$progress ) {
 				$isDebug && $importlog->debug(sprintf("Album [%s] has artwork.", $album->name));
@@ -106,7 +105,7 @@ sub findArtwork {
 			precacheArtwork( $track->id );
 		}
 
-		$progress->update($track->album->name);
+		$progress->update($album->name);
 	}
 
 	$progress->final($count) if $count;
@@ -133,7 +132,7 @@ sub getImageContentAndType {
 		return ($content, $class->_imageContentType(\$content));
 	}
 
-	$log->is_debug && $log->debug("Image File empty or couldn't read: $path : $! [$@]");
+	main::DEBUGLOG && $log->is_debug && $log->debug("Image File empty or couldn't read: $path : $! [$@]");
 
 	return undef;
 }
@@ -268,7 +267,7 @@ sub _readCoverArtFiles {
 	
 			$isInfo && $log->info("Variable cover: $artwork from $1");
 	
-			if (Slim::Utils::OSDetect::isWindows()) {
+			if (main::ISWINDOWS) {
 				# Remove illegal characters from filename.
 				$artwork =~ s/\\|\/|\:|\*|\?|\"|<|>|\|//g;
 			}
@@ -359,21 +358,30 @@ sub precacheArtwork {
 		# Pre-cache this artwork resized to our commonly-used sizes/formats
 		# 1. user's thumb size or 100x100_o (large web artwork)
 		# 2. 50x50_o (small web artwork)
-		# 3. 56x56_o.jpg (Jive artwork - OAR JPG)
+		# 3+ SqueezePlay/Jive size artwork
 
 		my $coversize = $prefs->get('thumbSize') || 100;
 	
-		my %dims = (
-			50 => '_o',
-			$coversize => '_o',
-			56 => '_o.jpg',
+		my @dims = (
+			"${coversize}x${coversize}_o",
+			'50x50_o',
+			'40x40_m',
+			'41x41_m',
+			'64x64_m',
+#			'300x143_m',
+#			'180x180_m',
+#			'240x240_m',
+#			'470x153_m',
+#			'470x170_m',
 		);
 	
-		for my $dim ( keys %dims ) {
-			$isDebug && $importlog->debug( "Pre-caching artwork for trackid $id at size ${dim}x${dim}$dims{$dim}" );
+		for my $dim ( @dims ) {
+			$isDebug && $importlog->debug( "Pre-caching artwork for trackid $id at size $dim" );
 			eval {
-				Slim::Web::Graphics::processCoverArtRequest( undef, "music/$id/cover_${dim}x${dim}$dims{$dim}" );
+				Slim::Web::Graphics::processCoverArtRequest( undef, "music/$id/cover_$dim" );
 			};
+			
+			$log->error("Pre-caching failed for trackid $id at size $dim: $@") if $@;
 		}
 	}
 }

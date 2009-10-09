@@ -2,7 +2,7 @@ package Slim::Plugin::MusicMagic::Common;
 
 # $Id$
 
-# SqueezeCenter Copyright 2001-2007 Logitech
+# Squeezebox Server Copyright 2001-2009 Logitech
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -15,69 +15,16 @@ use Slim::Utils::Misc;
 use Slim::Utils::OSDetect;
 use Slim::Utils::Strings;
 use Slim::Utils::Prefs;
+use Slim::Utils::Unicode;
 
 my $os  = Slim::Utils::OSDetect::OS();
-*escape   = Slim::Utils::OSDetect::isWindows() ? \&URI::Escape::uri_escape : \&URI::Escape::uri_escape_utf8;
+*escape = main::ISWINDOWS ? \&URI::Escape::uri_escape : \&URI::Escape::uri_escape_utf8;
 
 my $log = logger('plugin.musicip');
 
 my $prefs = preferences('plugin.musicip');
 
-sub convertPath {
-	my $mmsPath = shift;
-	
-	if ($prefs->get('host') eq 'localhost') {
-		return $mmsPath;
-	}
-	
-	my $remoteRoot = $prefs->get('remote_root');
-	my $nativeRoot = preferences('server')->get('audiodir');
-	my $original   = $mmsPath;
-	my $winPath    = $mmsPath =~ m/\\/; # test if this is a windows path
-
-	if ($os eq 'unix') {
-
-		# we are unix
-		if ($winPath) {
-
-			# we are running musicip on windows but
-			# slim server is running on unix
-
-			# convert any windozes paths to unix style
-			$remoteRoot =~ tr/\\/\//;
-
-			$log->debug("$remoteRoot :: $nativeRoot");
-
-			# convert windozes paths to unix style
-			$mmsPath =~ tr/\\/\//;
-			# convert remote root to native root
-			$mmsPath =~ s/$remoteRoot/$nativeRoot/;
-		}
-
-	} else {
-
-		# we are windows
-		if (!$winPath) {
-
-			# we recieved a unix path from music match
-			# convert any unix paths to windows style
-			# convert windows native to unix first
-			# cuz matching dont work unless we do
-			$nativeRoot =~ tr/\\/\//;
-
-			$log->debug("$remoteRoot :: $nativeRoot");
-
-			# convert unix root to windows root
-			$mmsPath =~ s/$remoteRoot/$nativeRoot/;
-			# convert unix paths to windows
-			$mmsPath =~ tr/\//\\/;
-		}
-	}
-
-	$log->debug("$original is now $mmsPath");
-
-	return $mmsPath
-}
+my %filterHash = ();
 
 sub checkDefaults {
 
@@ -116,9 +63,109 @@ sub checkDefaults {
 	if (!defined $prefs->get('port')) {
 		$prefs->set('port',10002);
 	}
+}
 
-	if (!defined $prefs->get('host')) {
-		$prefs->set('host','localhost');
+sub grabFilters {
+	my ($class, $client, $params, $callback, @args) = @_;
+	
+	my $MMSport = $prefs->get('port');
+
+	my $http = Slim::Networking::SimpleAsyncHTTP->new(
+		\&_gotFilters,
+		sub {
+			$log->error('Failed fetching filters from MusicIP');
+			_fetchingFiltersDone(shift);
+		},
+		{
+			client   => $client,
+			params   => $params,
+			callback => $callback,
+			class    => $class,
+			args     => \@args,
+			timeout  => 5,
+#			cacheTime => 0
+		}
+	);
+
+	$http->get( "http://localhost:$MMSport/api/filters" );
+}
+
+sub getFilterList {
+	return \%filterHash;
+}
+
+sub _gotFilters {
+	my $http = shift;
+
+	my @filters = ();
+
+	if ($http) {
+
+		@filters = split(/\n/, decode($http->content));
+
+		if ($log->is_debug && scalar @filters) {
+
+			main::DEBUGLOG && $log->debug("Found filters:");
+
+			for my $filter (@filters) {
+
+				main::DEBUGLOG && $log->debug("\t$filter");
+			}
+		}
+	}
+
+	my $none = sprintf('(%s)', Slim::Utils::Strings::string('NONE'));
+
+	push @filters, $none;
+	%filterHash = ();
+
+	foreach my $filter ( @filters ) {
+
+		if ($filter eq $none) {
+
+			$filterHash{0} = $filter;
+			next
+		}
+
+		$filterHash{$filter} = $filter;
+	}
+
+	# remove filter from client settings if it doesn't exist any more
+	foreach my $client (Slim::Player::Client::clients()) {
+
+		unless ( $filterHash{ $prefs->client($client)->get('mix_filter') } ) {
+
+			$log->warn('Filter "' . $prefs->client($client)->get('mix_filter') . '" does no longer exist - resetting');
+			$prefs->client($client)->set('mix_filter', 0);
+
+		}
+
+	}
+
+	unless ( $filterHash{ $prefs->get('mix_filter') } ) {
+
+		$log->warn('Filter "' . $prefs->get('mix_filter') . '" does no longer exist - resetting');
+		$prefs->set('mix_filter', 0);
+
+	}
+	
+	_fetchingFiltersDone($http);
+}
+
+sub _fetchingFiltersDone {
+	my $http = shift;
+
+	my $client   = $http->params('client');
+	my $params   = $http->params('params');
+	my $callback = $http->params('callback');
+	my $class    = $http->params('class');
+	my @args     = @{$http->params('args')};
+
+	$params->{'filters'} = \%filterHash;
+
+	if ($callback && $class) {
+		my $body = $class->handler($client, $params);
+		$callback->( $client, $params, $body, @args );	
 	}
 }
 

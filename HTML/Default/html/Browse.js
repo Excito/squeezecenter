@@ -9,9 +9,9 @@ Browse = {
 
 		// Album view selector
 		if (Ext.get('viewSelect')) {
-			var viewMode = (SqueezeJS.getCookie('SqueezeCenter-albumView') 
-								&& SqueezeJS.getCookie('SqueezeCenter-albumView').match(/[012]/) 
-								? SqueezeJS.getCookie('SqueezeCenter-albumView') : '0');
+			var viewMode = (SqueezeJS.getCookie('Squeezebox-albumView') 
+								&& SqueezeJS.getCookie('Squeezebox-albumView').match(/[012]/) 
+								? SqueezeJS.getCookie('Squeezebox-albumView') : '0');
 
 			// we don't have gallery view in playlist mode
 			if (!SqueezeJS.string('switch_to_gallery'))
@@ -51,7 +51,7 @@ Browse = {
 						'<span class="menu-title">' + SqueezeJS.string('sort_by') + '...</span>'
 				);
 
-				var sortOrder = SqueezeJS.getCookie('SqueezeCenter-orderBy');
+				var sortOrder = SqueezeJS.getCookie('Squeezebox-orderBy');
 				for (order in orderByList) {
 					menu.add(new Ext.menu.CheckItem({
 						text: order,
@@ -98,17 +98,17 @@ Browse = {
 		params = params.replace(/&artwork=\w*/gi, '');
 
 		if (artwork == 1) {
-			SqueezeJS.setCookie( 'SqueezeCenter-albumView', "1" );
+			SqueezeJS.setCookie( 'Squeezebox-albumView', "1" );
 			params += '&artwork=1';
 		}
 
 		else if (artwork == 2) {
-			SqueezeJS.setCookie( 'SqueezeCenter-albumView', "2" );
+			SqueezeJS.setCookie( 'Squeezebox-albumView', "2" );
 			params += '&artwork=2';
 		}
 
 		else {
-			SqueezeJS.setCookie( 'SqueezeCenter-albumView', "" );
+			SqueezeJS.setCookie( 'Squeezebox-albumView', "" );
 			params += '&artwork=0';
 		}
 
@@ -122,7 +122,7 @@ Browse = {
 		if (option)
 			params += '&orderBy=' + option;
 
-		SqueezeJS.setCookie('SqueezeCenter-orderBy', option);
+		SqueezeJS.setCookie('Squeezebox-orderBy', option);
 		location.search = params;
 	},
 
@@ -147,3 +147,66 @@ Browse = {
 	}
 };
 
+Browse.XMLBrowser = {
+	template: new Ext.Template('{query}action={action}&index={index}&player={player}&sess={sess}&start={start}'),
+	
+	playLink: function(query, index, sess) {
+		this._playAddLink('play', query, index, sess, SqueezeJS.string('connecting_for'));
+	},
+	
+	playAllLink: function(query, index, sess) {
+		this._playAddLink('playall', query, index, sess, SqueezeJS.string('connecting_for'));
+	},
+	
+	addLink: function(query, index, sess) {
+		this._playAddLink('add', query, index, sess);
+	},
+	
+	addAllLink: function(query, index, sess) {
+		this._playAddLink('addall', query, index, sess);
+	},
+	
+	_playAddLink: function(action, query, index, sess, showBriefly) {
+		this._doRequest(this.template.apply({
+				action: action,
+				query: query,
+				player: encodeURIComponent(SqueezeJS.getPlayer()),
+				index: index,
+				sess: sess
+			}), 
+			false,
+			showBriefly
+		);
+	},
+		
+	toggleFavorite: function(self, index, start, sess) {
+		var img = Ext.get(self).child('img');
+		var action = 'favadd';
+		
+		if (img.dom.src.match(/remove/)) {
+			img.dom.src = img.dom.src.replace(/_remove/, '');
+			action = 'favdel';
+		}
+		else {
+			img.dom.src = img.dom.src.replace(/\.gif/, '_remove.gif');
+		}
+		
+		this._doRequest(this.template.apply({
+				action: action,
+				player: encodeURIComponent(SqueezeJS.getPlayer()),
+				index: index,
+				start: start,
+				sess: sess
+			})
+		);
+	},
+
+	_doRequest: function(query, refreshStatus, showBriefly) {
+		SqueezeJS.UI.setProgressCursor();
+		SqueezeJS.Controller.urlRequest(
+			location.pathname + '?' + query,
+			refreshStatus,
+			showBriefly
+		);
+	}
+}

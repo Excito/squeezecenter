@@ -10,7 +10,7 @@ use base 'Slim::Plugin::Base';
 use Slim::Utils::Prefs;
 use Slim::Control::XMLBrowser;
 
-if ( !main::SLIM_SERVICE ) {
+if ( !main::SLIM_SERVICE && !$::noweb ) {
  	require Slim::Web::XMLBrowser;
 }
 
@@ -20,6 +20,11 @@ my %cli_next = ();
 
 sub initPlugin {
 	my ( $class, %args ) = @_;
+	
+	if ( $args{is_app} ) {
+		# Put all apps in the apps menu
+		$args{menu} = 'apps';
+	}
 	
 	{
 		no strict 'refs';
@@ -39,7 +44,14 @@ sub initPlugin {
 	
 	$class->initCLI( %args );
 	
-	$class->initJive( %args );
+	if ( my $menu = $class->initJive( %args ) ) {
+		if ( $args{is_app} ) {
+			Slim::Control::Jive::registerAppMenu($menu);
+		}
+		else {
+			Slim::Control::Jive::registerPluginMenu($menu);
+		}
+	}
 
 	$class->SUPER::initPlugin();
 }
@@ -64,7 +76,8 @@ sub initJive {
 		stringToken    => (uc($name) eq $name) ? $name : undef, # Only use string() if it is uppercase
 		text           => $name,
 		id             => 'opml' . $args{tag},
-		node           => $args{menu},
+		node           => $args{node} || $args{menu},
+		weight         => $class->weight,
 		displayWhenOff => 0,
 		window         => { 
 				'icon-id' => $icon,
@@ -80,8 +93,22 @@ sub initJive {
 			},
 		},
 	} );
+	
+	# Bug 12336, additional items for type=search
+	if ( $args{type} eq 'search' ) {
+		$jiveMenu[0]->{actions}->{go}->{params}->{search} = '__TAGGEDINPUT__';
+		$jiveMenu[0]->{input} = {
+			len  => 1,
+			help => {
+				text => 'JIVE_SEARCHFOR_HELP',
+			},
+			softbutton1 => 'INSERT',
+			softbutton2 => 'DELETE',
+			title       => $name,
+		};
+	}
 
-	Slim::Control::Jive::registerPluginMenu(\@jiveMenu);
+	return \@jiveMenu;
 }
 
 sub initCLI {
@@ -162,7 +189,7 @@ sub cliRadiosQuery {
 	my $tag  = $args->{tag};
 
 	my $icon   = $class->_pluginDataFor('icon') ? $class->_pluginDataFor('icon') : 'html/images/radio.png';
-	my $weight = $args->{weight} || 1000;
+	my $weight = $class->weight;
 
 	return sub {
 		my $request = shift;
@@ -228,9 +255,6 @@ sub cliRadiosQuery {
 			if ( main::SLIM_SERVICE ) {
 				# Bug 7110, icons are full URLs so we must use icon not icon-id
 				$data->{icon} = delete $data->{'icon-id'};
-				
-				# Bug 7230, send pre-thumbnailed URL
-				$data->{icon} =~ s/\.png$/_56x56_p\.png/;
 			}
 		}
 		else {
@@ -256,11 +280,13 @@ sub cliRadiosQuery {
 		
 		if ( main::SLIM_SERVICE ) {
 			my $client = $request->client();
-			$disabled  = [ keys %{ $client->playerData->userid->allowedServices->{disabled} } ];
+			if ( $client && $client->playerData ) {
+				$disabled  = [ keys %{ $client->playerData->userid->allowedServices->{disabled} } ];
 			
-			# Hide plugins if necessary (private, beta, etc)
-			if ( !$client->canSeePlugin($tag) ) {
-				$data = {};
+				# Hide plugins if necessary (private, beta, etc)
+				if ( !$client->canSeePlugin($tag) ) {
+					$data = {};
+				}
 			}
 		}
 		
@@ -287,6 +313,9 @@ sub cliRadiosQuery {
 
 sub webPages {
 	my $class = shift;
+	
+	# Only setup webpages here if a menu is defined by the plugin
+	return unless $class->menu;
 
 	my $title = $class->getDisplayName();
 	my $url   = 'plugins/' . $class->tag() . '/index.html';
@@ -297,7 +326,7 @@ sub webPages {
 		Slim::Web::Pages->addPageCondition( $title, sub { $class->condition(shift); } );
 	}
 
-	Slim::Web::HTTP::addPageFunction( $url, sub {
+	Slim::Web::Pages->addPageFunction( $url, sub {
 		my $client = $_[0];
 		
 		Slim::Web::XMLBrowser->handleWebIndex( {

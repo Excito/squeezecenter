@@ -1,0 +1,22 @@
+#!/bin/sh
+
+filename=$3
+version=$2
+path=$PWD
+
+tmpdir=$(mktemp -d);
+(
+cd $tmpdir;
+tar -zxf $path/../$filename;
+rm -f */Graphics/CODE2000.*;
+rm -f */Graphics/FreeSans.ttf;
+rm -rf */CPAN;
+rm -rf */Bin;
+rm -rf */Firmware/*.bin;
+rm -f */HTML/EN/html/ext/resources/images/default/grid/Thumbs.db;
+find * -regex '.*\.\(png\|gif\)$$' -exec chmod a-x '{}' ';';
+tar -zcf squeezeboxserver-$version.dfsg1.tar.gz *;
+)
+mv $tmpdir/squeezeboxserver-$version.dfsg1.tar.gz .;
+rm -rf $tmpdir;
+

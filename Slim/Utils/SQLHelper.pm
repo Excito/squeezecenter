@@ -1,6 +1,6 @@
 package Slim::Utils::SQLHelper;
 
-# $Id: SQLHelper.pm 10437 2006-10-22 00:24:04Z dsully $
+# $Id: SQLHelper.pm 27975 2009-08-01 03:28:30Z andy $
 
 =head1 NAME
 
@@ -32,7 +32,7 @@ L<DBIx::Migration>
 =cut
 
 use strict;
-use File::Spec::Functions qw(:ALL);
+use File::Spec::Functions qw(catdir file_name_is_absolute);
 
 use Slim::Utils::OSDetect;
 use Slim::Utils::Log;
@@ -49,7 +49,7 @@ sub executeSQLFile {
 		$sqlFile = catdir(Slim::Utils::OSDetect::dirsFor('SQL'), $driver, $file);
 	}
 
-	logger('database.sql')->info("Executing SQL file $sqlFile");
+	main::INFOLOG && logger('database.sql')->info("Executing SQL file $sqlFile");
 
 	open(my $fh, $sqlFile) or do {
 
@@ -78,7 +78,7 @@ sub executeSQLFile {
 
 			$statement .= $line;
 
-			logger('database.sql')->info("Executing SQL: [$statement]");
+			main::INFOLOG && logger('database.sql')->info("Executing SQL: [$statement]");
 
 			eval { $dbh->do($statement) };
 

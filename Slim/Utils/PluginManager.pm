@@ -1,39 +1,23 @@
 package Slim::Utils::PluginManager;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 #
-# $Id: PluginManager.pm 24700 2009-01-17 11:17:46Z adrian $
-
-# TODO:
-#
-# * Enable plugins that OP_NEEDS_ENABLE
-# * Disable plugins that OP_NEEDS_DISABLE 
-# 
-# * Uninstall Plugins that have been marked as OP_NEEDS_UNINSTALL
-#
-# * Handle install of new plugins from web ui
-#   - Unzip zip files to a cache dir, and read install.xml to verify
-#   - Perform install of plugins marked OP_NEEDS_INSTALL
-#
-# * Check plugin versions from cache on new version of SqueezeCenter 
-#   - Mark as OP_NEEDS_UPGRADE
-# 
-# * Install by id (UUID)?
-# * Copy HTML/* into a common folder, so INCLUDE_PATH is shorter?
-#   There's already a namespace for each plugin.
+# $Id: PluginManager.pm 28393 2009-08-31 19:42:29Z andy $
 
 use strict;
 
 use File::Basename qw(dirname);
 use File::Spec::Functions qw(:ALL);
 use File::Next;
+use File::Path;
 use FindBin qw($Bin);
-use Path::Class;
+use Path::Class qw(dir);
 use XML::Simple;
 use YAML::Syck;
+use Config;
 
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
@@ -42,73 +26,103 @@ use Slim::Utils::Prefs;
 use Slim::Utils::Strings;
 use Slim::Utils::Versions;
 
-# XXXX - These constants will probably change. This is just a rough start.
-use constant STATE_ENABLED  => 1;
-use constant STATE_DISABLED => 0;
-
-use constant OP_NONE            => "";
-use constant OP_NEEDS_INSTALL   => "needs-install";
-use constant OP_NEEDS_UPGRADE   => "needs-upgrade";
-use constant OP_NEEDS_UNINSTALL => "needs-uninstall";
-use constant OP_NEEDS_ENABLE    => "needs-enable";
-use constant OP_NEEDS_DISABLE   => "needs-disable";
-
-use constant CACHE_VERSION => 2;
-
-my @pluginRootDirs = ();
-my $plugins        = {};
-my $cacheInfo      = {};
-
-my $prefs = preferences('plugin.state');
 my $log   = logger('server.plugins');
 
-# On SN, disable some SC-only plugins
-my %SKIP = ();
-if ( main::SLIM_SERVICE ) {
-	%SKIP = (
-		'Slim::Plugin::Extensions::Plugin'     => 1,
-		'Slim::Plugin::Health::Plugin'         => 1,
-		'Slim::Plugin::JiveExtras::Plugin'     => 1,
-		'Slim::Plugin::MusicMagic::Plugin'     => 1,
-		'Slim::Plugin::MyRadio::Plugin'        => 1,
-		'Slim::Plugin::PreventStandby::Plugin' => 1,
-		'Slim::Plugin::RS232::Plugin'          => 1,
-		'Slim::Plugin::RandomPlay::Plugin'     => 1,
-		'Slim::Plugin::Rescan::Plugin'         => 1,
-		'Slim::Plugin::SavePlaylist::Plugin'   => 1,
-		'Slim::Plugin::SlimTris::Plugin'       => 1,
-		'Slim::Plugin::Snow::Plugin'           => 1,
-		'Slim::Plugin::iTunes::Plugin'         => 1,
-		'Slim::Plugin::xPL::Plugin'            => 1,
-	);
-}
+my $prefs = preferences('plugin.state'); # per plugin state or pending state
+# valid states: disabled, enabled, needs-enable, needs-disable, needs-install, needs-uninstall
 
-# Skip obsolete plugins, they should be deleted by installers
-# but may still be left over in some cases
-for (
-	'Slim::Plugin::Picks::Plugin',
-	'Slim::Plugin::RadioIO::Plugin',
-	'Slim::Plugin::ShoutcastBrowser::Plugin',
-	'Slim::Plugin::Webcasters::Plugin',
-) {
-	$SKIP{$_} = 1;
-}
+my $plugins   = {};
+my $loaded    = {};
+my $disabled  = {};
+my $cacheInfo = {};
+my $message;
+my $downloader;
+
+use constant CACHE_VERSION => 3;
+
+# Skip unwanted plugins
+my %SKIP = ();
 
 sub init {
 	my $class = shift;
 
-	my ($manifestFiles, $sum) = $class->findInstallManifests;
+	# migrate state info to new pref format
+	$prefs->migrate(1, sub {
+		for my $old (keys %{$prefs->all}) {
+			my $new;
+			if    ($old =~ /^Plugins::(.*)::/)                { $new = $1 }
+			elsif ($old =~ /^Slim::Plugin::(.*)::/)           { $new = $1 }
+			elsif ($old =~ /.*[\/|\\](.*)[\/|\\]install.xml/) { $new = $1 }
+			if ($new) {
+				$prefs->set($new, $prefs->get($old) ? 'enabled' : 'disabled');
+			}
+			$prefs->remove($old);
+		}
+		1;
+	});
 
+	if ( !$main::SLIM_SERVICE ) {
+		eval {
+			require Slim::Utils::PluginDownloader;
+			$downloader = 'Slim::Utils::PluginDownloader';
+			$downloader->init;
+		};
+	}
+
+	my $pendingOps;
 	my $cacheInvalid;
+	my $osDetails = Slim::Utils::OSDetect::details();
+	
+	%SKIP = map {$_ => 1} Slim::Utils::OSDetect::skipPlugins();
 
-	if (!scalar keys %{$prefs->all}) {
+	# load the manifest cache
+	$class->_loadPluginCache;
+
+	# process any pending operations (using cache which will potentially become stale)
+	for my $plugin (keys %{$prefs->all}) {
+
+		my $val = $prefs->get($plugin);
+
+		if ($val =~ /needs/) {
+
+			$pendingOps = 1;
+
+			if       ($val eq 'needs-enable') {
+
+				$class->_needsEnable($plugin);
+
+			} elsif ($val eq 'needs-disable') {
+
+				$class->_needsDisable($plugin);
+
+			} elsif ($val eq 'needs-uninstall') { 
+
+				$class->_needsUninstall($plugin); 
+
+			} elsif ($val eq 'needs-install') {
+
+				$class->_needsInstall($plugin);
+			}
+		}
+	}
+
+	# validate the cache
+	my ($manifestFiles, $sum) = $class->_findInstallManifests;
+
+	if ($main::failsafe) {
+	
+		$cacheInvalid = 'starting in failsafe mode - do not load optional plugins';
+	
+	} elsif (!scalar keys %{$prefs->all}) {
 
 		$cacheInvalid = 'plugins states are not defined';
 
-	} elsif ( -r $class->pluginCacheFile ) {
-		
-		$class->loadPluginCache;
+	} elsif ($pendingOps) {
 
+		$cacheInvalid = 'processed pending operations';
+
+	} elsif ($cacheInfo && $cacheInfo->{'version'}) {
+		
 		if ($cacheInfo->{'version'} != CACHE_VERSION) {
 
 			$cacheInvalid = 'cache version does not match';
@@ -124,6 +138,14 @@ sub init {
 		} elsif ($cacheInfo->{'mtimesum'} != $sum) {
 
 			$cacheInvalid = 'manifest checksum differs';
+
+		} elsif ($cacheInfo->{'server'} ne $::VERSION) {
+
+			$cacheInvalid = 'server version changed';
+
+		} elsif ($cacheInfo->{'osType'} ne $osDetails->{'os'} || $cacheInfo->{'osArch'} ne $osDetails->{'osArch'}) {
+
+			$cacheInvalid = 'os or os architecture changed';
 		}
 
 	} else {
@@ -135,34 +157,344 @@ sub init {
 
 		$log->warn("Reparsing plugin manifests - $cacheInvalid");
 
-		$class->readInstallManifests($manifestFiles);
+		$class->_readInstallManifests($manifestFiles);
 
-	} else {
+		$cacheInfo = {
+			'version' => CACHE_VERSION,
+			'bin'     => $Bin,
+			'count'   => scalar @{$manifestFiles},
+			'mtimesum'=> $sum,
+			'server'  => $::VERSION,
+			'osType'  => $osDetails->{'os'},
+			'osArch'  => $osDetails->{'osArch'},
+		};
+		
+		$class->_writePluginCache unless $main::failsafe;
+	}
+} 
 
-		$class->checkPluginVersions;
+sub load {
+	my $class = shift;
 
-		$class->runPendingOperations;
+	for my $name (sort keys %$plugins) {
+		
+		my $state = $prefs->get($name);
+		
+		my $manifest = $plugins->{$name};
+
+		# Skip plugins with no perl module.
+		next unless $manifest->{'module'};
+		
+		my $baseDir    = $manifest->{'basedir'};
+		my $module     = $manifest->{'module'};
+		
+		# Initialize all plugins into the disabled list, they are removed below
+		# if they are loaded
+		$disabled->{$module} = $plugins->{$name};
+
+		if ( main::SLIM_SERVICE && $name =~ /^Plugins/ ) {
+			# Skip 3rd party plugins on SN
+			next;
+		}
+
+		# in failsafe mode skip all plugins which aren't required
+		next if ($main::failsafe && !$plugins->{$name}->{'enforce'});
+
+		if (defined $state && $state !~ /enabled|disabled/) {
+			$log->error("Skipping plugin: $name - in erroneous state: $state");
+			next;
+		}
+
+		if (defined $state && $state eq 'disabled') {
+			$log->warn("Skipping plugin: $name - disabled");
+			next;
+		}
+
+		# Skip plugins that can't be loaded.
+		if ($manifest->{'error'} ne 'INSTALLERROR_SUCCESS') {
+			$log->error(sprintf("Couldn't load $name. Error: %s\n", $class->getErrorString($name)));
+			next;
+		}
+
+		main::INFOLOG && $log->info("Loading plugin: $name");
+
+		my $loadModule = 0;
+
+		# Look for a lib dir that has a PAR file or otherwise.
+		if (-d (my $lib = catdir($baseDir, 'lib')) ) {
+
+			my $dir = dir( catdir($baseDir, 'lib') );
+
+			for my $file ($dir->children) {
+
+				if ($file =~ /\.par$/) {
+
+					$loadModule = 1;
+
+					require PAR;
+					PAR->import({ file => $file->stringify });
+
+					last;
+				}
+
+				if ($file =~ /\.pm$/) {
+					$loadModule = 1;
+					last;
+				}
+
+				if ($file =~ /.*Plugins$/ && -d $file) {
+					$loadModule = 1;
+					last;
+				}
+			}
+
+			unshift @INC, $lib;
+
+			# allow plugins to include architecture specific modules
+ 			my $arch = $Config::Config{'archname'};
+			$arch =~ s/^i[3456]86-/i386-/;
+			$arch =~ s/gnu-//;
+
+			my $perlmajorversion = $Config{'version'};
+			$perlmajorversion =~ s/\.\d+$//;
+
+			unshift @INC, catdir($lib, $perlmajorversion, $arch, 'auto') if -d catdir($lib, $perlmajorversion, $arch, 'auto');
+			unshift @INC, catdir($lib, $perlmajorversion, $arch)         if -d catdir($lib, $perlmajorversion, $arch);
+		}
+
+		if (-f catdir($baseDir, 'Plugin.pm')) {
+
+			$loadModule = 1;
+		}
+
+		# Pull in the module
+		if ($loadModule && $module) {
+
+			if (Slim::bootstrap::tryModuleLoad($module)) {
+
+				logError("Couldn't load $module");
+
+				$plugins->{$name}->{error} = 'INSTALLERROR_FAILED_TO_LOAD';
+
+			} else {
+
+				$loaded->{$module} = $plugins->{$name};
+				
+				delete $disabled->{$module};
+			}
+		}
+		
+		if ( main::SLIM_SERVICE ) {
+			# no web stuff for SN
+			next;
+		}
+
+		# Add any Bin dirs to findbin search path
+		my $binDir = catdir($baseDir, 'Bin');
+
+		if (-d $binDir) {
+
+			main::DEBUGLOG && $log->debug("Adding Bin directory: [$binDir]");
+
+			Slim::Utils::Misc::addFindBinPaths( catdir($binDir, Slim::Utils::OSDetect::details()->{'binArch'}), $binDir );
+		}
+
+		# Add any available HTML to TT's INCLUDE_PATH
+		my $htmlDir = catdir($baseDir, 'HTML');
+
+		if (-d $htmlDir) {
+
+			main::DEBUGLOG && $log->debug("Adding HTML directory: [$htmlDir]");
+
+			Slim::Web::HTTP::addTemplateDirectory($htmlDir);
+		}
 	}
 
-	$class->enablePlugins;
+	# Call init functions for all loaded plugins - multiple passes allows plugins to offer services to each other
+	# - plugins offering service to other plugins use preinitPlugin to init themselves and postinitPlugin to start the service
+	# - normal plugins use initPlugin and register with services offered by other plugins at this time
 
-	$cacheInfo = {
-		'version' => CACHE_VERSION,
-		'bin'     => $Bin,
-		'count'   => scalar @{$manifestFiles},
-		'mtimesum'=> $sum,
-	};
+	for my $initFunction (qw(preinitPlugin initPlugin postinitPlugin)) {
 
-	$class->writePluginCache;
+		for my $module (sort keys %$loaded) {
+
+			if ($module->can($initFunction)) {
+				
+				eval { $module->$initFunction };
+				
+				if ($@) {
+
+					logWarning("Couldn't call $module->$initFunction: $@");
+				}
+			}
+		}
+	}
+
+	# check for plugin updates
+	if ($downloader) {
+		$downloader->periodicCheckForUpdates;
+	}
 }
 
-sub pluginCacheFile {
+sub shutdownPlugins {
+	my $class = shift;
+
+	main::INFOLOG && $log->info("Shutting down plugins...");
+
+	for my $module (sort keys %$loaded) {
+
+		if ($module->can('shutdownPlugin')) {
+
+			eval { $module->shutdownPlugin };
+
+			if ($@) {
+				logWarning("error running ${module}->shutdownPlugin: $@");
+			}
+		}
+	}
+}
+
+sub dirsFor {
+	my $class = shift;
+	my $type  = shift;
+	
+	my @dirs = ();
+
+	for my $name (keys %$plugins) {
+
+		# FIXME: for the moment include strings for disabled plugins so the settings page works
+		if ($type eq 'strings' || $prefs->get($name) eq 'enabled') {
+			push @dirs, $plugins->{$name}->{'basedir'};
+		}
+	}
+	
+	return @dirs;
+}
+
+sub allPlugins {
+	my $class = shift;
+
+	return $plugins;
+}
+
+sub getErrorString {
+	my $class = shift;
+	my $plugin = shift;
+
+	unless ($plugins->{$plugin}->{error} =~ /INSTALLERROR_SUCCESS|INSTALLERROR_NO_MODULE/) {
+
+		return Slim::Utils::Strings::getString($plugins->{$plugin}->{error});
+	}
+
+	return '';
+}
+
+sub dataForPlugin {
+	my $class  = shift;
+	my $module = shift;
+
+	if ($loaded->{$module}) {
+
+		return $loaded->{$module};
+	}
+
+	return undef;
+}
+
+sub installedPlugins {
+	my $class = shift;
+
+	my @found = ();
+
+	for my $plugin ( keys %{$plugins} ) {
+
+		if ($plugins->{$plugin}->{error} =~ /INSTALLERROR_SUCCESS|INSTALLERROR_NO_MODULE/) {
+
+			push @found, $plugin;
+		}
+	}
+
+	return @found;
+}
+
+# this returns all plugins modules which are loaded (i.e. enabled and successfully loaded)
+sub enabledPlugins {
+	my $class = shift;
+
+	return keys %$loaded;
+}
+
+# this returns all plugins which are disabled
+sub disabledPlugins {
+	my $class = shift;
+	
+	return $disabled;
+}
+
+# this returns plugins if a plugin module is currently loaded (i.e. enabled and successfully loaded)
+sub isEnabled {
+	my $class  = shift;
+	my $module = shift || return;
+	
+	return $loaded->{$module};
+}
+
+sub isConfiguredEnabled {
+	my $class = shift;
+	my $plugin = shift;
+
+    return $prefs->get($plugin) =~ /needs-enable|enabled/;
+}
+
+sub enablePlugin {
+	my $class  = shift;
+	my $plugin = shift;
+
+	if ($prefs->get($plugin) ne 'enabled') {
+
+		main::INFOLOG && $log->info("Setting plugin $plugin to state: needs-enable");
+
+		$prefs->set($plugin, 'needs-enable');
+	}
+}
+
+sub disablePlugin {
+	my $class  = shift;
+	my $plugin = shift;
+
+	if ($plugins->{$plugin}->{enforce}) {
+
+		$log->warn("Can't disable plugin: $plugin - 'enforce' set in install.xml");
+		return;
+	}
+
+	if ($prefs->get($plugin) ne 'disabled') {
+
+		main::INFOLOG && $log->info("Setting plugin $plugin to state: needs-disable");
+
+		$prefs->set($plugin, 'needs-disable');
+	}
+}
+
+sub needsRestart {
+	return grep { /needs/ } values %{$prefs->all};
+}
+
+sub message {
+	my $class = shift;
+
+	$message = shift if @_;
+
+	return ($class->needsRestart && Slim::Utils::Strings::string('PLUGINS_RESTART_MSG')) || $message;
+}
+
+sub _pluginCacheFile {
 	my $class = shift;
 
 	return catdir( preferences('server')->get('cachedir'), 'plugin-data.yaml' );
 }
 
-sub writePluginCache {
+sub _writePluginCache {
 	my $class = shift;
 	
 	if ( main::SLIM_SERVICE ) {
@@ -170,17 +502,17 @@ sub writePluginCache {
 		return;
 	}
 
-	$log->info("Writing out plugin data file.");
+	main::INFOLOG && $log->info("Writing out plugin cache file.");
 
 	# add the cacheinfo data
 	$plugins->{'__cacheinfo'} = $cacheInfo;
 
-	YAML::Syck::DumpFile($class->pluginCacheFile, $plugins);
+	YAML::Syck::DumpFile($class->_pluginCacheFile, $plugins);
 
 	delete $plugins->{'__cacheinfo'};
 }
 
-sub loadPluginCache {
+sub _loadPluginCache {
 	my $class = shift;
 	
 	if ( main::SLIM_SERVICE ) {
@@ -188,27 +520,30 @@ sub loadPluginCache {
 		return;
 	}
 
-	$log->info("Loading plugin data file.");
+	my $file = $class->_pluginCacheFile;
 
-	$plugins = YAML::Syck::LoadFile($class->pluginCacheFile);
+	if (!-r $file) {
+		main::INFOLOG && $log->info("No plugin cache file.");
+		return;
+	}
+
+	main::INFOLOG && $log->info("Loading plugin cache file.");
+
+	$plugins = YAML::Syck::LoadFile($file);
 
 	$cacheInfo = delete $plugins->{'__cacheinfo'} || { 
 		'version' => -1,
 	};
 
-	if ($log->is_debug) {
-		$log->debug("Cache Version: " . $cacheInfo->{'version'} . 
-			" Bin: ", $cacheInfo->{'bin'} . 
-			" Plugins: " . $cacheInfo->{'count'} . 
-			" MTimeSum: " . $cacheInfo->{'mtimesum'} );
-
+	if (main::DEBUGLOG && $log->is_debug) {
+		$log->debug("Cache Info: " . Data::Dump::dump($cacheInfo) );
 		for my $plugin (sort keys %{$plugins}){
-			$log->debug("  $plugin");
+			$log->debug("$plugin");
 		}
 	}
 }
 
-sub findInstallManifests {
+sub _findInstallManifests {
 	my $class = shift;
 
 	my $mtimesum = 0;
@@ -233,7 +568,7 @@ sub findInstallManifests {
 	return (\@files, $mtimesum);
 }
 
-sub readInstallManifests {
+sub _readInstallManifests {
 	my $class = shift;
 	my $files = shift;
 
@@ -244,12 +579,7 @@ sub readInstallManifests {
 		my ($pluginName, $installManifest) = $class->_parseInstallManifest($file);
 
 		if (!defined $pluginName) {
-
 			next;
-		}
-
-		if ($installManifest->{'error'} eq 'INSTALLERROR_SUCCESS') {
-
 		}
 
 		$plugins->{$pluginName} = $installManifest;
@@ -260,7 +590,7 @@ sub _parseInstallManifest {
 	my $class = shift;
 	my $file  = shift;
 
-	my $installManifest = eval { XMLin($file) };
+	my $installManifest = eval { XMLin($file, SuppressEmpty => undef) };
 
 	if ($@) {
 
@@ -269,114 +599,116 @@ sub _parseInstallManifest {
 		return undef;
 	}
 
-	my $pluginName = $installManifest->{'module'};
+	my $pluginName;
 
-	$installManifest->{'basedir'} = dirname($file);
+	my $module = $installManifest->{'module'};
 
-	if (!defined $pluginName) {
-		
-		$installManifest->{'error'} = 'INSTALLERROR_NO_PLUGIN';
+	if ($module && $module =~ /^Plugins::(.*)::/) {
 
-		return ($file, $installManifest);
+		$pluginName = $1;
+
+	} elsif ($module && $module =~ /^Slim::Plugin::(.*)::/) {
+
+		$pluginName = $1;
+
+	} else {
+
+		($pluginName) = $file =~ /.*[\/|\\](.*)[\/|\\]install.xml/;
 	}
 
-	if (!$class->checkPluginVersion($installManifest)) {
-
-		$installManifest->{'error'} = 'INSTALLERROR_INVALID_VERSION';
-
-		return ($pluginName, $installManifest);
+	if ( exists $SKIP{$pluginName} ) {
+		# Disabled on SN
+		return;
 	}
 
-	# Check the OS matches
-	my $osDetails    = Slim::Utils::OSDetect::details();
-	my $osType       = $osDetails->{'os'};
-	my $osArch       = $osDetails->{'osArch'};
-
-	my $requireOS    = 0;
-	my $matchingOS   = 0;
-	my $requireArch  = 0;
-	my $matchingArch = 0;
-	my @platforms    = $installManifest->{'targetPlatform'} || ();
-
-	if (ref($installManifest->{'targetPlatform'}) eq 'ARRAY') {
-
-		@platforms = @{ $installManifest->{'targetPlatform'} };
-	}
-
-	for my $platform (@platforms) {
-
-		$requireOS = 1;
-
-		my ($targetOS, $targetArch) = split /-/, $platform;
-
-		if ($osType =~ /$targetOS/i) {
-
-			$matchingOS = 1;
-
-			if ($targetArch) {
-
-				$requireArch = 1;
-
-				if ($osArch =~ /$targetArch/i) {
-
-					$matchingArch = 1;
-					last;
-				}
-			}
-		}
-	}
-
-	if ($requireOS && (!$matchingOS || ($requireArch && !$matchingArch))) {
-
-		$installManifest->{'error'} = 'INSTALLERROR_INCOMPATIBLE_PLATFORM';
-
-		return ($pluginName, $installManifest);
-	}
-
-
-	if ($installManifest->{'icon-id'}) {
-
-		Slim::Web::Pages->addPageLinks("icons", { $pluginName => $installManifest->{'icon-id'} });
-
-	}
-
-	$installManifest->{'error'} = 'INSTALLERROR_SUCCESS';
-
-	if ($installManifest->{'defaultState'} && !defined $prefs->get($pluginName)) {
+	if (!defined $prefs->get($pluginName)) {
 
 		my $state = delete $installManifest->{'defaultState'};
 
-		if ($state eq 'disabled') {
+		if (ref $state eq 'HASH') {
 
-			$prefs->set($pluginName, STATE_DISABLED);
+			$state = $state->{ Slim::Utils::OSDetect::OS() } || $state->{ 'other' };
+		}
+
+		if ($state && $state eq 'disabled') {
+
+			$prefs->set($pluginName, 'disabled');
 
 		} else {
 
-			$prefs->set($pluginName, STATE_ENABLED);
+			$prefs->set($pluginName, 'enabled');
 		}
 	}
+
+	$installManifest->{'basedir'} = dirname($file);
+
+	if (!defined $module) {
+		
+		$installManifest->{'error'} = 'INSTALLERROR_NO_MODULE';
+
+	} elsif (!$class->_checkPluginVersion($installManifest)) {
+
+		$installManifest->{'error'} = 'INSTALLERROR_INVALID_VERSION';
+
+	} else {
+
+		# Check the OS matches
+		my $osDetails    = Slim::Utils::OSDetect::details();
+		my $osType       = $osDetails->{'os'};
+		my $osArch       = $osDetails->{'osArch'};
+		
+		my $requireOS    = 0;
+		my $matchingOS   = 0;
+		my $requireArch  = 0;
+		my $matchingArch = 0;
+		my @platforms    = $installManifest->{'targetPlatform'} || ();
+		
+		if (ref($installManifest->{'targetPlatform'}) eq 'ARRAY') {
+			
+			@platforms = @{ $installManifest->{'targetPlatform'} };
+		}
+		
+		for my $platform (@platforms) {
+			
+			$requireOS = 1;
+			
+			my ($targetOS, $targetArch) = split /-/, $platform;
+			
+			if ($osType =~ /$targetOS/i) {
+				
+				$matchingOS = 1;
+				
+				if ($targetArch) {
+					
+					$requireArch = 1;
+					
+					if ($osArch =~ /$targetArch/i) {
+						
+						$matchingArch = 1;
+						last;
+					}
+				}
+			}
+		}
+		
+		if ($requireOS && (!$matchingOS || ($requireArch && !$matchingArch))) {
+			
+			$installManifest->{'error'} = 'INSTALLERROR_INCOMPATIBLE_PLATFORM';
+
+			$log->warn("plugin $pluginName incompatible with system - disabling");
+
+			$prefs->set($pluginName, 'disabled');
+		}
+	}
+
+	$installManifest->{'error'} ||= 'INSTALLERROR_SUCCESS';
+
+	main::DEBUGLOG && $log->debug("$pluginName [" . ($module || '') . "] " . Slim::Utils::Strings::getString($installManifest->{error}));
 
 	return ($pluginName, $installManifest);
 }
 
-sub checkPluginVersions {
-	my $class = shift;
-
-	while (my ($name, $manifest) = each %{$plugins}) {
-
-		if ($manifest->{'error'} eq 'INSTALLERROR_NO_PLUGIN') {
-			# skip plugins with no module - these do not need to have a target version
-			next;
-		}
-
-		if (!$class->checkPluginVersion($manifest)) {
-
-			$plugins->{$name}->{'error'} = 'INSTALLERROR_INVALID_VERSION';
-		}
-	}
-}
-
-sub checkPluginVersion {
+sub _checkPluginVersion {
 	my ($class, $manifest) = @_;
 
 	if (!$manifest->{'targetApplication'} || ref($manifest->{'targetApplication'}) ne 'HASH') {
@@ -396,389 +728,66 @@ sub checkPluginVersion {
 	return 1;
 }
 
-sub enablePlugins {
+sub _needsEnable {
 	my $class = shift;
+	my $plugin = shift;
 
-	my @incDirs = ();
-	my @loaded  = ();
-	
-	for my $name (sort keys %$plugins) {
-		
-		if ( exists $SKIP{$name} ) {
-			$log->debug("Skipping plugin: $name");
-			next;
-		}
-		
-		if ( main::SLIM_SERVICE && $name =~ /^Plugins/ ) {
-			# Skip 3rd party plugins on SN
-			next;
-		}
+	main::INFOLOG && $log->info("enabling $plugin");
 
-		my $manifest = $plugins->{$name};
-
-		# Skip plugins with no perl module.
-		next unless $manifest->{'module'};
-
-		# Skip plugins that can't be loaded.
-		if ($manifest->{'error'} ne 'INSTALLERROR_SUCCESS') {
-			$log->error(sprintf("Couldn't load $name. Error: %s\n", $class->getErrorString($name)));
-
-			next;
-		}
-
-		delete $manifest->{opType};
-
-
-		if (defined $prefs->get($name) && $prefs->get($name) eq STATE_DISABLED && $manifest->{'enforce'}) {
-	
-			$log->debug("Enabling plugin: $name - must not be disabled");
-			$prefs->set($name, STATE_ENABLED);
-		}
-
-		elsif (defined $prefs->get($name) && $prefs->get($name) eq STATE_DISABLED) {
-
-			$log->warn("Skipping plugin: $name - disabled");
-
-			next;
-		}
-
-		$log->info("Enabling plugin: [$name]");
-
-		my $baseDir    = $manifest->{'basedir'};
-		my $module     = $manifest->{'module'};
-		my $loadModule = 0;
-
-		# Look for a lib dir that has a PAR file or otherwise.
-		if (-d catdir($baseDir, 'lib')) {
-
-			my $dir = dir( catdir($baseDir, 'lib') );
-
-			for my $file ($dir->children) {
-
-				if ($file =~ /\.par$/) {
-
-					$loadModule = 1;
-
-					require PAR;
-					PAR->import({ file => $file->stringify });
-
-					last;
-				}
-
-				if ($file =~ /\.pm$/) {
-
-					$loadModule = 1;
-					unshift @INC, catdir($baseDir, 'lib');
-
-					last;
-				}
-
-				if ($file =~ /.*Plugins$/ && -d $file) {
-					$loadModule = 1;
-					unshift @INC, catdir($baseDir, 'lib');
-
-					last;
-				}
-			}
-		}
-
-		if (-f catdir($baseDir, 'Plugin.pm')) {
-
-			$loadModule = 1;
-		}
-
-		# Pull in the module
-		if ($loadModule && $module) {
-
-			if (Slim::bootstrap::tryModuleLoad($module)) {
-
-				logError("Couldn't load $module");
-
-			} else {
-
-				$prefs->set($module, STATE_ENABLED);
-
-				push @loaded, $module;
-			}
-		}
-		
-		if ( main::SLIM_SERVICE ) {
-			# no web stuff for SN
-			next;
-		}
-
-		# Add any available HTML to TT's INCLUDE_PATH
-		my $htmlDir = catdir($baseDir, 'HTML');
-
-		if (-d $htmlDir) {
-
-			$log->debug("Adding HTML directory: [$htmlDir]");
-
-			Slim::Web::HTTP::addTemplateDirectory($htmlDir);
-		}
-
-		# Add any Bin dirs to findbin search path
-		my $binDir = catdir($baseDir, 'Bin');
-
-		if (-d $binDir) {
-
-			$log->debug("Adding Bin directory: [$binDir]");
-
-			Slim::Utils::Misc::addFindBinPaths( catdir($binDir, Slim::Utils::OSDetect::details()->{'binArch'}), $binDir );
-		}
-	}
-
-	# Call init functions for all loaded plugins - multiple passes allows plugins to offer services to each other
-	# - plugins offering service to other plugins use preinitPlugin to init themselves and postinitPlugin to start the service
-	# - normal plugins use initPlugin and register with services offered by other plugins at this time
-
-	for my $initFunction (qw(preinitPlugin initPlugin postinitPlugin)) {
-
-		for my $module (@loaded) {
-
-			if ($module->can($initFunction)) {
-
-				eval { $module->$initFunction };
-				
-				if ($@) {
-
-					logWarning("Couldn't call $module->$initFunction: $@");
-				}
-			}
-		}
-	}
+	$prefs->set($plugin, 'enabled');
 }
 
-sub dataForPlugin {
-	my $class  = shift;
+sub _needsDisable {
+	my $class = shift;
+	my $plugin = shift;
+
+	main::INFOLOG && $log->info("disabling $plugin");
+
+	$prefs->set($plugin, 'disabled');
+}
+
+sub _needsUninstall {
+	my $class = shift;
 	my $plugin = shift;
 
 	if ($plugins->{$plugin}) {
 
-		return $plugins->{$plugin};
-	}
+		my $dir = $plugins->{$plugin}->{'basedir'};
 
-	return undef;
-}
+		if (-d $dir && $dir =~ /InstalledPlugins/) {
 
-sub allPlugins {
-	my $class = shift;
+			rmtree $dir;
 
-	return $plugins;
-}
+			main::INFOLOG && $log->info("uninstalling $plugin from $dir");
 
-sub installedPlugins {
-	my $class = shift;
+		} else {
 
-	return $class->_filterPlugins('error', 'INSTALLERROR_SUCCESS');
-}
-
-sub _filterPlugins {
-	my ($class, $category, $opType) = @_;
-
-	my @found = ();
-
-	for my $name ( keys %{$plugins} ) {
-
-		my $manifest = $plugins->{$name};
-		
-		if (defined $manifest->{$category} && $manifest->{$category} eq $opType) {
-
-			push @found, $name;
-		}
-	}
-
-	return @found;
-}
-
-sub runPendingOperations {
-	my $class = shift;
-
-	# These first two should be no-ops.
-	for my $plugin ($class->getPendingOperations(OP_NEEDS_ENABLE)) {
-
-		my $manifest = $plugins->{$plugin};
-	}
-
-	for my $plugin ($class->getPendingOperations(OP_NEEDS_DISABLE)) {
-
-		my $manifest = $plugins->{$plugin};
-	}
-
-	# Uninstall first, then install
-	for my $plugin ($class->getPendingOperations(OP_NEEDS_UPGRADE)) {
-
-		#$class->uninstallPlugin($plugin);
-		my $manifest = $plugins->{$plugin};
-	}
-
-	for my $plugin ($class->getPendingOperations(OP_NEEDS_INSTALL)) {
-
-		my $manifest = $plugins->{$plugin};
-	}
-
-	for my $plugin ($class->getPendingOperations(OP_NEEDS_UNINSTALL)) {
-
-		my $manifest = $plugins->{$plugin};
-
-		if (-d $manifest->{'basedir'}) {
-
-			$log->info("Uninstall: Removing $manifest->{'basedir'}");
-
-			# rmtree($manifest->{'basedir'});
+			$log->error("unable to uninstall plugin as not in InstalledPlugins dir - $dir");
 		}
 
-		delete $plugins->{$plugin};
-	}
-}
+	} else {
 
-sub getPendingOperations {
-	my ($class, $opType) = @_;
-
-	return $class->_filterPlugins('opType', $opType);
-}
-
-sub getErrorString {
-	my ($class, $plugin) = @_;
-
-	unless ($plugins->{$plugin}->{error} eq 'INSTALLERROR_SUCCESS') {
-
-		return Slim::Utils::Strings::getString($plugins->{$plugin}->{error});
+		$log->error("unable to uninstall plugin $plugin - not in the cache");
 	}
 
-	return '';
+	$prefs->remove($plugin);
 }
 
-sub enabledPlugins {
+sub _needsInstall {
 	my $class = shift;
-
-	my @found = ();
-
-	for my $plugin ($class->installedPlugins) {
-
-		if (defined $prefs->get($plugin) && $prefs->get($plugin) == STATE_ENABLED) {
-
-			unless ($plugins->{$plugin}->{opType} && ($plugins->{$plugin}->{opType} eq OP_NEEDS_INSTALL
-				|| $plugins->{$plugin}->{opType} eq OP_NEEDS_ENABLE 
-				|| $plugins->{$plugin}->{opType} eq OP_NEEDS_UPGRADE)) {
-					
-				push @found, $plugin;
-			}
-		}
-
-	}
-
-	return @found;
-}
-
-sub isEnabled {
-	my $class  = shift;
-	my $plugin = shift;
-	
-	if ( exists $SKIP{$plugin} ) {
-		# Disabled on SN
-		return;
-	}
-
-	my %found  = map { $_ => 1 } $class->enabledPlugins;
-
-	if (defined $found{$plugin}) {
-
-		return 1;
-	}
-
-	return undef;
-}
-
-sub enablePlugin {
-	my $class  = shift;
 	my $plugin = shift;
 
-	my $opType = $plugins->{$plugin}->{'opType'};
+	if ($downloader) {
 
-	if ($opType eq OP_NEEDS_UNINSTALL) {
-		return;
+		$downloader->extract($plugin);
+
+	} else {
+
+		$log->error("unable to install $plugin - downloads disabled");
 	}
 
-	if ($opType ne OP_NEEDS_ENABLE) {
-
-		$plugins->{$plugin}->{'opType'} = OP_NEEDS_ENABLE;
-		$prefs->set($plugin, STATE_ENABLED);
-	}
-}
-
-sub disablePlugin {
-	my $class  = shift;
-	my $plugin = shift;
-
-	if ($plugins->{$plugin}->{enforce}) {
-		$log->debug("Can't disable plugin: $plugin - 'enforce' set in install.xml");
-		return;
-	}
-	
-	$log->debug("Disabling plugin $plugin");
-
-	my $opType = $plugins->{$plugin}->{'opType'};
-
-	if ($opType eq OP_NEEDS_UNINSTALL) {
-		return;
-	}
-
-	if ($opType ne OP_NEEDS_DISABLE) {
-
-		$plugins->{$plugin}->{'opType'} = OP_NEEDS_DISABLE;
-		$prefs->set($plugin, STATE_DISABLED);
-	}
-}
-
-sub shutdownPlugins {
-	my $class = shift;
-
-	$log->info("Shutting down plugins...");
-
-	for my $plugin (sort $class->enabledPlugins) {
-
-		$class->shutdownPlugin($plugin);
-	}
-}
-
-sub shutdownPlugin {
-	my $class  = shift;
-	my $plugin = shift;
-
-	if ($plugin->can('shutdownPlugin')) {
-
-		$plugin->shutdownPlugin;
-	}
-}
-
-# XXX - this should go away in favor of specifying strings.txt, convert.conf,
-# etc in install.xml, and having callers ask for those files.
-sub pluginRootDirs {
-	my $class = shift;
-
-	if (scalar @pluginRootDirs) {
-		return @pluginRootDirs;
-	}
-
-	for my $path (Slim::Utils::OSDetect::dirsFor('Plugins')) {
-
-		opendir(DIR, $path) || next;
-
-		for my $plugin ( readdir(DIR) ) {
-
-			if (-d catdir($path, $plugin) && $plugin !~ m/^\./i) {
-
-				push @pluginRootDirs, catdir($path, $plugin);
-			}
-		}
-
-		closedir(DIR);
-	}
-
-	return @pluginRootDirs;
+	$prefs->remove($plugin);
 }
 
 1;
 
-__END__

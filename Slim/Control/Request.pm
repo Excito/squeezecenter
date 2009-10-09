@@ -1,11 +1,11 @@
 package Slim::Control::Request;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# This class implements a generic request mechanism for SqueezeCenter.
+# This class implements a generic request mechanism for Squeezebox Server.
 # More documentation is provided below the table of commands & queries
 
 =head1 NAME
@@ -14,7 +14,7 @@ Slim::Control::Request
 
 =head1 DESCRIPTION
 
-This class implements a generic request mechanism for SqueezeCenter.
+This class implements a generic request mechanism for Squeezebox Server.
 
 The general mechansim is to create a Request object and execute it. There is
 an option of specifying a callback function, to be called once the request is
@@ -76,7 +76,7 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
 
  Y    alarm           <tagged parameters>
  Y    button          <buttoncode>
- Y    connect         <ip|www.squeezenetwork.com|www.beta.squeezenetwork.com>
+ Y    connect         <ip|www.mysqueezebox.com|www.test.mysqueezebox.com>
  Y    client          forget
  Y    display         <line1>                     <line2>                       <duration>
  Y    ir              <ircode>                    <time>
@@ -188,7 +188,10 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
  Y    playlist        open                        <url>
  Y    playlist        sync
  Y    playlist        cant_open                   <url>                      <error>
+ Y    playlist        pause                       <0|1>
+ Y    playlist        stop
  N    rescan          done
+ N    library         changed               	  <0|1>
  Y    unknownir       <ircode>                    <timestamp>
  N    prefset         <namespace>                 <prefname>                  <newvalue>
  Y    alarm           sound                       <id>
@@ -326,7 +329,7 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
 
       my $cmd = $request->getRequestString();
 
-      $log->info("myCallbackFunction called for cmd $cmd\n");
+      main::INFOLOG && $log->info("myCallbackFunction called for cmd $cmd\n");
  }
 
 
@@ -342,7 +345,7 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
 =head2 Adding a command
 
  To add a command to the dispatch table, use the addDispatch method. If the
- method is part of SqueezeCenter itself, please add it to the init method below
+ method is part of Squeezebox Server itself, please add it to the init method below
  and update the comment table at the top of the document. 
  In a plugin, call the method from your initPlugin subroutine.
 
@@ -446,8 +449,6 @@ my $listenerSuperRE = qr/::/;   # regexp to screen out request which no listener
 my $alwaysUseIxHashes = 0;      # global flag which is set when we need to use tied IxHashes
                                 # this is set when a cli subscription is active
 
-our $requestTask = Slim::Utils::PerfMon->new('Request Task', [0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 1, 5]);
-
 my $log = logger('control.command');
 
 ################################################################################
@@ -483,6 +484,7 @@ sub init {
 	addDispatch(['connect',        '_where'],                                                          [1, 0, 0, \&Slim::Control::Commands::clientConnectCommand]);
 	addDispatch(['connected',      '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::connectedQuery]);
 	addDispatch(['contextmenu',    '_index',         '_quantity'],                                     [1, 1, 1, \&Slim::Control::Queries::contextMenuQuery]);
+	addDispatch(['mixermenu',      '_index',         '_quantity'],                                     [1, 1, 1, \&Slim::Control::Queries::mixerMenuQuery]);
 	addDispatch(['current_title',  '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::cursonginfoQuery]);
 	addDispatch(['debug',          '_debugflag',     '?'],                                             [0, 1, 0, \&Slim::Control::Queries::debugQuery]);
 	addDispatch(['debug',          '_debugflag',     '_newvalue'],                                     [0, 0, 0, \&Slim::Control::Commands::debugCommand]);
@@ -504,24 +506,25 @@ sub init {
 	addDispatch(['irenable',       '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::irenableQuery]);
 	addDispatch(['irenable',       '_newvalue'],                                                       [1, 0, 0, \&Slim::Control::Commands::irenableCommand]);
 	addDispatch(['linesperscreen', '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::linesperscreenQuery]);
+	addDispatch(['logging'],                                                                           [0, 0, 1, \&Slim::Control::Commands::loggingCommand]);
 	addDispatch(['mixer',          'bass',           '?'],                                             [1, 1, 0, \&Slim::Control::Queries::mixerQuery]);
-	addDispatch(['mixer',          'bass',           '_newvalue'],                                     [1, 0, 0, \&Slim::Control::Commands::mixerCommand]);
+	addDispatch(['mixer',          'bass',           '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::mixerCommand]);
 	addDispatch(['mixer',          'muting',         '?'],                                             [1, 1, 0, \&Slim::Control::Queries::mixerQuery]);
-	addDispatch(['mixer',          'muting',         '_newvalue'],                                     [1, 0, 0, \&Slim::Control::Commands::mixerCommand]);
+	addDispatch(['mixer',          'muting',         '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::mixerCommand]);
 	addDispatch(['mixer',          'stereoxl',       '?'],                                             [1, 1, 0, \&Slim::Control::Queries::mixerQuery]);
-	addDispatch(['mixer',          'stereoxl',       '_newvalue'],                                     [1, 0, 0, \&Slim::Control::Commands::mixerCommand]);
+	addDispatch(['mixer',          'stereoxl',       '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::mixerCommand]);
 	addDispatch(['mixer',          'pitch',          '?'],                                             [1, 1, 0, \&Slim::Control::Queries::mixerQuery]);
-	addDispatch(['mixer',          'pitch',          '_newvalue'],                                     [1, 0, 0, \&Slim::Control::Commands::mixerCommand]);
+	addDispatch(['mixer',          'pitch',          '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::mixerCommand]);
 	addDispatch(['mixer',          'treble',         '?'],                                             [1, 1, 0, \&Slim::Control::Queries::mixerQuery]);
-	addDispatch(['mixer',          'treble',         '_newvalue'],                                     [1, 0, 0, \&Slim::Control::Commands::mixerCommand]);
+	addDispatch(['mixer',          'treble',         '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::mixerCommand]);
 	addDispatch(['mixer',          'volume',         '?'],                                             [1, 1, 0, \&Slim::Control::Queries::mixerQuery]);
-	addDispatch(['mixer',          'volume',         '_newvalue'],                                     [1, 0, 0, \&Slim::Control::Commands::mixerCommand]);
+	addDispatch(['mixer',          'volume',         '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::mixerCommand]);
 	addDispatch(['mode',           '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::modeQuery]);
 	addDispatch(['musicfolder',    '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::musicfolderQuery]);
 	addDispatch(['name',           '_newvalue'],                                                       [1, 0, 0, \&Slim::Control::Commands::nameCommand]);
 	addDispatch(['name',           '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::nameQuery]);
 	addDispatch(['path',           '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::cursonginfoQuery]);
-	addDispatch(['pause',          '_newvalue',      '_fadein'],                                       [1, 0, 0, \&Slim::Control::Commands::playcontrolCommand]);
+	addDispatch(['pause',          '_newvalue',      '_fadein', '_suppressShowBriefly'],               [1, 0, 0, \&Slim::Control::Commands::playcontrolCommand]);
 	addDispatch(['play',           '_fadein'],                                                         [1, 0, 0, \&Slim::Control::Commands::playcontrolCommand]);
 	addDispatch(['player',         'address',        '_IDorIndex', '?'],                               [0, 1, 0, \&Slim::Control::Queries::playerXQuery]);
 	addDispatch(['player',         'count',          '?'],                                             [0, 1, 0, \&Slim::Control::Queries::playerXQuery]);
@@ -589,7 +592,7 @@ sub init {
 	addDispatch(['playlists',      'rename'],                                                          [0, 0, 1, \&Slim::Control::Commands::playlistsRenameCommand]);
 	addDispatch(['playlists',      'tracks',         '_index',     '_quantity'],                       [0, 1, 1, \&Slim::Control::Queries::playlistsTracksQuery]);
 	addDispatch(['power',          '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::powerQuery]);
-	addDispatch(['power',          '_newvalue',      '_noplay'],                                       [1, 0, 0, \&Slim::Control::Commands::powerCommand]);
+	addDispatch(['power',          '_newvalue',      '_noplay'],                                       [1, 0, 1, \&Slim::Control::Commands::powerCommand]);
 	addDispatch(['pref',           '_prefname',      '?'],                                             [0, 1, 0, \&Slim::Control::Queries::prefQuery]);
 	addDispatch(['pref',           'validate',       '_prefname',  '_newvalue'],                       [0, 1, 0, \&Slim::Control::Queries::prefValidateQuery]);
 	addDispatch(['pref',           '_prefname',      '_newvalue'],                                     [0, 0, 1, \&Slim::Control::Commands::prefCommand]);
@@ -597,18 +600,19 @@ sub init {
 	addDispatch(['rescan',         '?'],                                                               [0, 1, 0, \&Slim::Control::Queries::rescanQuery]);
 	addDispatch(['rescan',         '_playlists'],                                                      [0, 0, 0, \&Slim::Control::Commands::rescanCommand]);
 	addDispatch(['rescanprogress'],                                                                    [0, 1, 1, \&Slim::Control::Queries::rescanprogressQuery]);
+	addDispatch(['restartserver'],                                                                     [0, 0, 0, \&Slim::Control::Commands::stopServer]);
 	addDispatch(['search',         '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::searchQuery]);
 	addDispatch(['serverstatus',   '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::serverstatusQuery]);
+	addDispatch(['setsncredentials','_username',     '_password'],                                     [0, 0, 1, \&Slim::Control::Commands::setSNCredentialsCommand]);
 	addDispatch(['show'],                                                                              [1, 0, 1, \&Slim::Control::Commands::showCommand]);
 	addDispatch(['signalstrength', '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::signalstrengthQuery]);
 	addDispatch(['sleep',          '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::sleepQuery]);
 	addDispatch(['sleep',          '_newvalue'],                                                       [1, 0, 0, \&Slim::Control::Commands::sleepCommand]);
-	# XXX: songinfo is deprecated, use trackinfo instead
 	addDispatch(['songinfo',       '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::songinfoQuery]);
 	addDispatch(['songs',          '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::titlesQuery]);
 	addDispatch(['status',         '_index',         '_quantity'],                                     [1, 1, 1, \&Slim::Control::Queries::statusQuery]);
 	addDispatch(['stop'],                                                                              [1, 0, 0, \&Slim::Control::Commands::playcontrolCommand]);
-	addDispatch(['stopserver'],                                                                        [0, 0, 0, \&main::stopServer]);
+	addDispatch(['stopserver'],                                                                        [0, 0, 0, \&Slim::Control::Commands::stopServer]);
 	addDispatch(['sync',           '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::syncQuery]);
 	addDispatch(['sync',           '_indexid-'],                                                       [1, 0, 0, \&Slim::Control::Commands::syncCommand]);
 	addDispatch(['syncgroups',     '?'],                                                               [0, 1, 0, \&Slim::Control::Queries::syncGroupsQuery]);
@@ -634,7 +638,10 @@ sub init {
 	addDispatch(['playlist',       'open',           '_path'],                                         [1, 0, 0, undef]);
 	addDispatch(['playlist',       'sync'],                                                            [1, 0, 0, undef]);
 	addDispatch(['playlist',       'cant_open',      '_url',         '_error'],                        [1, 0, 0, undef]);
+	addDispatch(['playlist',       'pause',          '_newvalue'],                                     [1, 0, 0, undef]);
+	addDispatch(['playlist',       'stop'],                                                            [1, 0, 0, undef]);
 	addDispatch(['rescan',         'done'],                                                            [0, 0, 0, undef]);
+	addDispatch(['library',        'changed',        '_newvalue'],                                     [0, 0, 0, undef]);
 	addDispatch(['unknownir',      '_ircode',        '_time'],                                         [1, 0, 0, undef]);
 	addDispatch(['prefset',        '_namespace',     '_prefname',  '_newvalue'],                       [0, 0, 1, undef]);
 	addDispatch(['displaynotify',  '_type',          '_parts'],                                        [1, 0, 0, undef]);
@@ -642,6 +649,7 @@ sub init {
 	addDispatch(['alarm',          'end',            '_id'],                                           [1, 0, 0, undef]);
 	addDispatch(['alarm',          'snooze',         '_id'],                                           [1, 0, 0, undef]);
 	addDispatch(['alarm',          'snooze_end',     '_id'],                                           [1, 0, 0, undef]);
+	addDispatch(['fwdownloaded',   '_machine'],                                                        [0, 0, 0, undef]);
 
 # DEPRECATED
 	addDispatch(['mode',           'pause'],                                                           [1, 0, 0, \&Slim::Control::Commands::playcontrolCommand]);
@@ -661,20 +669,20 @@ sub init {
 	# No web code on SN
 	return if main::SLIM_SERVICE;
 
-	# Normal SqueezeCenter commands can be accessed with URLs like
+	# Normal Squeezebox Server commands can be accessed with URLs like
 	#   http://localhost:9000/status.html?p0=pause&player=00%3A00%3A00%3A00%3A00%3A00
 	# Use the protectCommand() API to prevent CSRF attacks on commands -- including commands
 	# not intended for use via the web interface!
 	#
 	# protect some commands regardless of args passed to them
-	Slim::Web::HTTP::protectCommand([qw|alarm alarms button client debug display displaynow ir pause play playlist 
-					playlistcontrol playlists stop stopserver wipecache prefset mode
+	Slim::Web::HTTP::CSRF->protectCommand([qw|alarm alarms button client debug display displaynow ir pause play playlist 
+					playlistcontrol playlists stop stopserver restartserver wipecache prefset mode
 					power rescan sleep sync time gototime
 					mixer playerpref pref|]);
 	# protect changing setting for command + 1-arg ("?" query always allowed -- except "?" is "%3F" once escaped)
-	#Slim::Web::HTTP::protectCommand(['power', 'rescan', 'sleep', 'sync', 'time', 'gototime'],'[^\?].*');	
+	#Slim::Web::HTTP::CSRF->protectCommand(['power', 'rescan', 'sleep', 'sync', 'time', 'gototime'],'[^\?].*');	
 	# protect changing setting for command + 2 args, 2nd as new value ("?" query always allowed)
-	#Slim::Web::HTTP::protectCommand(['mixer', 'playerpref', 'pref'],'.*','[^\?].*');	# protect changing volume ("?" query always allowed)
+	#Slim::Web::HTTP::CSRF->protectCommand(['mixer', 'playerpref', 'pref'],'.*','[^\?].*');	# protect changing volume ("?" query always allowed)
 
 }
 
@@ -760,7 +768,7 @@ sub addDispatch {
 	# FIXME - should we check the params for the replacement are the same?
 	my $prevFunc = defined $entry->[$query] ? $entry->[$query]->[4] : undef;
 
-	$log->is_info && $log->info("Adding dispatch: [", join(' ', @$arrayCmdRef) . "]");
+	main::INFOLOG && $log->is_info && $log->info("Adding dispatch: [", join(' ', @$arrayCmdRef) . "]");
 
 	$entry->[$query] = [ \@params, @$arrayDataRef ];
 
@@ -783,7 +791,7 @@ sub subscribe {
 	# rebuild the super regexp for the current list of listeners
 	__updateListenerSuperRE();
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf(
 			"Request from: %s - (%d listeners)\n",
 			Slim::Utils::PerlRunTime::realNameForCodeRef($subscriberFuncRef),
@@ -807,7 +815,7 @@ sub unsubscribe {
 	# rebuild the super regexp for the current list of listeners
 	__updateListenerSuperRE();
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf(
 			"Request from: %s - (%d listeners)\n",
 			Slim::Utils::PerlRunTime::realNameForCodeRef($subscriberFuncRef),
@@ -822,7 +830,7 @@ sub notifyFromArray {
 	my $client         = shift;     # client, if any, to which the query applies
 	my $requestLineRef = shift;     # reference to an array containing the query verbs
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf("(%s)", join(" ", @{$requestLineRef})));
 	}
 
@@ -838,14 +846,16 @@ sub notifyFromArray {
 # sends notifications for first entry in queue - called once per idle loop
 sub checkNotifications {
 	
-	return 0 if (!scalar @notificationQueue);
+	my $count = scalar @notificationQueue;
+	
+	return 0 if !$count;
 
 	# notify first entry on queue
 	my $request = shift @notificationQueue;
 
 	$request->notify();
 
-	return 1;
+	return $count - 1;
 }
 
 # convenient function to execute a request from an array, with optional
@@ -986,7 +996,7 @@ sub new {
 		$self->{'_status'} = 104;
 		return $self;
 	}
-
+	
 	# parse the line
 	my $i = 0;
 	my $found;
@@ -1004,7 +1014,7 @@ sub new {
 		# choose the parameter array based on whether last param is '?'
 		# 1 = array for queries ending in ?, 0 otherwise
 
-		if ($requestLineRef->[-1] ne '?') {
+		if (!defined $requestLineRef->[-1] || $requestLineRef->[-1] ne '?') {
 
 			$found = $search->{'::'}->[0];
 
@@ -1057,10 +1067,18 @@ sub new {
 			# Mark as not dispatachable as no function or we ran out of params
 			$self->{'_status'} = 104;
 
-		} elsif ($found->[1] && !$Slim::Player::Client::clientHash{$clientid}) {
-			# Mark as not dispatchable as no client
-			$self->{'_status'} = 103;
+		} elsif ($found->[1] && (!$clientid || !$Slim::Player::Client::clientHash{$clientid})) {
+
 			$self->{'_clientid'} = undef;
+
+			if ($found->[1] == 2 && $clientid) {
+				# Special case where there is a clientid but there is no attached client
+				$self->{'_disconnected_clientid'} = $clientid;
+				$self->{'_status'} = 1;
+			} else {
+				# Mark as not dispatchable as no client
+				$self->{'_status'} = 103;
+			}
 
 		} else {
 			# Mark as dispatchable
@@ -1077,7 +1095,7 @@ sub new {
 			$params{"_p$i"} = $requestLineRef->[$i];
 		}
 
-		if ($log->is_info) {
+		if (main::INFOLOG && $log->is_info) {
 			$log->info("Request [" . join(' ', @{$requestLineRef}) . "]: no match in dispatchDB!");
 		}
 	}
@@ -1133,6 +1151,12 @@ sub client {
 	}
 	
 	return Slim::Player::Client::getClient($self->{'_clientid'});
+}
+
+sub disconnectedClientID {
+	my $self = shift;
+	
+	return $self->{_disconnected_clientid};
 }
 
 # sets/returns the client ID
@@ -1266,7 +1290,7 @@ sub removeAutoExecuteCallback {
 	my $cleanup     = $self->autoExecuteCleanup();
 	my $request2del = $subscribers{$cnxid}{$name}{$clientid};
 	
-	$log->debug("removeAutoExecuteCallback: deleting $cnxid - $name - $clientid");
+	main::DEBUGLOG && $log->debug("removeAutoExecuteCallback: deleting $cnxid - $name - $clientid");
 
 	delete $subscribers{$cnxid}{$name}{$clientid};
 	
@@ -1318,7 +1342,7 @@ my %statusMap = (
 	102 => 'Bad params!',
 	103 => 'Missing client!',
 	104 => 'Unknown in dispatch table',
-	105 => 'Bad SqueezeCenter config',
+	105 => 'Bad Squeezebox Server config',
 );
 
 # validate the Request, make sure we are dispatchable
@@ -1328,8 +1352,13 @@ sub validate {
 	if (ref($self->{'_func'}) ne 'CODE') {
 
 		$self->{'_status'}   = 104;
-
-	} elsif ($self->{'_needClient'} && !$Slim::Player::Client::clientHash{$self->{'_clientid'}}){
+		
+	}
+	elsif ( $self->{_needClient} == 2 ) {
+		# Allowed as a disconnected client
+		$self->{_status} = 1;
+	}
+ 	elsif ($self->{'_needClient'} && !$Slim::Player::Client::clientHash{$self->{'_clientid'}}){
 
 		$self->{'_status'}   = 103;
 		$self->{'_clientid'} = undef;
@@ -1622,7 +1651,7 @@ sub sliceResultLoop {
 		if ($start) {
 			splice ( @{${$self->{'_results'}}{$loop}} , 0, $start);
 		}
-		if ($quantity) {
+		if ($quantity && $quantity < scalar @{${$self->{'_results'}}{$loop}}) {
 			splice ( @{${$self->{'_results'}}{$loop}} , $quantity);
 		}
 	}
@@ -1655,7 +1684,7 @@ sub sortResultLoop {
 	if (defined ${$self->{'_results'}}{$loop}) {
 		my @data;
 		
-		if ($field == 'weight') {
+		if ($field eq 'weight') {
 			@data = sort { $a->{$field} <=> $b->{$field} } @{${$self->{'_results'}}{$loop}};
 		} else {
 			@data = sort { $a->{$field} cmp $b->{$field} } @{${$self->{'_results'}}{$loop}};
@@ -1853,11 +1882,11 @@ sub normalize {
 sub execute {
 	my $self = shift;
 
-	if ($log->is_info) {
+	if (main::INFOLOG && $log->is_info) {
 		$self->dump("Request");
 	}
 
-	$::perfmon && (my $now = Time::HiRes::time());
+	main::PERFMON && (my $now = AnyEvent->time);
 
 	# some time may have elapsed between the request creation
 	# and its execution, and the client, f.e., could have disappeared
@@ -1899,7 +1928,7 @@ sub execute {
 	# contine execution unless the Request is still work in progress (async)...
 	$self->executeDone() unless $self->isStatusProcessing();
 
-	$::perfmon && $now && $requestTask->log(Time::HiRes::time() - $now, "Execute: ", $self->{'_func'});
+	main::PERFMON && $now && Slim::Utils::PerfMon->check('request', AnyEvent->time - $now, undef, $self->{'_func'});
 }
 
 # perform end of execution, calling the callback etc...
@@ -1923,7 +1952,7 @@ sub executeDone {
 		}
 	}
 
-	if ($log->is_debug) {
+	if (main::DEBUGLOG && $log->is_debug) {
 
 		$log->debug($self->dump('Request'));
 	}
@@ -1983,7 +2012,7 @@ sub callback {
 		
 		if (defined(my $funcPtr = $self->callbackFunction())) {
 
-			$log->info("Calling callback function");
+			main::INFOLOG && $log->info("Calling callback function");
 
 			my $args = $self->callbackArguments();
 		
@@ -2021,7 +2050,7 @@ sub callback {
 
 	} else {
 
-		$log->info("Callback disabled");
+		main::INFOLOG && $log->info("Callback disabled");
 	}
 }
 
@@ -2030,7 +2059,7 @@ sub notify {
 	my $self = shift || return;
 	my $specific = shift; # specific target of notify if we have a single known target
 
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug(sprintf("Notifying %s", $self->getRequestString()));
 	}
 
@@ -2050,12 +2079,12 @@ sub notify {
 			# If this listener is client-specific, ignore unless we have that client
 			if ( $clientid ) {
 				unless ( blessed( $self->client ) && $self->client->id eq $clientid ) {
-					$log->debug( "Skipping notification, only wanted for $clientid" );
+					main::DEBUGLOG && $log->debug( "Skipping notification, only wanted for $clientid" );
 					next;
 				}
 			}
 
-			if ( $log->is_debug ) {
+			if ( main::DEBUGLOG && $log->is_debug ) {
 				my $funcName = $listener;
 				
 				if ( ref($notifyFuncRef) eq 'CODE' ) {
@@ -2067,7 +2096,7 @@ sub notify {
 								   ));
 			}
 			
-			$::perfmon && (my $now = Time::HiRes::time());
+			main::PERFMON && (my $now = AnyEvent->time);
 			
 			eval { &$notifyFuncRef($self) };
 			
@@ -2080,7 +2109,7 @@ sub notify {
 				}
 			}
 			
-			$::perfmon && $requestTask->log(Time::HiRes::time() - $now, "Notify: ", $notifyFuncRef);
+			main::PERFMON && Slim::Utils::PerfMon->check('notify', AnyEvent->time - $now, undef, $notifyFuncRef);
 		}
 	}
 	
@@ -2145,7 +2174,7 @@ sub registerAutoExecute{
 	my $filterFunc = shift;
 	my $cleanupFunc = shift;
 	
-	$log->debug("registerAutoExecute()");
+	main::DEBUGLOG && $log->debug("registerAutoExecute()");
 	
 	# we shall be a query
 	return unless $self->{'_isQuery'};
@@ -2173,7 +2202,7 @@ sub registerAutoExecute{
 
 	if (defined $oldrequest) {
 
-		$log->info("Old friend: $cnxid - $name - $clientid");
+		main::INFOLOG && $log->info("Old friend: $cnxid - $name - $clientid");
 
 		delete $subscribers{$cnxid}{$name}{$clientid};
 
@@ -2187,13 +2216,13 @@ sub registerAutoExecute{
 		Slim::Utils::Timers::killTimers($oldrequest, \&__autoexecute);
 	}
 	else {
-		$log->info("New buddy: $cnxid - $name - $clientid");
+		main::INFOLOG && $log->info("New buddy: $cnxid - $name - $clientid");
 	}
 	
 	# store the new subscription if this is what is asked of us
 	if ($timeout ne '-') {
 		
-		$log->debug(".. set ourself up");
+		main::DEBUGLOG && $log->debug(".. set ourself up");
 
 		# copy the request
 		my $request = $self->virginCopy();
@@ -2201,7 +2230,7 @@ sub registerAutoExecute{
 		$subscribers{$cnxid}{$name}{$clientid} = $request;
 
 		if ($timeout > 0) {
-			$log->debug(".. starting timer: $timeout");
+			main::DEBUGLOG && $log->debug(".. starting timer: $timeout");
 			# start the timer
 			Slim::Utils::Timers::setTimer($request, 
 				Time::HiRes::time() + $timeout,
@@ -2379,11 +2408,11 @@ sub dump {
 
 	$str .= ' (' . $self->getStatusText() . ")";
 
-	$log->info($str);
+	main::INFOLOG && $log->info($str);
 
 	while (my ($key, $val) = each %{$self->{'_params'}}) {
 
-			$log->info("   Param: [$key] = [$val]");
+			main::INFOLOG && $log->info("   Param: [$key] = [$val]");
  	}
 
 	while (my ($key, $val) = each %{$self->{'_results'}}) {
@@ -2392,7 +2421,7 @@ sub dump {
 
 			my $count = scalar @{${$self->{'_results'}}{$key}};
 
-			$log->info("   Result: [$key] is loop with $count elements:");
+			main::INFOLOG && $log->info("   Result: [$key] is loop with $count elements:");
 
 			# loop over each elements
 			for (my $i = 0; $i < $count; $i++) {
@@ -2400,12 +2429,12 @@ sub dump {
 				my $hash = ${$self->{'_results'}}{$key}->[$i];
 
 				while (my ($key2, $val2) = each %{$hash}) {
-					$log->info("   Result:   $i. [$key2] = [$val2]");
+					main::INFOLOG && $log->info("   Result:   $i. [$key2] = [$val2]");
 				}	
 			}
 
 		} else {
-			$log->info("   Result: [$key] = [$val]");
+			main::INFOLOG && $log->info("   Result: [$key] = [$val]");
 		}
  	}
 }
@@ -2423,7 +2452,7 @@ sub __matchingRequest {
 
 	for my $names (@{$_[1]}) {
 		my $req = $request->[$i++];
-		if (!grep($_ eq $req, @$names)) {
+		if (!$req || !grep($_ eq $req, @$names)) {
 			return 0;
 		}
 	}
@@ -2470,7 +2499,7 @@ sub __updateListenerSuperRE {
 
 	$listenerSuperRE = qr /$regexp/;
 
-	$log->debug("updated listener superRE: $listenerSuperRE");
+	main::DEBUGLOG && $log->debug("updated listener superRE: $listenerSuperRE");
 }
 
 # returns a string corresponding to the notification filter, used for 
@@ -2499,7 +2528,7 @@ sub __filterString {
 sub __autoexecute{
 	my $self = shift;
 	
-	$log->debug("__autoexecute()");
+	main::DEBUGLOG && $log->debug("__autoexecute()");
 	
 	# we shall have somewhere to callback to
 	my $funcPtr = $self->autoExecuteCallback() || return;
@@ -2538,7 +2567,7 @@ sub __autoexecute{
 		my $name = $self->getRequestString();
 		my $clientid = $self->clientid() || 'global';
 		my $request2del = delete $subscribers{$cnxid}{$name}{$clientid};
-		$log->debug("__autoexecute: deleting $cnxid - $name - $clientid");
+		main::DEBUGLOG && $log->debug("__autoexecute: deleting $cnxid - $name - $clientid");
 		if (my $cleanup = $self->autoExecuteCleanup()) {
 			eval { &{$cleanup}($self, $cnxid) };
 		}

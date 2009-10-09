@@ -1,6 +1,6 @@
 package Slim::Schema::ResultSet::Year;
 
-# $Id: Year.pm 14318 2007-11-02 11:18:42Z mherger $
+# $Id: Year.pm 27975 2009-08-01 03:28:30Z andy $
 
 use strict;
 use base qw(Slim::Schema::ResultSet::Base);
@@ -40,7 +40,8 @@ sub descendAlbum {
 	my $rs = $self->result_source->resultset;
 
 	# Handle sorts from the web UI.
-	$sort ||= "concat('0', album.titlesort), album.disc";
+	my $sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass();
+	$sort ||= $sqlHelperClass->prepend0("album.titlesort") . ", album.disc";
 
 	my @join;
 

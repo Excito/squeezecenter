@@ -2,7 +2,7 @@ package Slim::Web::Settings::Player::Audio;
 
 # $Id: Basic.pm 10633 2006-11-09 04:26:27Z kdf $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -17,11 +17,11 @@ use Slim::Utils::Strings qw(string);
 my $prefs = preferences('server');
 
 sub name {
-	return Slim::Web::HTTP::protectName('AUDIO_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('AUDIO_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/player/audio.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/player/audio.html');
 }
 
 sub needsClient {

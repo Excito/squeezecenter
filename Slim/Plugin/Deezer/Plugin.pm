@@ -1,6 +1,6 @@
 package Slim::Plugin::Deezer::Plugin;
 
-# $Id: Plugin.pm 25897 2009-04-09 17:22:00Z andy $
+# $Id: Plugin.pm 28265 2009-08-25 19:58:11Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -27,6 +27,7 @@ sub initPlugin {
 		tag    => 'deezer',
 		menu   => 'music_services',
 		weight => 35,
+		is_app => 1,
 	);
 	
 	# Note: Deezer does not wish to be included in context menus
@@ -34,7 +35,7 @@ sub initPlugin {
 	
 	if ( !main::SLIM_SERVICE ) {
 		# Add a function to view trackinfo in the web
-		Slim::Web::HTTP::addPageFunction( 
+		Slim::Web::Pages->addPageFunction( 
 			'plugins/deezer/trackinfo.html',
 			sub {
 				my $client = $_[0];
@@ -73,5 +74,8 @@ sub initPlugin {
 sub getDisplayName {
 	return 'PLUGIN_DEEZER_MODULE_NAME';
 }
+
+# Don't add this item to any menu
+sub playerMenu { }
 
 1;

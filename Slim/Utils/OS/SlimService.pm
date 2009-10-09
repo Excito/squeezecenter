@@ -1,5 +1,10 @@
 package Slim::Utils::OS::SlimService;
 
+# Squeezebox Server Copyright 2001-2009 Logitech.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License, 
+# version 2.
+
 use strict;
 use File::Spec::Functions qw(:ALL);
 use FindBin qw($Bin);
@@ -59,5 +64,19 @@ sub dirsFor {
 }
 
 sub getSystemLanguage { 'EN' }
+
+sub migratePrefsFolder {};
+
+sub skipPlugins {
+	my $class = shift;
+	
+	return (
+		qw(Extensions JiveExtras MusicMagic MyRadio PreventStandby RS232 RandomPlay Rescan SavePlaylist SlimTris Snow iTunes xPL),
+		$class->SUPER::skipPlugins(),
+	);
+}
+
+# XXX: I don't think we even need this anymore
+sub sqlHelperClass { 'Slim::Utils::SQLiteHelper' }
 
 1;

@@ -3,7 +3,6 @@
 	<id>5B30DC4B-FACD-455D-8385-D0B030DED8A7</id>
 	<name>PLUGIN_DEEZER_MODULE_NAME</name>
 	<module>Slim::Plugin::Deezer::Plugin</module>
-	<playerMenu>MUSIC_SERVICES</playerMenu>
 	<version>1.0</version>
 	<description>PLUGIN_DEEZER_MODULE_NAME</description>
 	<creator>Slim Devices/Logitech</creator>
@@ -13,7 +12,7 @@
 	<icon>plugins/Deezer/html/images/icon.png</icon>
 	<type>2</type>
 	<targetApplication>
-		<id>SlimServer</id>
+		<id>Squeezebox Server</id>
 		<minVersion>7.3</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>

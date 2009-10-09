@@ -1,6 +1,6 @@
 package Slim::Utils::MySQLHelper;
 
-# $Id: MySQLHelper.pm 24799 2009-01-28 23:50:50Z andy $
+# $Id: MySQLHelper.pm 28582 2009-09-21 14:41:59Z andy $
 
 =head1 NAME
 
@@ -25,12 +25,11 @@ use DBI::Const::GetInfoType;
 use File::Path;
 use File::Slurp;
 use File::Spec::Functions qw(:ALL);
-use File::Which qw(which);
 use Proc::Background;
 use Time::HiRes qw(sleep);
 
 {
-	if ($^O =~ /Win32/) {
+	if (main::ISWINDOWS) {
 		require Win32::Service;
 	}
 }
@@ -55,9 +54,11 @@ my $log = logger('database.mysql');
 
 my $prefs = preferences('server');
 
-my $isWin  = Slim::Utils::OSDetect::isWindows();
+use constant SERVICENAME => 'SqueezeMySQL';
 
-my $serviceName = 'SqueezeMySQL';
+sub storageClass {'DBIx::Class::Storage::DBI::mysql'};
+
+sub default_dbsource { 'dbi:mysql:hostname=127.0.0.1;port=9092;database=%s' }
 
 =head2 init()
 
@@ -72,29 +73,9 @@ sub init {
 	# the user has setup their own copy of MySQL.
 	if ($prefs->get('dbsource') !~ /port=9092/) {
 
-		$log->info("Not starting MySQL - looks to be user configured.");
-
-		unless ($isWin) {
-
-			my $mysql_config = which('mysql_config');
-
-			# The user might have a socket file in a non-standard
-			# location. See bug 3443
-			if ($mysql_config && -x $mysql_config) {
-
-				my $socket = `$mysql_config --socket`;
-				chomp($socket);
-
-				if ($socket && -S $socket) {
-					$class->socketFile($socket);
-				}
-			}
-			
-			elsif (Slim::Utils::OSDetect::getOS->get('isReadyNAS')) {
-				Slim::Utils::OSDetect::getOS->initMySQL($class);
-			}
-		}
-
+		main::INFOLOG && $log->info("Not starting MySQL - looks to be user/system configured.");
+		Slim::Utils::OSDetect::getOS->initMySQL($class);
+		
 		return 1;
 	}
 
@@ -106,16 +87,16 @@ sub init {
 		}
 	}
 
-	my $cacheDir = $prefs->get('cachedir');
+	my $cacheDir = $prefs->get('librarycachedir');
 
-	$class->socketFile( catdir($cacheDir, 'squeezecenter-mysql.sock') ),
-	$class->pidFile(    catdir($cacheDir, 'squeezecenter-mysql.pid') );
+	$class->socketFile( catdir($cacheDir, 'squeezebox-mysql.sock') ),
+	$class->pidFile(    catdir($cacheDir, 'squeezebox-mysql.pid') );
 
 	$class->confFile( $class->createConfig($cacheDir) );
 
 	if ($class->needSystemTables) {
 
-		$log->info("Creating system tables..");
+		main::INFOLOG && $log->info("Creating system tables..");
 
 		$class->createSystemTables;
 	}
@@ -125,7 +106,7 @@ sub init {
 	if (!$class->dbh) {
 
 		# Bring MySQL up as a service on Windows.
-		if ($isWin) {
+		if (main::ISWINDOWS) {
 
 			$class->startServer(1);
 
@@ -176,14 +157,14 @@ sub createConfig {
 	}
 
 	# MySQL on Windows wants forward slashes.
-	if ($isWin) {
+	if (main::ISWINDOWS) {
 
 		for my $key (keys %config) {
 			$config{$key} =~ s/\\/\//g;
 		}
 	}
 
-	$log->info("createConfig() Creating config from file: [$ttConf] -> [$output].");
+	main::INFOLOG && $log->info("createConfig() Creating config from file: [$ttConf] -> [$output].");
 
 	open(TEMPLATE, "< $ttConf") or die "Couldn't open $ttConf for reading: $!\n";
 	open(OUTPUT, "> $output") or die "Couldn't open $output for writing: $!\n";
@@ -221,7 +202,7 @@ sub startServer {
 
 		my %status = ();
 
-		Win32::Service::GetStatus('', $serviceName, \%status);
+		Win32::Service::GetStatus('', SERVICENAME, \%status);
 
 		if ($status{'CurrentState'} == 0x04) {
 
@@ -235,7 +216,7 @@ sub startServer {
 
 	if ($isRunning) {
 
-		$log->info("MySQL is already running!");
+		main::INFOLOG && $log->info("MySQL is already running!");
 
 		return 0;
 	}
@@ -254,28 +235,47 @@ sub startServer {
 
 	my @commands = ($mysqld, sprintf('--defaults-file=%s', $confFile));
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf("About to start MySQL as a %s with command: [%s]\n",
 			($service ? 'service' : 'process'), join(' ', @commands),
 		));
 	}
 
-	if ($service && $isWin) {
+	if (main::ISWINDOWS && $service) {
 
 		my %status = ();
 
-		Win32::Service::GetStatus('', $serviceName, \%status);
+		Win32::Service::GetStatus('', SERVICENAME, \%status);
 
 		# Attempt to install the service, if it isn't.
 		# NB mysqld fails immediately if install is not allowed by user account so don't add this to @commands
 		if (scalar keys %status == 0) {
 
-			system( sprintf "%s --install %s %s", $commands[0], $serviceName, $commands[1] );
+			system( sprintf "%s --install %s %s", $commands[0], SERVICENAME, $commands[1] );
+		}
+		
+		# if MySQL service is still in the process of starting or stopping,
+		# wait a few seconds, or SC will fail miserably
+		my $maxWait = 30;
+		
+		while ($status{CurrentState} != 0x04 && $status{CurrentState} != 0x01 && $maxWait-- > 0) {
+			
+			sleep 1;
+			Win32::Service::GetStatus('', SERVICENAME, \%status);
+
+			if (main::DEBUGLOG && $log->is_debug) {
+				if ($status{CurrentState} == 0x02) {
+					$log->debug('Wait while MySQL is starting...');
+				}
+				elsif ($status{CurrentState} == 0x03) {
+					$log->debug('Wait while MySQL is stopping...');
+				}
+			}
 		}
 
-		Win32::Service::StartService('', $serviceName);
+		Win32::Service::StartService('', SERVICENAME);
 
-		Win32::Service::GetStatus('', $serviceName, \%status);
+		Win32::Service::GetStatus('', SERVICENAME, \%status);
 
 		if (scalar keys %status == 0 || ($status{'CurrentState'} != 0x02 && $status{'CurrentState'} != 0x04)) {
 
@@ -314,6 +314,64 @@ sub startServer {
 	return 1;
 }
 
+sub source {
+	return sprintf($prefs->get('dbsource'), 'slimserver');
+}
+
+sub on_connect_do {
+	return [ 'SET NAMES UTF8' ];
+}
+
+sub changeCollation {
+	my ( $class, $dbh, $collation ) = @_;
+	
+	if ( $class->sqlVersion($dbh) > 4.0 ) {
+		my @tables = qw(
+			albums
+			contributors
+			genres
+			tracks
+		);
+
+		for my $table ( @tables ) {
+			main::DEBUGLOG && $log->is_debug && $log->debug( "Changing $table to $collation" );
+			eval { $dbh->do( "ALTER TABLE $table CONVERT TO CHARACTER SET utf8 COLLATE $collation" ) };
+		}
+	}
+}
+
+=head2 randomFunction()
+
+Returns RAND(), MySQL-specific random function
+
+=cut
+
+sub randomFunction { 'RAND()' }
+
+=head2 prepend0( $string )
+
+Returns concat( '0', $string )
+
+=cut
+
+sub prepend0 { "concat('0', " . $_[1] . ")" }
+
+=head2 append0( $string )
+
+Returns concat( $string, '0' )
+
+=cut
+
+sub append0 { "concat(" . $_[1] . ", '0')" }
+
+=head2 concatFunction()
+
+Returns 'concat', used in a string comparison to see if something has already been concat()'ed
+
+=cut
+
+sub concatFunction { 'concat' }
+
 =head2 stopServer()
 
 Bring down our private copy of MySQL server.
@@ -328,17 +386,17 @@ sub stopServer {
 	my $class = shift;
 	my $dbh   = shift || $class->dbh;
 
-	if ($isWin) {
+	if (main::ISWINDOWS) {
 
 		my %status = ();
 		
-		Win32::Service::GetStatus('', $serviceName, \%status);
+		Win32::Service::GetStatus('', SERVICENAME, \%status);
 
 		if (scalar keys %status != 0 && ($status{'CurrentState'} == 0x02 || $status{'CurrentState'} == 0x04)) {
 
-			$log->info("Running service shutdown.");
+			main::INFOLOG && $log->info("Running service shutdown.");
 
-			if (Win32::Service::StopService('', $serviceName)) {
+			if (Win32::Service::StopService('', SERVICENAME)) {
 
 				return;
 			}
@@ -350,7 +408,7 @@ sub stopServer {
 	# We have a running server & handle. Shut it down internally.
 	if ($dbh) {
 
-		$log->info("Running shutdown.");
+		main::INFOLOG && $log->info("Running shutdown.");
 
 		$dbh->func('shutdown', 'admin');
 		$dbh->disconnect;
@@ -376,7 +434,7 @@ sub stopServer {
 
 		next if !$pid || !kill(0, $pid);
 
-		$log->info("Killing pid: [$pid]");
+		main::INFOLOG && $log->info("Killing pid: [$pid]");
 
 		kill('TERM', $pid);
 
@@ -473,7 +531,7 @@ sub dbh {
 	my $class = shift;
 	my $dsn   = '';
 
-	if ($isWin) {
+	if (main::ISWINDOWS) {
 
 		$dsn = $prefs->get('dbsource');
 		$dsn =~ s/;database=.+;?//;
@@ -490,7 +548,7 @@ sub dbh {
 
 =head2 createDatabase( $dbh )
 
-Creates the initial SqueezeCenter database in MySQL.
+Creates the initial Squeezebox Server database in MySQL.
 
 'CREATE DATABASE slimserver'
 
@@ -523,7 +581,7 @@ Returns the version of MySQL that the $dbh is connected to.
 
 =cut
 
-sub mysqlVersion {
+sub sqlVersion {
 	my $class = shift;
 	my $dbh   = shift || return 0;
 
@@ -543,7 +601,7 @@ Returns the long version string, i.e. 5.0.22-standard
 
 =cut
 
-sub mysqlVersionLong {
+sub sqlVersionLong {
 	my $class = shift;
 	my $dbh   = shift || return 0;
 
@@ -554,7 +612,7 @@ sub mysqlVersionLong {
 
 =head2 cleanup()
 
-Shut down MySQL when SqueezeCenter is shut down.
+Shut down MySQL when Squeezebox Server is shut down.
 
 =cut
 

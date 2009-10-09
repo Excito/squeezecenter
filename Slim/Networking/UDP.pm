@@ -1,8 +1,8 @@
 package Slim::Networking::UDP;
 
-# $Id: UDP.pm 23948 2008-11-17 18:32:32Z mherger $
+# $Id: UDP.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -39,7 +39,7 @@ sub init {
 	) or do {
 
 		# XXX - exiting in a deep sub is kinda bad. should propagate up.
-		logger('')->logdie("FATAL: There is already another copy of the SqueezeCenter running on this machine. ($!)");
+		logger('')->logdie("FATAL: There is already another copy of the Squeezebox Server running on this machine. ($!)");
 	};
 
 	defined(Slim::Utils::Network::blocking($udpsock, 0)) || do { 
@@ -61,7 +61,7 @@ sub init {
 		# skip client addrs that aren't dotted-4 with a port
 		next if $clientID !~ /\d+\.\d+\.\d+\.\d+:\d+/;
 
-		$log->info("Discovery init: Saying hello to $clientID");
+		main::INFOLOG && $log->info("Discovery init: Saying hello to $clientID");
 
 		Slim::Networking::Discovery::sayHello($udpsock, Slim::Utils::Network::ipaddress2paddr($clientID));
 		
@@ -69,6 +69,8 @@ sub init {
 		select(undef, undef, undef, 0.05);
 	}
 }
+
+my $warnNoSlimp3Support = 0;
 
 sub readUDP {
 	my $sock = shift || $udpsock;
@@ -86,14 +88,22 @@ sub readUDP {
 			# These are SliMP3 packets.
 			if ($msg =~ /^(?:[ir2a]|h(?!\x00\x00))/) {
 
-				if (!$Slim::Player::SLIMP3::SLIMP3Connected) {
-
-					Slim::bootstrap::tryModuleLoad('Slim::Networking::SliMP3::Protocol');
+				if (main::SB1SLIMP3SYNC) {
+					if (!$Slim::Player::SLIMP3::SLIMP3Connected) {
+	
+						Slim::bootstrap::tryModuleLoad('Slim::Networking::SliMP3::Protocol');
+					}
+	
+					my $client = Slim::Networking::SliMP3::Protocol::getUdpClient($clientpaddr, $sock, $msg) || return;
+					
+					Slim::Networking::SliMP3::Protocol::processMessage($client, $msg, $ts);
+				} else {
+					if (!$warnNoSlimp3Support) {
+						my ($clientport, $clientip) = sockaddr_in($clientpaddr);
+						logWarning("Ignoring client: " . inet_ntoa($clientip) . ": no SliMP3 support");
+						$warnNoSlimp3Support = 1;
+					}
 				}
-
-				my $client = Slim::Networking::SliMP3::Protocol::getUdpClient($clientpaddr, $sock, $msg) || return;
-				
-				Slim::Networking::SliMP3::Protocol::processMessage($client, $msg, $ts);
 	
 			} elsif ($msg =~/^d/) {
 

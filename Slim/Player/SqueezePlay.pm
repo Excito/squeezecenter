@@ -1,6 +1,6 @@
 package Slim::Player::SqueezePlay;
 
-# SqueezeCenter Copyright (c) 2001-2008 Logitech.
+# Squeezebox Server Copyright (c) 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,6 +13,13 @@ package Slim::Player::SqueezePlay;
 use strict;
 use vars qw(@ISA);
 
+use Slim::Utils::Prefs;
+use Slim::Utils::Log;
+
+my $prefs = preferences('server');
+
+my $log = logger('network.protocol.slimproto');
+
 BEGIN {
 	if ( main::SLIM_SERVICE ) {
 		require SDI::Service::Player::SqueezeNetworkClient;
@@ -24,31 +31,180 @@ BEGIN {
 	}
 }
 
+{
+	
+	__PACKAGE__->mk_accessor('rw', qw(
+		_model modelName
+		myFormats
+		maxSupportedSamplerate
+		accuratePlayPoints
+		firmware
+		canDecodeRhapsody
+	));
+}
+
 sub new {
 	my $class = shift;
 
 	my $client = $class->SUPER::new(@_);
+	
+	$client->init_accessor(
+		_model                  => 'squeezeplay',
+		modelName               => 'SqueezePlay',
+		myFormats               => [qw(ogg flc aif pcm mp3)],	# in order of preference
+		maxSupportedSamplerate  => 48000,
+		accuratePlayPoints      => 0,
+		firmware                => 0,
+		canDecodeRhapsody       => 0,
+	);
 
 	return $client;
 }
 
-sub model     { 'squeezeplay' }
-sub modelName { 'SqueezePlay' }
+# model=squeezeplay,modelName=SqueezePlay,ogg,flc,pcm,mp3,tone,MaxSampleRate=96000
+
+my %CapabilitiesMap = (
+	Model                   => '_model',
+	ModelName               => 'modelName',
+	MaxSampleRate           => 'maxSupportedSamplerate',
+	AccuratePlayPoints      => 'accuratePlayPoints',
+	Firmware                => 'firmware',
+	Rhap                    => 'canDecodeRhapsody',
+	SyncgroupID             => undef,
+
+	# deprecated
+	model                   => '_model',
+	modelName               => 'modelName',
+);
+
+sub model {
+	return shift->_model;
+}
+
+sub revision {
+	return shift->firmware;
+}
+
+sub needsUpgrade {}
+
+sub init {
+	my $client = shift;
+	my ($model, $capabilities) = @_;
+	
+	$client->updateCapabilities($capabilities);
+
+	$client->sequenceNumber(0);
+	
+	# Do this at end so that any resync that happens has the capabilities already set
+	$client->SUPER::init(@_);
+}
+
+
+sub reconnect {
+	my ($client, $paddr, $revision, $tcpsock, $reconnect, $bytes_received, $syncgroupid, $capabilities) = @_;
+	
+	$client->updateCapabilities($capabilities);
+	
+	$client->SUPER::reconnect($paddr, $revision, $tcpsock, $reconnect, $bytes_received, $syncgroupid);
+}
+
+sub updateCapabilities {
+	my ($client, $capabilities) = @_; 
+	
+	if ($client && $capabilities) {
+		
+		# if we have capabilities then all CODECs must be declared that way
+		my @formats;
+		
+		for my $cap (split(/,/, $capabilities)) {
+			if ($cap =~ /^[a-z][a-z0-9]{1,4}$/) {
+				push(@formats, $cap);
+			} else {
+				my $value;
+				my $vcap;
+				if ((($vcap, $value) = split(/=/, $cap)) && defined $value) {
+					$cap = $vcap;
+				} else {
+					$value = 1;
+				}
+				
+				if (defined($CapabilitiesMap{$cap})) {
+					my $f = $CapabilitiesMap{$cap};
+					$client->$f($value);
+				
+				} elsif (!exists($CapabilitiesMap{$cap})) {
+					
+					# It could be possible to have a completely generic mechanism here
+					# but I have not done that for the moment
+					$log->warn("unknown capability: $cap=$value, ignored");
+				}
+			}
+		}
+		
+		main::INFOLOG && $log->is_info && $log->info('formats: ', join(',', @formats));
+		$client->myFormats([@formats]);
+	}
+}
+
+##
+# Copy of Boom curve
+# Special Volume control for Boom.
+#
+# Boom is an oddball because it requires extremes in volume adjustment, from
+# dead-of-night-time listening to shower time.
+# Additionally, we want 50% volume to be reasonable
+#
+# So....  A total dynamic range of 74dB over 100 steps is okay, the problem is how to
+# distribute those steps.  When distributed evenly, center volume is way too quiet.
+# So, This algorithm moves what would be 50% (i.e. -76*.5=38dB) and moves it to the 25%
+# position.
+#
+# This is simply a mapping function from 0-100, with 2 straight lines with different slopes.
+#
+sub getVolumeParameters
+{
+	my $params =
+	{
+		totalVolumeRange => -74,       # dB
+		stepPoint        => 25,        # Number of steps, up from the bottom, where a 2nd volume ramp kicks in.
+		stepFraction     => .5,        # fraction of totalVolumeRange where alternate volume ramp kicks in.
+	};
+	return $params;
+}
 
 sub hasIR() { return 0; }
 
-# in order of preference ...
 sub formats {
-	my $client = shift;
-	
-	return qw(ogg flc aif wav mp3);
+	return @{shift->myFormats};
 }
 
-# Need to use weighted play-point
-sub needsWeightedPlayPoint { 1 }
+sub fade_volume {
+	my ($client, $fade, $callback, $callbackargs) = @_;
+
+	if (abs($fade) > 1 ) {
+		# for long fades do standard behavior so that sleep/alarm work
+		$client->SUPER::fade_volume($fade, $callback, $callbackargs);
+	} else {
+		#SP does local audio control for mute/pause/unpause so don't do fade in/out 
+		my $vol = abs($prefs->client($client)->get("volume"));
+		$vol = ($fade > 0) ? $vol : 0;
+		$client->volume($vol, 1);
+		if ($callback) {
+			&{$callback}(@{$callbackargs});
+		}
+
+	}
+}
+
+# Need to use weighted play-point?
+sub needsWeightedPlayPoint { !shift->accuratePlayPoints(); }
 
 sub playPoint {
-	return Slim::Player::Client::playPoint(@_);
+	my $client = shift;
+	
+	return $client->accuratePlayPoints()
+		? $client->SUPER::playPoint(@_)
+		: Slim::Player::Client::playPoint($client, @_);
 }
 
 sub skipAhead {

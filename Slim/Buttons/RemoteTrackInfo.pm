@@ -1,8 +1,8 @@
 package Slim::Buttons::RemoteTrackInfo;
 
-# $Id: RemoteTrackInfo.pm 22939 2008-08-28 16:42:33Z andy $
+# $Id: RemoteTrackInfo.pm 28492 2009-09-11 08:50:22Z michael $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,7 +13,7 @@ Slim::Buttons::RemoteTrackInfo
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::RemoteTrackInfo> is a SqueezeCenter module to create a UI for viewing information 
+L<Slim::Buttons::RemoteTrackInfo> is a Squeezebox Server module to create a UI for viewing information 
 about remote tracks.
 
 =cut
@@ -62,7 +62,7 @@ sub setMode {
 	# 
 	# Only allow adding to favorites if the URL is something we can play.
 
-	my ($favIndex, $favHotkey);
+	my $favIndex;
 
 	if ( $url && Slim::Utils::Favorites->enabled ) {
 
@@ -72,11 +72,10 @@ sub setMode {
 				my $client = shift;
 
 				my $index = $client->modeParam('favorite');
-				my $hotkey= $client->modeParam('hotkey');
 				if (defined $index) {
 					return "{PLUGIN_FAVORITES_REMOVE}";
 				} else {
-					return "{PLUGIN_FAVORITES_ADD}";
+					return "{PLUGIN_FAVORITES_SAVE}";
 				}
 			},
 
@@ -84,7 +83,6 @@ sub setMode {
 				my $client = shift;
 				my $favorites = Slim::Utils::Favorites->new($client) || return;
 				my $index = $client->modeParam('favorite');
-				my $hotkey= $client->modeParam('hotkey');
 				my $icon  = $client->modeParam('icon');
 
 				if (defined $index) {
@@ -93,14 +91,12 @@ sub setMode {
 					Slim::Buttons::Common::pushModeLeft( $client, 'favorites.delete', {
 						title => $title,
 						index => $index,
-						hotkey=> $hotkey,
 						depth => 2,
 					} );
 
 				} else {
-					($index, $hotkey) = $favorites->add($url, $title, undef, undef, 'hotkey', $icon);
+					$index = $favorites->add($url, $title, undef, undef, undef, $icon);
 					$client->modeParam('favorite', $index);
-					$client->modeParam('hotkey', $hotkey);
 					$client->showBriefly( {
 						'line' => [ $client->string('FAVORITES_ADDING'), $client->modeParam('title') ]
 					});
@@ -109,7 +105,7 @@ sub setMode {
 			overlayRef => [ undef, $client->symbols('rightarrow') ],
 		};
 
-		($favIndex, $favHotkey) = Slim::Utils::Favorites->new($client)->findUrl($url);
+		$favIndex = Slim::Utils::Favorites->new($client)->findUrl($url);
 	}
 
 	# now use another mode for the heavy lifting
@@ -120,7 +116,6 @@ sub setMode {
 		'url'      => $url,
 		'title'    => $title,
 		'favorite' => $favIndex,
-		'hotkey'   => $favHotkey,
 		'icon'     => $client->modeParam('item') ? $client->modeParam('item')->{'image'} : undef,
 
 		# play music when play is pressed

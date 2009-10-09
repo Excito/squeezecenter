@@ -1,8 +1,8 @@
 package Slim::Buttons::ScreenSaver;
 
-# $Id: ScreenSaver.pm 22964 2008-08-29 16:22:28Z andy $
+# $Id: ScreenSaver.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -19,8 +19,6 @@ and out of screensaver modes.
 =cut
 
 use strict;
-use File::Spec::Functions qw(:ALL);
-use File::Spec::Functions qw(updir);
 
 use Slim::Buttons::Common;
 use Slim::Buttons::Playlist;
@@ -81,7 +79,7 @@ sub screenSaver {
 
 	assert($mode);
 
-	if ( $timerslog->is_info ) {
+	if ( main::INFOLOG && $timerslog->is_info ) {
 
 		my $diff = $now - Slim::Hardware::IR::lastIRTime($client) - $cprefs->get('screensavertimeout');
 
@@ -125,23 +123,20 @@ sub screenSaver {
 		}
 	}
 
-	if ($display->inhibitSaver) {
+	my $alarmSaverActive = Slim::Utils::Alarm->getCurrentAlarm($client) && $mode eq Slim::Utils::Alarm->alarmScreensaver($client);
 
-		# don't change if display state inhibits at present
+	if (!$alarmSaverActive && $mode =~ /^screensaver|^SCREENSAVER|^IDLESAVER/ && $mode ne $savermode &&
+			Slim::Buttons::Common::validMode($savermode)) {
 
-	} elsif ($mode eq 'block') {
+		# the screensaver has changed - pop the old one
+		Slim::Buttons::Common::popMode($client);
+	} 
 
-		# blocked mode handles its own updating of the screen.
+	if ($alarmSaverActive || $display->inhibitSaver || $mode eq 'block' || $saver eq 'nosaver' && $client->power()) {
 
-	} elsif ($saver eq 'nosaver' && $client->power()) {
+		# do nothing - stay in current mode
 
-		# don't change modes when none (just dim) is the screensaver.
-	
-	} elsif (Slim::Utils::Alarm->getCurrentAlarm($client) && $mode eq Slim::Utils::Alarm->alarmScreensaver) {
-
-		# don't change modes if the alarmclock has activated the datetime screensaver
-
-	} elsif ($timeout && 
+	} elsif ($client->power() && $timeout && 
 			
 			# no ir for at least the screensaver timeout
 			$irtime < $now - $timeout && 
@@ -151,10 +146,7 @@ sub screenSaver {
 				# in case the saver is 'now playing' and we're browsing another song
 				($mode eq 'playlist' && !Slim::Buttons::Playlist::showingNowPlaying($client)) ||
 				# just in case it falls into default, we dont want recursive pushModes
-				($mode ne 'screensaver' && !Slim::Buttons::Common::validMode($savermode)) ) &&
-			
-			# not blocked and power is on
-			$mode ne 'block' && $client->power()) {
+				($mode ne 'screensaver' && !Slim::Buttons::Common::validMode($savermode)) ) ) {
 		
 		# we only go into screensaver mode if we've timed out 
 		# and we're not off or blocked
@@ -219,8 +211,6 @@ sub screenSaver {
 			$display->update();
 		}
 
-	} else {
-		# do nothing - periodic updates handled per client where required
 	}
 
 	# Call ourselves again after 1 second
@@ -278,7 +268,7 @@ sub wakeup {
 sub setMode {
 	my $client = shift;
 
-	$log->is_debug && $log->debug("Going into screensaver mode.");
+	main::DEBUGLOG && $log->is_debug && $log->debug("Going into screensaver mode.");
 
 	$client->lines( $client->customPlaylistLines() || \&Slim::Buttons::Playlist::lines );
 

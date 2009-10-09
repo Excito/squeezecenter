@@ -4,6 +4,7 @@ use strict;
 use base 'Slim::Plugin::iTunes::Importer::Artwork';
 
 use Win32::OLE;
+use Win32::Process::List;
 
 use File::Spec::Functions qw(:ALL);
 
@@ -14,8 +15,13 @@ my $log   = logger('plugin.itunes');
 my $prefs = preferences('plugin.itunes');
 
 my $itunes;
+my $wasRunning;
 
 sub initArtworkExport {
+	my $p = Win32::Process::List->new;
+	my %processes = $p->GetProcesses();
+	$wasRunning = grep { lc($processes{$_}) eq 'itunes.exe' } keys %processes;
+
 	$itunes = Win32::OLE->GetActiveObject('iTunes.Application') || Win32::OLE->new('iTunes.Application');
 }
 
@@ -116,7 +122,7 @@ sub exportSingleArtwork {
 					
 							$artwork->SaveArtworkToFile($filename);
 						
-							$log->is_debug && $log->debug( "Exporting single artwork for ID $pid: " . $track->Album );
+							main::DEBUGLOG && $log->is_debug && $log->debug( "Exporting single artwork for ID $pid: " . $track->Album );
 							
 							return $filename;
 						}
@@ -134,6 +140,7 @@ sub exportSingleArtwork {
 sub finishArtworkExport {
 	my ( $class, $cachedir ) = @_;
 	
+	$itunes->Quit unless $wasRunning;
 	$itunes = undef;
 }
 

@@ -11,7 +11,14 @@ install/squeezecenter::
 	install -m0755 scanner.pl debian/squeezecenter/usr/sbin/squeezecenter-scanner
 	install -m0755 debian/squeezecenter_safe debian/squeezecenter/usr/sbin/squeezecenter_safe
 
-	cp -R debian/dbconfig-common/* debian/squeezecenter/usr/share/dbconfig-common/
+	install -d debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/install
+	cat SQL/mysql/schema_*_up.sql > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/install/mysql
+
+	install -d debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql
+
+	cat SQL/mysql/schema_7_up.sql  SQL/mysql/schema_8_up.sql > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql/7.2.99
+	cat SQL/mysql/schema_9_up.sql  SQL/mysql/schema_10_up.sql > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql/7.4.0
+
 
 	# fix changelogs
 	mkdir debian/tmp
@@ -29,35 +36,3 @@ binary-post-install/squeezecenter-skins::
 	# Removing essential skins that is included in the main package
 	rm -rf debian/squeezecenter-skins/usr/share/squeezecenter/HTML/Default
 	rm -rf debian/squeezecenter-skins/usr/share/squeezecenter/HTML/EN
-
-# Need to have the relative dir for get-orig-source to work
-PKGDIR := $(abspath $(dir $(firstword $(MAKEFILE_LIST)))/..)
-DEBVERSION := $(shell head -n 1 $(PKGDIR)/debian/changelog | perl -pe 's/^.*?\((.*?)\).*$$/$$1/' )
-UPVERSION := $(shell echo $(DEBVERSION) | perl -pe 's/^\d+\://;s/-\d+$$//;s/\.dfsg$$//')
-UPVERSION2 := $(shell echo $(UPVERSION) | perl -pe 's/(\d)\.0/$$1/')
-FILENAME := squeezecenter_$(UPVERSION).dfsg.orig.tar.gz
-UPFILENAME := squeezecenter_$(UPVERSION).orig.tar.gz
-UPDIR = squeezecenter-$(UPVERSION2)-noCPAN
-URL := http://www.slimdevices.com/downloads/SqueezeCenter_v$(UPVERSION)/squeezecenter-$(UPVERSION2)-noCPAN.tgz
-
-get-orig-source:
-	@@\
-		tmpdir=$$(mktemp -d);\
-		wget -T10 -t3 -O $$tmpdir/$(UPFILENAME) $(URL);\
-		(\
-		cd $$tmpdir;\
-		tar -zxf $(UPFILENAME);\
-		rm -f $(UPDIR)/Graphics/CODE2000.*;\
-		rm -f $(UPDIR)/Graphics/FreeSans.ttf;\
-		rm -rf $(UPDIR)/CPAN;\
-		rm -rf $(UPDIR)/Bin;\
-		rm -rf $(UPDIR)/Firmware/*.bin;\
-		rm -f $(UPDIR)/HTML/EN/html/ext/resources/images/default/grid/Thumbs.db;\
-		find $(UPDIR) -regex '.*\.\(png\|gif\)$$' -exec chmod a-x '{}' ';';\
-		tar -zcf $(FILENAME) $(UPDIR);\
-		);\
-		mv $$tmpdir/$(FILENAME) .;\
-		rm -rf $$tmpdir;
-
-
-

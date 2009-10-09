@@ -1,6 +1,6 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl -w -ICPAN
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -12,47 +12,70 @@
 #
 
 require 5.008_001;
+
+use constant SPLASH_LOGO => 'logitech-squeezebox.png';
+
+# don't use Wx, if script is run using perl on OSX, it needs to be run using wxperl
+my $splash;
+my $useWx = ($^O !~ /darwin/ || $^X =~ /wxPerl/i) && eval {
+	require Wx;
+	
+	showSplashScreen();
+	
+	require Wx::Event;
+	require Slim::GUI::ControlPanel;
+
+	return 1;
+};
+
+print "$@\n" if $@;
+
 use strict;
-use File::Path;
-use File::Spec::Functions;
-use Getopt::Long;
 use Socket;
 use utf8;
 
-my $useWx = eval {
-	require Wx;
-	require Wx::Event;
-
-	# don't use Wx, if script is run using perl on OSX
-	# it needs to be run using wxperl
-	return $^O !~ /darwin/ || $^X =~ /wxPerl/i;
-};
-
 use constant SLIM_SERVICE => 0;
-use constant SCANNER => 0;
+use constant SCANNER      => 0;
+use constant RESIZER      => 0;
+use constant DEBUG        => 1;
+use constant ISWINDOWS    => ( $^O =~ /^m?s?win/i ) ? 1 : 0;
+use constant ISMAC        => ( $^O =~ /darwin/i ) ? 1 : 0;
 
-use Slim::bootstrap;
-use Slim::Utils::OSDetect;
+# load these later, don't need them right now
+require File::Path;
+require File::Spec::Functions;
+require Getopt::Long;
 
-my ($os, $language, %strings);
+require Slim::Utils::OSDetect;
+require Slim::Utils::Light;
+
+our $VERSION = '7.4';
+
+BEGIN {
+	if (ISWINDOWS) {
+		eval { require Wx::Perl::Packager; }
+	}
+}
+
+
+if (DEBUG && $@) {
+	print "GUI can't be loaded: $@\n";
+}
+
+my ($os);
 
 sub main {
 	Slim::Utils::OSDetect::init();
 	$os = Slim::Utils::OSDetect->getOS();
-	$language = $os->getSystemLanguage();
 	
-	loadStrings();
-
-	my $isRunning = checkForSC();
-
-	if ($isRunning && !$useWx) {
-		print sprintf("\n%s\n\n", string('CLEANUP_PLEASE_STOP_SC'));
+	if (checkForSC() && !$useWx) {
+		print sprintf("\n%s\n\n", Slim::Utils::Light::string('CLEANUP_PLEASE_STOP_SC'));
 		exit;
 	}
 
 	my ($all, $cache, $filecache, $mysql, $prefs, $logs);
 	
-	GetOptions(
+	Getopt::Long::GetOptions(
 		'all'       => \$all,
 		'cache'     => \$cache,
 		'filecache' => \$filecache,
@@ -69,28 +92,21 @@ sub main {
 		'logs'      => $logs,
 		'mysql'     => $mysql,
 	});
-	
+		
 	unless (scalar @$folders) {
 
 		# show simple GUI if possible
 		if ($useWx) {
 			
-			require Slim::Utils::CleanupGUI;
-			
-			my $app = Slim::Utils::CleanupGUI->new({
-				running  => $isRunning ? string('CLEANUP_PLEASE_STOP_SC') : undef,
-				title    => string('CLEANUP_TITLE'),
-				desc     => string('CLEANUP_DESC'),
-				cancel   => string('CANCEL'),
-				cleanup  => string('CLEANUP_DO'),
-				options  => options(),
+			my $app = Slim::GUI::ControlPanel->new({
 				folderCB => \&getFolderList,
 				cleanCB  => \&cleanup,
-				msgCap   => string('CLEANUP_SUCCESS'),
-				msg      => string('CLEANUP_PLEASE_RESTART_SC'),
+				options  => options(),
 			});
-			
-			$app->MainLoop unless $isRunning;
+	
+			$splash->Destroy();
+	
+			$app->MainLoop;
 			exit;
 		}
 
@@ -102,12 +118,12 @@ sub main {
 
 	cleanup($folders);
 	
-	print sprintf("\n%s\n\n", string('CLEANUP_PLEASE_RESTART_SC'));
+	print sprintf("\n%s\n\n", Slim::Utils::Light::string('CLEANUP_PLEASE_RESTART_SC'));
 }
 
 sub usage {
 	my $usage = <<EOF;
-%s: $0 [--all] [--prefs] [--cache]
+%s: $0 [--all] [--cache] [--mysql] [--filecache] [--prefs] [--logs]
 
 %s
 
@@ -122,14 +138,14 @@ sub usage {
 	
 EOF
 	print sprintf($usage, 
-		string('CLEANUP_USAGE'), 
-		string('CLEANUP_COMMAND_LINE'),
-		string('CLEANUP_MYSQL'),
-		string('CLEANUP_FILECACHE'),
-		string('CLEANUP_PREFS'),
-		string('CLEANUP_LOGS'),
-		string('CLEANUP_CACHE'),
-		string('CLEANUP_ALL'),
+		Slim::Utils::Light::string('CLEANUP_USAGE'), 
+		Slim::Utils::Light::string('CLEANUP_COMMAND_LINE'),
+		Slim::Utils::Light::string('CLEANUP_MYSQL'),
+		Slim::Utils::Light::string('CLEANUP_FILECACHE'),
+		Slim::Utils::Light::string('CLEANUP_PREFS'),
+		Slim::Utils::Light::string('CLEANUP_LOGS'),
+		Slim::Utils::Light::string('CLEANUP_CACHE'),
+		Slim::Utils::Light::string('CLEANUP_ALL'),
 	);
 }
 
@@ -137,7 +153,7 @@ sub getFolderList {
 	my $args = shift;
 	
 	my @folders;
-	my $cacheFolder = $os->dirsFor('cache');
+	my $cacheFolder = Slim::Utils::Light::getPref('cachedir') || $os->dirsFor('cache');
 
 	push @folders, _target('cache', 'cache') if ($args->{all} || $args->{cache});
 	
@@ -145,14 +161,14 @@ sub getFolderList {
 		push @folders, {
 			label   => 'file cache (artwork, templates etc.)',
 			folders => [
-				catdir($cacheFolder, 'Artwork'),
-				catdir($cacheFolder, 'iTunesArtwork'),
-				catdir($cacheFolder, 'FileCache'),
-				catdir($cacheFolder, 'fonts.bin'),
-				catdir($cacheFolder, 'strings.bin'),
-				catdir($cacheFolder, 'templates'),
-				catdir($cacheFolder, 'cookies.dat'),
-				catdir($cacheFolder, 'plugin-data.yaml'),
+				File::Spec::Functions::catdir($cacheFolder, 'Artwork'),
+				File::Spec::Functions::catdir($cacheFolder, 'iTunesArtwork'),
+				File::Spec::Functions::catdir($cacheFolder, 'FileCache'),
+				File::Spec::Functions::catdir($cacheFolder, 'fonts.bin'),
+				File::Spec::Functions::catdir($cacheFolder, 'strings.bin'),
+				File::Spec::Functions::catdir($cacheFolder, 'templates'),
+				File::Spec::Functions::catdir($cacheFolder, 'cookies.dat'),
+				File::Spec::Functions::catdir($cacheFolder, 'plugin-data.yaml'),
 			],
 		};
 	}
@@ -161,11 +177,11 @@ sub getFolderList {
 		push @folders, {
 			label   => 'MySQL data',
 			folders => [
-				catdir($cacheFolder, 'MySQL'),
-				catdir($cacheFolder, 'my.cnf'),
-				catdir($cacheFolder, 'squeezecenter-mysql.pid'),
-				catdir($cacheFolder, 'squeezecenter-mysql.sock'),
-				catdir($cacheFolder, 'mysql-error-log.txt'),
+				File::Spec::Functions::catdir($cacheFolder, 'MySQL'),
+				File::Spec::Functions::catdir($cacheFolder, 'my.cnf'),
+				File::Spec::Functions::catdir($cacheFolder, 'squeezecenter-mysql.pid'),
+				File::Spec::Functions::catdir($cacheFolder, 'squeezecenter-mysql.sock'),
+				File::Spec::Functions::catdir($cacheFolder, 'mysql-error-log.txt'),
 			],
 		};
 	}
@@ -196,42 +212,41 @@ sub options {
 	my $options = [
 		{
 			name     => 'prefs',
-			title    => string('CLEANUP_PREFS'),
+			title    => Slim::Utils::Light::string('CLEANUP_PREFS'),
 			position => [30, 20],
 		},
 	
 		{
 			name     => 'filecache',
-			title    => string('CLEANUP_FILECACHE'),
+			title    => Slim::Utils::Light::string('CLEANUP_FILECACHE'),
 			position => [30, 40],
 		},
 	
 		{
 	
 			name     => 'mysql',
-			title    => string('CLEANUP_MYSQL'),
+			title    => Slim::Utils::Light::string('CLEANUP_MYSQL'),
 			position => [30, 60],
 		},
 	
 		{
 	
 			name     => 'logs',
-			title    => string('CLEANUP_LOGS'),
+			title    => Slim::Utils::Light::string('CLEANUP_LOGS'),
 			position => [30, 80],
 		},
 	
 		{
 	
 			name     => 'cache',
-			margin   => 20,
-			title    => '(!) ' . string('CLEANUP_CACHE'),
+			title    => Slim::Utils::Light::string('CLEANUP_CACHE'),
 			position => [30, 120],
 		},
 	
 		{
 	
 			name     => 'all',
-			title    => '(!!) ' . string('CLEANUP_ALL'),
+			title    => '(!) ' . Slim::Utils::Light::string('CLEANUP_ALL'),
 			position => [30, 160],
 		},
 	];
@@ -240,11 +255,8 @@ sub options {
 }
 
 sub checkForSC {
-	my $raddr = '127.0.0.1';
-	my $rport = 3483;
-
-	my $iaddr = inet_aton($raddr);
-	my $paddr = sockaddr_in($rport, $iaddr);
+	my $iaddr = inet_aton('127.0.0.1');
+	my $paddr = sockaddr_in(3483, $iaddr);
 
 	socket(SSERVER, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
 
@@ -263,7 +275,7 @@ sub cleanup {
 	my $fallbackFolder = $os->dirsFor('');
 		
 	for my $item (@$folders) {
-		print sprintf("\n%s %s...\n", string('CLEANUP_DELETING'), $item->{label}) unless $useWx;
+		print sprintf("\n%s %s...\n", Slim::Utils::Light::string('CLEANUP_DELETING'), $item->{label}) unless $useWx;
 		
 		foreach ( @{$item->{folders}} ) {
 			next unless $_;
@@ -271,7 +283,7 @@ sub cleanup {
 			print "-> $_\n" if (-e $_ && !$useWx);
 
 			if (-d $_) {
-				rmtree $_;
+				File::Path::rmtree($_);
 			}
 			
 			elsif (-f $_) {
@@ -281,48 +293,34 @@ sub cleanup {
 	}
 }
 
-# return localised version of string token
-sub string {
-	my $name = shift;
-	$strings{ $name }->{ $language } || $strings{ $name }->{'EN'} || $name;
-}
-
-sub loadStrings {
-	my $string     = '';
-	my $language   = '';
-	my $stringname = '';
-
-	my $file = 'strings.txt';
-
-	open(STRINGS, "<:utf8", $file) || do {
-		die "Couldn't open $file - FATAL!";
-	};
-
-	LINE: while (my $line = <STRINGS>) {
-
-		chomp($line);
-		
-		next if $line =~ /^#/;
-		next if $line !~ /\S/;
-
-		if ($line =~ /^(\S+)$/) {
-
-			$stringname = $1;
-			$string = '';
-			next LINE;
-
-		} elsif ($line =~ /^\t(\S*)\t(.+)$/) {
-
-			$language = uc($1);
-			$string   = $2;
-
-			$strings{$stringname}->{$language} = $string;
-		}
+sub showSplashScreen {
+	return unless $^O =~ /win/i;
+	
+	my $file;
+	
+	if (defined $PerlApp::VERSION) {
+		$file = PerlApp::extract_bound_file(SPLASH_LOGO);
+	}
+	
+	if (!$file || !-f $file) {
+		$file = '../platforms/win32/res/' . SPLASH_LOGO;
 	}
 
-	close STRINGS;
-}
+	Wx::Image::AddHandler(Wx::PNGHandler->new());
+	
+	if (my $bitmap = Wx::Bitmap->new($file, Wx::wxBITMAP_TYPE_PNG())) {
 
+		$splash = Wx::SplashScreen->new(
+			$bitmap, 
+			Wx::wxSPLASH_CENTRE_ON_SCREEN() | Wx::wxSPLASH_TIMEOUT(),
+			10000,
+			undef,
+			-1, [-1, -1], [-1, -1],
+			Wx::wxSIMPLE_BORDER() | Wx::wxSTAY_ON_TOP()
+		);
+
+	}
+}
 
 main();
 

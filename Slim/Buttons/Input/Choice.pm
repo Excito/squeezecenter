@@ -1,8 +1,8 @@
 package Slim::Buttons::Input::Choice;
 
-# $Id: Choice.pm 22998 2008-09-01 16:01:57Z andy $
+# $Id: Choice.pm 28291 2009-08-26 16:55:58Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -352,7 +352,7 @@ sub changePos {
 
 	my $newposition = Slim::Buttons::Common::scroll($client, $dir, scalar(@$listRef), $listIndex);
 	
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug(
 			"newpos: $newposition = scroll dir:$dir listIndex: $listIndex listLen: ", scalar(@$listRef)
 		);
@@ -647,7 +647,12 @@ sub exitInput {
 
 		} elsif ($exitType eq 'left') {
 
-			Slim::Buttons::Common::popModeRight($client);
+			if ( $client->modeParam('blockPop') ) {
+				$client->bumpLeft();
+			}
+			else {
+				Slim::Buttons::Common::popModeRight($client);
+			}
 
 		} else {
 

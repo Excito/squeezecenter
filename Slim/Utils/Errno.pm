@@ -1,8 +1,8 @@
 package Slim::Utils::Errno;
 
-# $Id: Errno.pm 23205 2008-09-17 15:23:29Z awy $
+# $Id: Errno.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -39,7 +39,7 @@ use Exporter::Lite;
 our @EXPORT = qw(EWOULDBLOCK EINPROGRESS EINTR ECHILD EBADF);
 
 BEGIN {
-        if ($^O =~ /Win32/) {
+        if (main::ISWINDOWS) {
                 *EINTR       = sub () { 10004 };
                 *EBADF       = sub () { 10009 };
                 *ECHILD      = sub () { 10010 };

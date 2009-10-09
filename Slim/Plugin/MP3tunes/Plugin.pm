@@ -23,6 +23,7 @@ sub initPlugin {
 		tag            => 'mp3tunes',
 		menu           => 'music_services',
 		weight         => 50,
+		is_app         => 1,
 	);
 	
 	Slim::Formats::RemoteMetadata->registerProvider(
@@ -52,13 +53,12 @@ sub initPlugin {
 	}
 }
 
-sub playerMenu () {
-	return 'MUSIC_SERVICES';
-}
-
 sub getDisplayName () {
 	return 'PLUGIN_MP3TUNES_MODULE_NAME';
 }
+
+# Don't add this item to any menu
+sub playerMenu { }
 
 # If the HTTP protocol handler sees an mp3tunes X-Locker-Info header, it will
 # pass it to us

@@ -2,7 +2,7 @@ package Slim::Plugin::Favorites::SqueezeNetwork;
 
 # Pull favorites from the SN database
 
-# $Id: SqueezeNetwork.pm 24189 2008-12-04 01:23:51Z andy $
+# $Id: SqueezeNetwork.pm 28189 2009-08-14 19:33:36Z andy $
 
 use strict;
 
@@ -68,13 +68,13 @@ sub add {
 			num    => $max + 1,
 		} );
 		
-		$log->debug( "Added favorite $title ($url) at index " . ( $max + 1 ) );
+		main::DEBUGLOG && $log->debug( "Added favorite $title ($url) at index " . ( $max + 1 ) );
 	}
 	else {
 		$fav->title( $title );
 		$fav->update;
 		
-		$log->debug("Favorite $url already exists");
+		main::DEBUGLOG && $log->debug("Favorite $url already exists");
 	}
 	
 	# NOMEMCACHE
@@ -89,7 +89,7 @@ sub hasUrl {
 	my $fav = SDI::Service::Model::Favorite->findByUserAndURL( $self->{userid}, $url );
 	
 	if ( $fav ) {
-		$log->debug( "User has favorite $url" );
+		main::DEBUGLOG && $log->debug( "User has favorite $url" );
 		return 1;
 	}
 	
@@ -102,7 +102,7 @@ sub findUrl {
 	my $fav = SDI::Service::Model::Favorite->findByUserAndURL( $self->{userid}, $url );
 
 	if ( $fav ) {
-		$log->is_debug && $log->debug( "User has favorite $url at index " . $fav->num );
+		main::DEBUGLOG && $log->is_debug && $log->debug( "User has favorite $url at index " . $fav->num );
 		return $fav->num - 1;
 	}
 
@@ -117,7 +117,7 @@ sub deleteUrl {
 	if ( $fav ) {
 		SDI::Service::Model::Favorite->deleteAndRenumber( $self->{userid}, $fav->id );
 		
-		$log->debug( "Deleted favorite for $url" );
+		main::DEBUGLOG && $log->debug( "Deleted favorite for $url" );
 		
 		# NOMEMCACHE
 		# Slim::Utils::Cache->new->set( 'favorites_last_mod_' . $self->{userid}, time(), 86400 * 30 );
@@ -137,7 +137,7 @@ sub deleteIndex {
 	);
 	
 	if ( $fav ) {
-		$log->is_debug && $log->debug( "Deleted favorite index $index (" . $fav->url . ")" );
+		main::DEBUGLOG && $log->is_debug && $log->debug( "Deleted favorite index $index (" . $fav->url . ")" );
 		
 		SDI::Service::Model::Favorite->deleteAndRenumber( $self->{userid}, $fav->id );
 		
@@ -169,52 +169,26 @@ sub entry {
 	return;
 }
 
-sub hasHotkey {
-	my ( $self, $digit ) = @_;
-	
-	my ($fav) = SDI::Service::Model::Favorite->search(
-		userid => $self->{userid},
-		hotkey => $digit,
-	);
-	
-	if ( $fav ) {
-		return $fav->num - 1;
-	}
-	
-	return;
-}
+# legacy method to support migration to presets
+sub hotkeys {
+	my $self = shift;
 
-sub setHotkey {
-	my ( $self, $index, $key ) = @_;
-	
-	if ( defined $key ) {
-		# Bug 10129, if this hotkey is assigned to another favorite, clear it
-		my @others = SDI::Service::Model::Favorite->search(
+	my @keys;
+
+	for my $key (1..9,0) {
+		my ($item) = SDI::Service::Model::Favorite->search(
 			userid => $self->{userid},
 			hotkey => $key,
 		);
-	
-		for my $other ( @others ) {
-			$other->hotkey( undef );
-			$other->update;
-		
-			$log->is_debug && $log->debug( "Removed old hotkey $key on " . $other->url );
-		}
+		push @keys, {
+			key   => $key,
+			used  => $item ? 1 : 0,
+			title => $item ? $item->title : undef,
+			index => $item ? $item->num - 1 : undef,
+		};
 	}
-	
-	my ($fav) = SDI::Service::Model::Favorite->search(
-		userid => $self->{userid},
-		num    => $index + 1,
-	);
-	
-	if ( $fav ) {
-		$fav->hotkey( $key );
-		$fav->update;
-		
-		$log->is_debug && $log->debug("Set hotkey for index $index to $key");
-	}
-	
-	return 1;
+
+	return \@keys;
 }
 
 1;

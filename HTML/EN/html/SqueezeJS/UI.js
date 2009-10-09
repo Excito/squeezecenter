@@ -2,7 +2,7 @@
 Ext.onReady(function(){
 	SqueezeJS.loadStrings([
 		'POWER', 'PLAY', 'PAUSE', 'NEXT', 'PREVIOUS', 'CONNECTING_FOR', 'BROWSE', 'REPEAT', 'SHUFFLE',
-		'BY', 'FROM', 'ON', 'OFF', 'YES', 'NO', 'COLON', 'SQUEEZECENTER', 'SQUEEZENETWORK', 'VOLUME',
+		'BY', 'FROM', 'ON', 'OFF', 'YES', 'NO', 'COLON', 'SQUEEZEBOX_SERVER', 'SQUEEZENETWORK', 'VOLUME',
 		'CLOSE', 'CANCEL', 'CHOOSE_PLAYER', 'SYNCHRONIZE'
 	]);
 });
@@ -258,6 +258,9 @@ Ext.extend(SqueezeJS.UI.FileTreeLoader, Ext.tree.TreeLoader, {
 
 		cliQuery.push("folder:" + node.id);
 
+		if (node.attributes.path_b64)
+			cliQuery.push("folder_b64:" + node.attributes.path_b64);
+
 		if (this.filter)
 			cliQuery.push("filter:" + this.filter);
 
@@ -340,8 +343,10 @@ SqueezeJS.UI.FileSelector = Ext.extend(Ext.tree.TreePanel, {
 
 	onClick: function(node, e){
 		var input = Ext.get(this.input);
+		var input_b64 = Ext.get(this.input_b64);
 		if (input != null && input.getValue() != null) {
 			input.dom.value = node.id;
+			input_b64.dom.value = node.attributes.path_b64;
 		}
 	},
 
@@ -443,7 +448,7 @@ SqueezeJS.UI.FilesystemBrowser = {
 	init: function(){
 		var inputEl, btnEl, filter, classes, start;
 
-		var tpl = new Ext.Template('&nbsp;<input type="button" value="' + SqueezeJS.string('browse') + '" onclick="SqueezeJS.UI.FilesystemBrowser.show(\'{inputField}\', \'{filter}\')">');
+		var tpl = new Ext.Template('&nbsp;<input type="button" value="' + SqueezeJS.string('browse') + '" onclick="SqueezeJS.UI.FilesystemBrowser.show(\'{inputField}\', \'{inputB64Field}\', \'{filter}\')">');
 		tpl.compile();
 
 		// try to get the filter expression from the input fields CSS class
@@ -472,15 +477,18 @@ SqueezeJS.UI.FilesystemBrowser = {
 						filter = "filetype:" + filter;
 				}
 
+				var inputElB64 = Ext.get(inputEl.id + '_b64');
+
 				btnEl = tpl.insertAfter(inputEl, {
 					inputField: inputEl.id,
+					inputB64Field: inputElB64 != null ? inputElB64.id : null,
 					filter: filter
 				});
 			}
 		}
 	},
 
-	show: function(inputField, filter){
+	show: function(inputField, inputB64Field, filter){
 		var filesystemDlg = new Ext.Window({
 			modal: true,
 			collapsible: false,
@@ -506,6 +514,7 @@ SqueezeJS.UI.FilesystemBrowser = {
 		new SqueezeJS.UI.FileSelector({
 			renderTo: 'filesystembrowser',
 			input: inputField,
+			input_b64: inputB64Field,
 			filter: filter
 		});
 	},
@@ -1206,7 +1215,7 @@ SqueezeJS.UI.Buttons.PlayerDropdown = Ext.extend(Ext.SplitButton, {
 								server: playerInfo.server,
 								cls: playerInfo.model,
 								scope: this,
-								dlgTitle: SqueezeJS.string('squeezecenter'),
+								dlgTitle: SqueezeJS.string('squeezebox_server'),
 								dlgServer: playerInfo.server,
 								handler: this._confirmSwitchPlayer
 							})
@@ -1511,7 +1520,7 @@ SqueezeJS.UI.Title = Ext.extend(SqueezeJS.UI.Component, {
 // title without disc/track numbers
 SqueezeJS.UI.RawTitle = Ext.extend(SqueezeJS.UI.Component, {
 	onPlayerStateChange : function(result){
-		this.el.update(SqueezeJS.SonginfoParser.title(result, this.noLink, false, true));
+		this.el.update(SqueezeJS.SonginfoParser.title(result, this.noLink, true));
 	}
 });
 
@@ -1523,9 +1532,9 @@ SqueezeJS.UI.TrackNo = Ext.extend(SqueezeJS.UI.Component, {
 
 SqueezeJS.UI.CompoundTitle = Ext.extend(SqueezeJS.UI.Component, {
 	onPlayerStateChange : function(result){
-		var title = SqueezeJS.SonginfoParser.title(result, this.noLink, true);
+		var title = SqueezeJS.SonginfoParser.title(result, this.noLink);
 		var contributors = SqueezeJS.SonginfoParser.contributors(result, this.noLink);
-		var album = SqueezeJS.SonginfoParser.album(result, this.noLink);
+		var album = SqueezeJS.SonginfoParser.album(result, this.noLink, true);
 
 		this.el.update(title
 			+ (contributors ? '&nbsp;' + SqueezeJS.string('by') + '&nbsp;' + contributors : '')
@@ -1722,9 +1731,9 @@ SqueezeJS.UI.CoverartPopup = Ext.extend(Ext.ToolTip, {
 
 	onPlayerStateChange : function(result){
 		if (this.songInfo) {
-			var title = SqueezeJS.SonginfoParser.title(result, true, true);
+			var title = SqueezeJS.SonginfoParser.title(result, true);
 			var contributors = SqueezeJS.SonginfoParser.contributors(result, true);
-			var album = SqueezeJS.SonginfoParser.album(result, true);
+			var album = SqueezeJS.SonginfoParser.album(result, true, true);
 	
 			this.setTitle(title
 				+ (contributors ? '&nbsp;/ ' + contributors : '')

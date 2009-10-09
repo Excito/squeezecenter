@@ -23,11 +23,15 @@ sub initPlugin {
 		menu      => 'music_services',
 		style     => 'albumcurrent',
 		weight    => 60,
+		is_app    => 1,
 	);
 }
 
 sub getDisplayName {
 	return 'PLUGIN_LMA_MODULE_NAME';
 }
+
+# Don't add this item to any menu
+sub playerMenu { }
 
 1;

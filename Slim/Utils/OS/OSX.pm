@@ -1,5 +1,10 @@
 package Slim::Utils::OS::OSX;
 
+# Squeezebox Server Copyright 2001-2009 Logitech.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License, 
+# version 2.
+
 use strict;
 use base qw(Slim::Utils::OS);
 
@@ -9,6 +14,8 @@ use File::Spec::Functions qw(:ALL);
 use FindBin qw($Bin);
 use POSIX qw(LC_CTYPE LC_TIME);
 
+use constant GROWLINTERVAL => 60*60;
+
 my $canFollowAlias;
 
 sub name {
@@ -17,63 +24,94 @@ sub name {
 
 sub initDetails {
 	my $class = shift;
-
-	$canFollowAlias = !Slim::bootstrap::tryModuleLoad('Mac::Files', 'Mac::Resources', 'nowarn');
 	
-	# Once for OS Version, then again for CPU Type.
-	open(SYS, '/usr/sbin/system_profiler SPSoftwareDataType |') or return;
+	if ( !main::RESIZER ) {
+		# Once for OS Version, then again for CPU Type.
+		open(SYS, '/usr/sbin/system_profiler SPSoftwareDataType |') or return;
 
-	while (<SYS>) {
+		while (<SYS>) {
 
-		if (/System Version: (.+)/) {
+			if (/System Version: (.+)/) {
 
-			$class->{osDetails}->{'osName'} = $1;
-			last;
+				$class->{osDetails}->{'osName'} = $1;
+				last;
+			}
 		}
-	}
 
-	close SYS;
+		close SYS;
 
-	# CPU Type / Processor Name
-	open(SYS, '/usr/sbin/system_profiler SPHardwareDataType |') or return;
+		# CPU Type / Processor Name
+		open(SYS, '/usr/sbin/system_profiler SPHardwareDataType |') or return;
 
-	while (<SYS>) {
+		while (<SYS>) {
 
-		if (/Intel/i) {
+			if (/Intel/i) {
 
-			$class->{osDetails}->{'osArch'} = 'x86';
-			last;
+				# Determine if we are running as 32-bit or 64-bit
+				my $bits = length( pack 'L!', 1 ) == 8 ? 64 : 32;
+			
+				$class->{osDetails}->{'osArch'} = 'x86';
+			
+				if ( $bits == 64 ) {
+					$class->{osDetails}->{'osArch'} = 'x86_64';
+				}
+			
+				last;
 
-		} elsif (/PowerPC/i) {
+			} elsif (/PowerPC/i) {
 
-			$class->{osDetails}->{'osArch'} = 'ppc';
+				$class->{osDetails}->{'osArch'} = 'ppc';
+			}
 		}
-	}
 
-	close SYS;
+		close SYS;
+	}
 
 	$class->{osDetails}->{'os'}  = 'Darwin';
 	$class->{osDetails}->{'uid'} = getpwuid($>);
 
+	# XXX - do we still need this? They're empty on my system, and created if needed in some other place anyway
 	for my $dir (
-		'Library/Application Support/SqueezeCenter',
-		'Library/Application Support/SqueezeCenter/Plugins', 
-		'Library/Application Support/SqueezeCenter/Graphics',
-		'Library/Application Support/SqueezeCenter/html',
-		'Library/Application Support/SqueezeCenter/IR',
-		'Library/Logs/SqueezeCenter'
+		'Library/Application Support/Squeezebox',
+		'Library/Application Support/Squeezebox/Plugins', 
+		'Library/Application Support/Squeezebox/Graphics',
+		'Library/Application Support/Squeezebox/html',
+		'Library/Application Support/Squeezebox/IR',
+		'Library/Logs/Squeezebox'
 	) {
 
 		eval 'mkpath("$ENV{\'HOME\'}/$dir");';
 	}
 
-	unshift @INC, $ENV{'HOME'} . "/Library/Application Support/SqueezeCenter";
-	unshift @INC, "/Library/Application Support/SqueezeCenter";
+	unshift @INC, $ENV{'HOME'} . "/Library/Application Support/Squeezebox";
+	unshift @INC, "/Library/Application Support/Squeezebox";
 	
 	return $class->{osDetails};
 }
 
-sub canFollowAlias { $canFollowAlias };
+sub initPrefs {
+	my ($class, $prefs) = @_;
+	
+	$prefs->{libraryname} = `scutil --get ComputerName` || '';
+	chomp($prefs->{libraryname});
+	
+	# we now have a binary preference pane - don't show the wizard
+	$prefs->{wizardDone} = 1;
+}
+
+sub canFollowAlias { 
+	return $canFollowAlias if defined $canFollowAlias;
+	
+	eval {
+		require Mac::Files;
+		require Mac::Resources;
+		$canFollowAlias = 1;
+	};
+	
+	if ( $@ ) {
+		$canFollowAlias = 0;
+	}
+}
 
 sub initSearchPath {
 	my $class = shift;
@@ -92,7 +130,7 @@ sub initSearchPath {
 
 Return OS Specific directories.
 
-Argument $dir is a string to indicate which of the SqueezeCenter directories we
+Argument $dir is a string to indicate which of the Squeezebox Server directories we
 need information for.
 
 =cut
@@ -117,17 +155,17 @@ sub dirsFor {
 		#	$dir = lc($dir);
 		#}
 
-		push @dirs, "$ENV{'HOME'}/Library/Application Support/SqueezeCenter/$dir";
-		push @dirs, "/Library/Application Support/SqueezeCenter/$dir";
+		push @dirs, "$ENV{'HOME'}/Library/Application Support/Squeezebox/$dir";
+		push @dirs, "/Library/Application Support/Squeezebox/$dir";
 		push @dirs, catdir($Bin, $dir);
 
 	} elsif ($dir eq 'log') {
 
-		push @dirs, $::logdir || catdir($ENV{'HOME'}, '/Library/Logs/SqueezeCenter');
+		push @dirs, $::logdir || catdir($ENV{'HOME'}, '/Library/Logs/Squeezebox');
 
 	} elsif ($dir eq 'cache') {
 
-		push @dirs, $::cachedir || catdir($ENV{'HOME'}, '/Library/Caches/SqueezeCenter');
+		push @dirs, $::cachedir || catdir($ENV{'HOME'}, '/Library/Caches/Squeezebox');
 
 	} elsif ($dir eq 'oldprefs') {
 
@@ -143,15 +181,19 @@ sub dirsFor {
 
 	} elsif ($dir eq 'prefs') {
 
-		push @dirs, $::prefsdir || catdir($ENV{'HOME'}, '/Library/Application Support/SqueezeCenter');
+		push @dirs, $::prefsdir || catdir($ENV{'HOME'}, '/Library/Application Support/Squeezebox');
 			
 	} elsif ($dir eq 'music') {
 
-		my $musicDir = catdir($ENV{'HOME'}, 'Music');
+		my $musicDir = catdir($ENV{'HOME'}, 'Music', 'iTunes');
+		
+		if (!-d $musicDir) {
+			$musicDir = catdir($ENV{'HOME'}, 'Music');
+		}
 
 		# bug 1361 expand music folder if it's an alias, or SC won't start
-		if ($class->isMacAlias($musicDir)) {
-			$musicDir = $class->pathFromMacAlias($musicDir);
+		if ( my $alias = $class->pathFromMacAlias($musicDir) ) {
+			$musicDir = $alias;
 		}
 
 		push @dirs, $musicDir;
@@ -253,63 +295,137 @@ sub ignoredItems {
 
 =head2 pathFromMacAlias( $path )
 
-Return the filepath for a given Mac Alias
+Return the filepath for a given Mac Alias. Returns undef if $path is not an alias.
 
 =cut
 
+# Keep a cache of alias lookups to avoid double-lookup during scan
+# INIT block is needed because this module is loaded before CPAN dir is setup
+my %aliases;
+INIT {
+	require Tie::Cache::LRU;
+	tie %aliases, 'Tie::Cache::LRU', 128;
+}
+
 sub pathFromMacAlias {
 	my ($class, $fullpath) = @_;
-	my $path = '';
+	
+	return unless $fullpath && canFollowAlias();
+	
+	my $path;
+	
+	$fullpath = Slim::Utils::Misc::pathFromFileURL($fullpath) unless $fullpath =~ m|^/|;
+	
+	if ( exists $aliases{$fullpath} ) {
+		return $aliases{$fullpath};
+	}
 
-	return $path unless $fullpath && $canFollowAlias;
-
-	if ($class->isMacAlias($fullpath)) {
-
-		$fullpath = Slim::Utils::Misc::pathFromFileURL($fullpath) unless $fullpath =~ m|^/|;
-
-		if (my $rsc = Mac::Resources::FSpOpenResFile($fullpath, 0)) {
+	if (-f $fullpath && -r _ && (my $rsc = Mac::Resources::FSpOpenResFile($fullpath, 0))) {
+		
+		if (my $alis = Mac::Resources::GetIndResource('alis', 1)) {
 			
-			if (my $alis = Mac::Resources::GetIndResource('alis', 1)) {
-				
-				$path = Mac::Files::ResolveAlias($alis);
-
-				Mac::Resources::ReleaseResource($alis);
-			}
-
-			Mac::Resources::CloseResFile($rsc);
+			$path = $aliases{$fullpath} = Mac::Files::ResolveAlias($alis);
+			
+			Mac::Resources::ReleaseResource($alis);
 		}
+		
+		Mac::Resources::CloseResFile($rsc);
 	}
 
 	return $path;
 }
 
-=head2 isMacAlias( $path )
+sub initUpdate {
+	Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 30, \&signalUpdateReady);
+}
 
-Return the filepath for a given Mac Alias
+sub getUpdateParams {
+	return {
+		cb => \&signalUpdateReady
+	};
+}
 
-=cut
-
-sub isMacAlias {
-	my ($class, $fullpath) = @_;
-	my $isAlias  = 0;
-
-	return unless $fullpath && $canFollowAlias;
-
-	$fullpath = Slim::Utils::Misc::pathFromFileURL($fullpath) unless $fullpath =~ m|^/|;
-
-	if (-f $fullpath && -r _ && (my $rsc = Mac::Resources::FSpOpenResFile($fullpath, 0))) {
-
-		if (my $alis = Mac::Resources::GetIndResource('alis', 1)) {
-
-			$isAlias = 1;
-
-			Mac::Resources::ReleaseResource($alis);
+sub signalUpdateReady {
+			
+	my $updater = Slim::Utils::Update::getUpdateInstaller();
+	my $log     = Slim::Utils::Log::logger('server.update');
+			
+	unless ($updater && -e $updater) {	
+		if ($updater) {
+			$log->info("Updater file '$updater' not found!");
 		}
-
-		Mac::Resources::CloseResFile($rsc);
+		else {
+			$log->info("No updater file found!");
+		}
+		return;
 	}
 
-	return $isAlias;
+	$log->debug("Notify '$updater' is ready to be installed");
+		
+	Slim::Utils::Timers::killTimers(undef, \&signalUpdateReady);
+	Slim::Utils::Timers::killTimers(undef, \&_signalUpdateReady);
+		
+	# don't run the signal immediately, as the prefs are written delayed
+	Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 15, \&_signalUpdateReady);
+}
+
+# don't re-try Growl if it fails to be called
+my $hasGrowl = 1;
+
+sub _signalUpdateReady {
+	my $log = Slim::Utils::Log::logger('server.update');
+	my $osa = Slim::Utils::Misc::findbin('osascript');
+	my ($script, $growlScript);
+	
+	my $osDetails = Slim::Utils::OSDetect::details();
+	
+	# try to use Growl on 10.5+
+	if ($hasGrowl && $osDetails->{'osName'} =~ /X 10\.(\d)\./ && $1 > 4) {
+		$growlScript = Slim::Utils::Misc::findbin('signalupdate.scpt');
+	}
+	
+	$script ||= Slim::Utils::Misc::findbin('openprefs.scpt');
+	
+	if ($osa && $growlScript) {
+
+		$growlScript = sprintf("%s '%s' %s &", $osa, $growlScript, Slim::Utils::Strings::string('PREFPANE_UPDATE_AVAILABLE'));
+
+		$log->debug("Running notification:\n$growlScript");
+		
+		# script will return true if Growl is installed
+		if (`$growlScript`) {
+			# as Growl notifications are temporary only, retrigger them every hour
+			Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + GROWLINTERVAL, \&_signalUpdateReady);
+		}
+		else {
+			$growlScript = undef;
+		}
+	}
+	
+	if ($osa && $script && !$growlScript) {
+		$script = sprintf("%s '%s' &", $osa, $script);
+		
+		$log->debug("Running notification:\n$script");
+		system($script);
+
+		$hasGrowl = 0;
+	}
+	
+	if (!$osa || !$script) {
+		$log->warn("AppleScript interpreter osascript or notification script not found!");
+	}
+}
+
+sub canAutoUpdate { 1 }
+
+sub installerExtension { 'dmg' }; 
+sub installerOS { 'osx' }
+
+sub restartServer {
+	my $class  = shift;
+	my $helper = Slim::Utils::Misc::findbin('restart-server.sh');
+
+	system("'$helper' &") if $helper;
 }
 
 

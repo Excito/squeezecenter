@@ -1,6 +1,6 @@
 package Slim::Buttons::TrackInfo;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -25,7 +25,6 @@ use Scalar::Util qw(blessed);
 use Slim::Buttons::Common;
 use Slim::Buttons::Playlist;
 use Slim::Menu::TrackInfo;
-use Slim::Player::TranscodingHelper;
 use Slim::Utils::Log;
 use Slim::Utils::Favorites;
 
@@ -86,6 +85,7 @@ sub setMode {
 		modeName  => 'TrackInfo',
 		opml      => $getMenu->( $client ),
 		onRefresh => $getMenu,
+		timeout   => 35,
 	);
 	
 	Slim::Buttons::Common::pushMode( $client, 'xmlbrowser', \%params );

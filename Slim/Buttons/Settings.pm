@@ -1,6 +1,6 @@
 package Slim::Buttons::Settings;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -18,8 +18,6 @@ to select, set, and read player preferences.
 =cut
 
 use strict;
-use File::Spec::Functions qw(:ALL);
-use File::Spec::Functions qw(updir);
 use Slim::Buttons::Common;
 use Slim::Buttons::Alarm;
 use Slim::Utils::Misc;
@@ -566,6 +564,7 @@ sub init {
 								'SETUP_SCREENSAVER',
 								'SETUP_IDLESAVER',
 								'SETUP_OFFSAVER',
+								'SETUP_ALARMSAVER',
 							],
 							'stringExternRef' => 1,
 							'header'          => 'SCREENSAVERS',
@@ -609,6 +608,18 @@ sub init {
 									'header'        => '{SETUP_IDLESAVER}',
 									'headerAddCount'=> 1,
 									'initialValue'  => sub { $prefs->client(shift)->get('idlesaver') },
+									'init'          => \&screensaverInit,
+								},
+						
+								'SETUP_ALARMSAVER' => {
+									'useMode'       => 'INPUT.Choice',
+									'onPlay'        => \&setPref,
+									'onAdd'         => \&setPref,
+									'onRight'       => \&setPref,
+									'pref'          => "alarmsaver",
+									'header'        => '{SETUP_ALARMSAVER}',
+									'headerAddCount'=> 1,
+									'initialValue'  => sub { $prefs->client(shift)->get('alarmsaver') },
 									'init'          => \&screensaverInit,
 								},
 							},
@@ -753,37 +764,43 @@ sub init {
 					'subcommand'   => 'shuffle',
 				},
 	
-				'PLAYLIST_MODE'          => {
-					'useMode'      => 'INPUT.Choice',
-					'listRef'      => [
-						{
-							name   => '{PLAYLIST_MODE_DISABLED}',
-							value  => 'disabled',
-						},
-						{
-							name   => '{PLAYLIST_MODE_OFF}',
-							value  => 'off',
-						},
-						{
-							name   => '{PLAYLIST_MODE_ON}',
-							value  => 'on',
-						},
-						{
-							name   => '{PARTY_MODE_ON}',
-							value  => 'party',
-						},
-					],
-					'onPlay'        => \&executeCommand,
-					'onAdd'         => \&executeCommand,
-					'onRight'       => \&executeCommand,
-					'header'        => '{PLAYLIST_MODE}',
-					'headerAddCount'=> 1,
-					'condition'     => sub { 1 },
-					'pref'          => sub{ return Slim::Player::Playlist::playlistMode(shift)},
-					'initialValue'  => sub{ return Slim::Player::Playlist::playlistMode(shift)},
-					'command'       => 'playlistmode',
-					'subcommand'    => 'set',
-				},
+				
+				# Bugs: 13896, 13689, 8878
+				# playlist/party mode is in conflict with 7.4 touch/press-to-play behavior
+				# fix for bug 13689 will be the complete fix, but for now remove playlistModeSettings from ip3K menus entirely
+				#
+				# if/when playlist/party mode is taken out, so too can this commented code be stripped out
+				#'PLAYLIST_MODE'          => {
+				#	'useMode'      => 'INPUT.Choice',
+				#	'listRef'      => [
+				#		{
+				#			name   => '{PLAYLIST_MODE_DISABLED}',
+				#			value  => 'disabled',
+				#		},
+				#		{
+				#			name   => '{PLAYLIST_MODE_OFF}',
+				#			value  => 'off',
+				#		},
+				#		{
+				#			name   => '{PLAYLIST_MODE_ON}',
+				#			value  => 'on',
+				#		},
+				#		{
+				#			name   => '{PARTY_MODE_ON}',
+				#			value  => 'party',
+				#		},
+				#	],
+				#	'onPlay'        => \&executeCommand,
+				#	'onAdd'         => \&executeCommand,
+				#	'onRight'       => \&executeCommand,
+				#	'header'        => '{PLAYLIST_MODE}',
+				#	'headerAddCount'=> 1,
+				#	'condition'     => sub { 1 },
+				#	'pref'          => sub{ return Slim::Player::Playlist::playlistMode(shift)},
+				#	'initialValue'  => sub{ return Slim::Player::Playlist::playlistMode(shift)},
+				#	'command'       => 'playlistmode',
+				#	'subcommand'    => 'set',
+				#},
 		
 				'SYNCHRONIZE' => {
 					'useMode'   => 'synchronize',
@@ -963,18 +980,6 @@ sub init {
 			},
 			'initialValue' => sub { $prefs->client($_[0])->get('longdateFormat') },
 			'pref'         => 'longdateFormat',
-		};
-		
-		
-		$menuParams{'SETTINGS'}->{'submenus'}->{'SETUP_PLAYER_CODE'} = {
-			'useMode'      => 'INPUT.Choice',
-			'condition'    => sub { 1 },
-			'listRef'      => [ 'foo' ],
-			'name'         => sub {
-				my ($client, $item) = @_;
-				return sprintf($client->string('SQUEEZENETWORK_PIN'), $client->pin);
-			},
-			'header'       => '{SQUEEZENETWORK_SIGNUP}',
 		};
 		
 		# Delete menu items we don't want on SN
@@ -1157,7 +1162,7 @@ sub serverListInit {
 	
 	if ( main::SLIM_SERVICE ) {
 		@servers = ({
-			name => $client->string('SQUEEZECENTER'),
+			name => $client->string('SQUEEZEBOX_SERVER'),
 			value => 0
 		});
 	}
@@ -1195,7 +1200,7 @@ sub switchServer {
 		$client->showBriefly({
 			'line' => [
 				$client->string('MUSICSOURCE'),
-				$client->string('SQUEEZECENTER_CONNECTING', $server->{name}) 
+				$client->string('SQUEEZEBOX_SERVER_CONNECTING', $server->{name}) 
 			]
 		});
 

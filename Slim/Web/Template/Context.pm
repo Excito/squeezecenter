@@ -1,8 +1,8 @@
 package Slim::Web::Template::Context;
 
-# $Id: Context.pm 15258 2007-12-13 15:29:14Z mherger $
+# $Id: Context.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -13,8 +13,6 @@ package Slim::Web::Template::Context;
 
 use strict;
 use base 'Template::Context';
-
-our $procTemplate = Slim::Utils::PerfMon->new('Process Template', [0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 1, 5]);
 
 # Following allow timing of template processing excluding time in idleStreams and log4perl
 my $depth = 0;   # depth of template being processed
@@ -37,7 +35,7 @@ sub process {
 
 	}
 
-	unless ($::perfmon) {
+	unless (main::PERFMON) {
 
 		return $self->SUPER::process(@_);
 
@@ -49,7 +47,7 @@ sub process {
 
 		$depth++;
 
-		my $t2 = Time::HiRes::time();
+		my $t2 = AnyEvent->time;
 
 		$this[$depth]  = 0;
 		$total[$depth] = 0;
@@ -57,16 +55,14 @@ sub process {
 
 		my $ret = \$self->SUPER::process(@_);
 
-		my $t3 = Time::HiRes::time();
+		my $t3 = AnyEvent->time;
 
 		my $this = $this[$depth] + $t3 - $start[$depth];
 		my $total= $total[$depth] += $this;
 
-		$procTemplate->log($total,
-			sub {
-				sprintf ("%-32s (this templ: %7d us)", "  " x $depth . (ref $temp ? $temp->{'name'} : $temp), $this * 1000000);
-			}
-		);
+		Slim::Utils::PerfMon->check('template', $total, 
+									sprintf("%-32s (this templ: %7d us)", "  " x $depth . (ref $temp ? $temp->{'name'} : $temp),
+											$this * 1000000));
 
 		$depth--;
 

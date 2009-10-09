@@ -1,3 +1,111 @@
+<h2><a name="v7.4" id="v7.4"></a>Version 7.4</h2>
+<ul>
+	<li>Firmware updates:</li>
+	<ul>
+		<li>Boom - Version 50<br />	
+			Squeezebox 2/3 - Version 130<br />
+			Transporter - Version 80<br />
+			Receiver - Version 65
+		</li>
+		<ul>
+			<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=4834">#4834</a> - (Transporter) After switching to digital input device will not play music without a complete reset (3rd time's the charm?)</li>
+			<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=11078">#11078</a> - Wired-only Classics can flood the network with broadcast packets</li>
+			<li>Allow players in a sync group to move between servers while remaining in the same sync group.</li>
+		</ul>
+	</ul>
+	<br />
+	
+	<li>Scanner:</li>
+	<ul>
+		<li>The file format scanning modules have been completely rewritten in C as a <a href="http://search.cpan.org/dist/Audio-Scan/">standalone module</a> with comprehensive unit tests.</li>
+		<li>This reduces memory usage, improves scanning speed, and fixes many bugs.</li>
+		<li>Seeking in WMA files is now supported.</li>
+		<li>Seeking in VBR MP3 files is now more accurate.</li>
+	</ul>
+	<br />
+	
+	<li>System integration:</li>
+	<ul>
+		<li>New Control Panel for Windows, Console for Windows Home Server and Preference Pane for OSX as a shortcut to common activities</li>
+	</ul>
+	<br />
+	
+	<li>Preset Changes:</li>
+	<ul>
+		<li>Boom/IR presets are no longer associated with Favorites, and each player now has a separate preset list.</li>
+		<li>When upgrading, any presets set within Favorites will be migrated to every player.</li>
+		<li>Presets are now synced with mysqueezebox.com (Favorites are still not synced).</li>
+		<li>Presets can no longer be set via the 'favorites add' command.</li>
+		<li>For more information, please see bug <a href="http://bugs.slimdevices.com/show_bug.cgi?id=13248">#13248</a>.</li>
+	</ul>
+	<br />
+	
+	<li>Resource Usage:</li>
+	<ul>
+		<li>Several features of Squeezebox Server can be disabled to reduce memory usage. The following command-line flags are available:</li>
+		<ul>
+			<li>--noweb - Disable web interface.</li>
+			<li>--notranscoding - Disable support for transcoding.</li>
+			<li>--nosb1slimp3sync - Disable support for SliMP3/SB1 syncing.</li>
+			<li>--noinfolog - Disable INFO-level logging.</li>
+			<li>--nodebuglog - Disable DEBUG-level logging.</li>
+		</ul>
+	</ul>
+	<br />
+
+	<li>Bug Fixes:</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=2611">#2611</a> - Add option to ignore some of iTunes playlists like eg. Videos, Purchased etc.</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=3592">#3592</a> - Add ability to name Squeezebox Server</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=7320">#7320</a> - Pressing Play from Web Page does not clear cache
+		<br>When paused and connected to a remote stream of unknown duration, stop when buffer fills.</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=8246">#8246</a> - Different behaviour with browsing shortcuts in Music Folder</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=8434">#8434</a> - MP4 -&gt; FLAC conversion - big endian vs. little endian</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=8563">#8563</a> - Scanner reads incorrect sample rate on 88.2kHz MP4 files</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=9351">#9351</a> - Players unpause randomly</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=9673">#9673</a> - Poor recovery from empty stream</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=9713">#9713</a> - WMA files cannot FWD / RWD</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=9752">#9752</a> - fade_volume doesn't always call callbacks at end of fade</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=10026">#10026</a> - PCM != WAV<br>Add (restore) WAV seek capability</br></li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=10199">#10199</a> - Most transcoding doesn't work with non-ascii-characters in filename</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=10278">#10278</a> - exit search jumps back to home menu</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=10320">#10320</a> - Time command should remain paused if paused</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=10443">#10443</a> - Failure to resume song on connection recovery after short network disruption</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=10645">#10645</a> - Improve pausing on remote sources that support seeking</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=10660">#10660</a> - Allow Squeezebox Server to downsample WAV using SoX</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=10731">#10731</a> - WAV convert to LAME (MP3) fails</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=10814">#10814</a> - Transcoding Framework only replaces variable once (need global replace)</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=10841">#10841</a> - SC reverts to last stream played if ShoutCast server reached max. # listeners</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=11099">#11099</a> - Now playing remote stream shows duration bar initially</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=11285">#11285</a> - Allow Squeezebox Server to downsample AIF using SoX</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=11447">#11447</a> - Clearing the current playlist does not clear the current index of the playlist</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=11652">#11652</a> - Previous alarm goes off on Boom even though it was changed (Manoj Kasichainula)</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=11722">#11722</a> - Fix RandomMix genre list sort order</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=11780">#11780</a> - Scanner failing on common album names</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=11912">#11912</a> - Repeat should be turned off by default</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=12240">#12240</a> - Last.fm does not scrobble last track in playlist (until new playlist started)</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=12873">#12873</a> - Sample Size information for FLAC doesn't show up in UI</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=13248">#13248</a> - Change presets to be per-player, separate from favorites</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=13600">#13600</a> - Non-western characters incorrectly sorted</li>
+	</ul>
+	<br />
+</ul>
+
+<h2><a name="v7.3.4" id="v7.3.4"></a>Version 7.3.4</h2>
+<ul>
+	<li>Platform Support:</li>
+	<ul>
+		<li>Support for Mac OS X Snow Leopard.  SqueezeCenter itself will run in 64-bit mode, but note that the Preference Pane only supports 32-bit mode.</li>
+	</ul>
+	<br />
+	
+	<li>Bug Fixes:</li>
+	<ul>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=4584">#4584</a> - Support for ALBUMARTISTSORT</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=11217">#11217</a> - Un-mute does not work</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=12475">#12475</a> - If initial DNS test fails, keep using original DNS servers</li>
+	</ul>
+</ul>
+
 <h2><a name="v7.3.3" id="v7.3.3"></a>Version 7.3.3</h2>
 <ul>
 	<li>Firmware updates:</li>
@@ -102,7 +210,6 @@
 	<li>Bug Fixes:</li>
 	<ul>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=7966">#7966</a> - SqueezeCenter does not recognize wide characters if using iTunes</li>
-		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=8272">#8272</a> - Race condition in setd pref sync logic causes inability to update firmware</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=9132">#9132</a> - Status command does not return updated ratings until SC restart</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=9544">#9544</a> - Large number of plugins with web pages could break the web UI</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=9623">#9623</a> - SqueezeCenter tried to download firmwares to Firmware dir</li>

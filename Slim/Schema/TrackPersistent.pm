@@ -1,6 +1,6 @@
 package Slim::Schema::TrackPersistent;
 
-# $Id: TrackPersistent.pm 26120 2009-04-20 12:29:31Z andy $
+# $Id: TrackPersistent.pm 27975 2009-08-01 03:28:30Z andy $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -17,7 +17,7 @@ use Slim::Utils::Prefs;
 my $prefs = preferences('server');
 
 our @allColumns = ( qw(
-	id url musicbrainz_id track added playcount lastplayed rating
+	id url musicbrainz_id added playcount lastplayed rating
 ) );
 
 {
@@ -28,9 +28,6 @@ our @allColumns = ( qw(
 	$class->add_columns( @allColumns );
 
 	$class->set_primary_key('id');
-
-	# setup our relationships
-	$class->belongs_to( track => 'Slim::Schema::Track' );
 }
 
 sub attributes {

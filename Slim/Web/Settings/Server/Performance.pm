@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::Performance;
 
-# $Id: Performance.pm 20698 2008-06-12 19:42:41Z andy $
+# $Id: Performance.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,11 +13,11 @@ use base qw(Slim::Web::Settings);
 use Slim::Utils::Prefs;
 
 sub name {
-	return Slim::Web::HTTP::protectName('PERFORMANCE_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('PERFORMANCE_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/server/performance.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/server/performance.html');
 }
 
 sub prefs {

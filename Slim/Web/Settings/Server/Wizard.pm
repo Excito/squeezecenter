@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Wizard;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -33,7 +33,7 @@ sub handler {
 
 	$paramRef->{languageoptions} = Slim::Utils::Strings::languageOptions();
 
-	# The hostname for SqueezeNetwork
+	# The hostname for mysqueezebox.com
 	$paramRef->{sn_server} = Slim::Networking::SqueezeNetwork->get_server("sn");
 
 	# make sure we only enforce the wizard at the very first startup
@@ -50,19 +50,19 @@ sub handler {
 
 		# try to guess the local language setting
 		# only on non-Windows systems, as the Windows installer is setting the langugae
-		if (!Slim::Utils::OSDetect::isWindows() && !$paramRef->{saveLanguage}
+		if (!main::ISWINDOWS && !$paramRef->{saveLanguage}
 			&& defined $response->{_request}->{_headers}->{'accept-language'}) {
 
-			$log->debug("Accepted-Languages: " . $response->{_request}->{_headers}->{'accept-language'});
+			main::DEBUGLOG && $log->debug("Accepted-Languages: " . $response->{_request}->{_headers}->{'accept-language'});
 
 			foreach my $language (extract_language_tags($response->{_request}->{_headers}->{'accept-language'})) {
 				$language = uc($language);
 				$language =~ s/-/_/;  # we're using zh_cn, the header says zh-cn
 	
-				$log->debug("trying language: " . $language);
+				main::DEBUGLOG && $log->debug("trying language: " . $language);
 				if (defined $paramRef->{languageoptions}->{$language}) {
 					$serverPrefs->set('language', $language);
-					$log->info("selected language: " . $language);
+					main::INFOLOG && $log->info("selected language: " . $language);
 					last;
 				}
 			}
@@ -74,7 +74,7 @@ sub handler {
 	
 	# handle language separately, as it is in its own form
 	if ($paramRef->{saveLanguage}) {
-		$log->debug( 'setting language to ' . $paramRef->{language} );
+		main::DEBUGLOG && $log->debug( 'setting language to ' . $paramRef->{language} );
 		$serverPrefs->set('language', $paramRef->{language});
 		Slim::Utils::DateTime::setDefaultFormats();
 	}
@@ -93,7 +93,7 @@ sub handler {
 				&& $paramRef->{$pref} ne $serverPrefs->get($pref) 
 				&& Slim::Music::Import->stillScanning) 
 			{
-				$log->debug('Aborting running scan, as user re-configured music source in the wizard');
+				main::DEBUGLOG && $log->debug('Aborting running scan, as user re-configured music source in the wizard');
 				Slim::Music::Import->abortScan();
 			}
 			
@@ -106,7 +106,7 @@ sub handler {
 			$serverPrefs->set($pref, $paramRef->{$pref});
 		}
 
-		if ($log->is_debug) {
+		if (main::DEBUGLOG && $log->is_debug) {
  			$log->debug("$pref: " . $serverPrefs->get($pref));
 		}
 		$paramRef->{prefs}->{$pref} = $serverPrefs->get($pref);
@@ -138,21 +138,13 @@ sub handler {
 			Slim::Networking::SqueezeNetwork->init();
 		}
 
-		if ( defined $paramRef->{sn_disable_stats} ) {
-			Slim::Utils::Timers::setTimer(
-				$paramRef->{sn_disable_stats},
-				time() + 30,
-				\&Slim::Web::Settings::Server::SqueezeNetwork::reportStatsDisabled,
-			);
-		}
-		
 		# Disable iTunes and MusicIP plugins if they aren't being used
-		if ( !$paramRef->{useiTunes} ) {
-			Slim::Utils::PluginManager->disablePlugin('Slim::Plugin::iTunes::Plugin');
+		if ( !$paramRef->{useiTunes} && Slim::Utils::PluginManager->isEnabled('Slim::Plugin::iTunes::Plugin') ) {
+			Slim::Utils::PluginManager->disablePlugin('iTunes');
 		}
 		
-		if ( !$paramRef->{useMusicIP} ) {
-			Slim::Utils::PluginManager->disablePlugin('Slim::Plugin::MusicMagic::Plugin');
+		if ( !$paramRef->{useMusicIP} && Slim::Utils::PluginManager->isEnabled('Slim::Plugin::MusicMagic::Plugin') ) {
+			Slim::Utils::PluginManager->disablePlugin('MusicMagic');
 		}
 	}
 	

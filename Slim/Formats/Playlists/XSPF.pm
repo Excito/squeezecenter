@@ -1,8 +1,8 @@
 package Slim::Formats::Playlists::XSPF;
 
-# $Id: XSPF.pm 15258 2007-12-13 15:29:14Z mherger $
+# $Id: XSPF.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -26,7 +26,7 @@ sub read {
 	my @items  = ();
 	my $title;
 
-	$log->info("Parsing: $url");
+	main::INFOLOG && $log->info("Parsing: $url");
 
 	my $xspf = XML::XSPF->parse($file) || do {
 
@@ -45,8 +45,8 @@ sub read {
 
 		if ($class->playlistEntryIsValid($location, $url)) {
 
-			$log->debug("    entry: $location");
-			$log->debug("    title: $title");
+			main::DEBUGLOG && $log->debug("    entry: $location");
+			main::DEBUGLOG && $log->debug("    title: $title");
 
 			push @items, $class->_updateMetaData( $location, {
 				'TITLE' => $title,
@@ -54,7 +54,7 @@ sub read {
 		}
 	}
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info("Parsed " . scalar(@items) . " items from XSPF\n");
 	}
 
@@ -73,7 +73,7 @@ sub write {
 	my $playlistname = shift;
 	my $filename     = shift;
 
-	$log->info("Writing out: $filename");
+	main::INFOLOG && $log->info("Writing out: $filename");
 
 	my $string  = '';
 	my $output  = $class->_filehandleFromNameOrString($filename, \$string) || return;
@@ -85,7 +85,7 @@ sub write {
 
 	for my $item (@{$listref}) {
 
-		my $obj = Slim::Schema->rs('Track')->objectForUrl($item);
+		my $obj = Slim::Schema->objectForUrl($item);
 
 		if (!blessed($obj) || !$obj->can('title')) {
 

@@ -1,6 +1,6 @@
 package Slim::Schema::ResultSet::Playlist;
 
-# $Id: Playlist.pm 23324 2008-09-28 19:37:49Z mherger $
+# $Id: Playlist.pm 27975 2009-08-01 03:28:30Z andy $
 
 use strict;
 use base qw(Slim::Schema::ResultSet::Base);
@@ -116,15 +116,6 @@ sub getPlaylists {
 	my $rs = $self->search($find, { 'order_by' => 'titlesort' });
 
 	return wantarray ? $rs->all : $rs;
-}
-
-sub getPlaylistForClient {
-	my $self   = shift;
-	my $client = shift;
-
-	return $self->single({
-		'url' => sprintf('clientplaylist://%s', $client->id),
-	});
 }
 
 sub objectForUrl {

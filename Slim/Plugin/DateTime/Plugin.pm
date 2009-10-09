@@ -1,6 +1,6 @@
 package Slim::Plugin::DateTime::Plugin;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -10,7 +10,7 @@ use base qw(Slim::Plugin::Base);
 use Slim::Utils::DateTime;
 use Slim::Utils::Prefs;
 
-if ( !main::SLIM_SERVICE ) {
+if ( !main::SLIM_SERVICE && !$::noweb ) {
  	require Slim::Plugin::DateTime::Settings;
 }
 
@@ -19,6 +19,33 @@ if ( main::SLIM_SERVICE ) {
 }
 
 my $prefs = preferences(main::SLIM_SERVICE ? 'server' : 'plugin.datetime');
+
+$prefs->migrate(1, sub {
+	$prefs->set('timeformat', Slim::Utils::Prefs::OldPrefs->get('screensaverTimeFormat') || '');
+	$prefs->set('dateformat', Slim::Utils::Prefs::OldPrefs->get('screensaverDateFormat') || '');
+	1;
+});
+
+$prefs->migrateClient(2, sub {
+	my ($clientprefs, $client) = @_;
+	$clientprefs->set('timeformat', $prefs->get('timeformat') || '');
+	$clientprefs->set('dateformat', $prefs->get('dateformat') || ($client->isa('Slim::Player::Boom') ? $client->string('SETUP_LONGDATEFORMAT_DEFAULT_N') : ''));
+	1;
+});
+
+$prefs->migrateClient(3, sub {
+	my ($clientprefs, $client) = @_;
+	$clientprefs->set('timeFormat', $clientprefs->get('timeformat') || '');
+	$clientprefs->set('dateFormat', $clientprefs->get('dateformat'));
+	1;
+});
+
+$prefs->setChange( sub {
+	my $client = $_[2];
+	if ($client->isa("Slim::Player::Boom")) {
+		$client->setRTCTime();
+	}		
+}, 'timeFormat');
 
 sub getDisplayName {
 	return 'PLUGIN_SCREENSAVER_DATETIME';
@@ -29,7 +56,7 @@ sub initPlugin {
 
 	$class->SUPER::initPlugin();
 
-	if ( !main::SLIM_SERVICE ) {
+	if ( !main::SLIM_SERVICE && !$::noweb ) {
 		Slim::Plugin::DateTime::Settings->new;
 	}
 

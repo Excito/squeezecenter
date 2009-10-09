@@ -3,7 +3,7 @@ package Slim::Plugin::SavePlaylist::Plugin;
 # $Id: Plugin.pm 11071 2007-01-01 15:47:59Z adrian $
 # This code is derived from code with the following copyright message:
 #
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -113,7 +113,7 @@ sub lines {
 			$line2 = $context{$client};
 		}
 
-	} elsif (Slim::Schema->rs('Track')->objectForUrl($newUrl)) {
+	} elsif (Slim::Schema->objectForUrl($newUrl)) {
 		
 		# Special text for overwriting an existing playlist
 		# if large text, make sure we show the message instead of the playlist name

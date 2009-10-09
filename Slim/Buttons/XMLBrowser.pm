@@ -1,8 +1,8 @@
 package Slim::Buttons::XMLBrowser;
 
-# $Id: XMLBrowser.pm 24100 2008-11-25 22:45:28Z andy $
+# $Id: XMLBrowser.pm 28609 2009-09-23 11:42:03Z andy $
 
-# Copyright 2005-2007 Logitech.
+# Copyright 2005-2009 Logitech.
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -48,7 +48,12 @@ sub setMode {
 	my $method = shift;
 
 	if ($method eq 'pop') {
-		Slim::Buttons::Common::popMode($client);
+		if ( $client->modeParam('blockPop') ) {
+			$client->bumpLeft();
+			return;
+		}
+		
+		Slim::Buttons::Common::popMode($client);		
 		return;
 	}
 
@@ -139,7 +144,7 @@ sub setMode {
 			# get passthrough params if supplied
 			my $pt = $item->{'passthrough'} || [];
 			
-			if ( $log->is_debug ) {
+			if ( main::DEBUGLOG && $log->is_debug ) {
 				my $cbname = Slim::Utils::PerlRunTime::realNameForCodeRef($url);
 				$log->debug( "Fetching OPML from coderef $cbname" );
 			}
@@ -256,6 +261,9 @@ sub gotPlaylist {
 		
 	if ( $action eq 'play' ) {
 		$client->execute([ 'playlist', 'play', \@urls ]);
+		if (Slim::Buttons::Common::mode($client) ne 'playlist') {
+			Slim::Buttons::Common::pushModeLeft($client, 'playlist');
+		}
 	}
 	else {
 		my $cmd = $action eq 'insert' ? 'inserttracks' : 'addtracks';
@@ -333,7 +341,9 @@ sub gotRSS {
 			? undef : "XMLBrowser:$url",
 		'header'   => $feed->{'title'},
 		'headerAddCount' => 1,
-
+		
+		'blockPop' => $client->modeParam('blockPop'),
+		
 		# TODO: we show only items here, we skip the description of the entire channel
 		'listRef'  => $feed->{'items'},
 
@@ -389,8 +399,14 @@ sub gotOPML {
 	# a new Pandora radio station
 	if ( $opml->{'command'} ) {
 		my @p = map { uri_unescape($_) } split / /, $opml->{'command'};
-		$log->is_debug && $log->debug( "Executing command: " . Data::Dump::dump(\@p) );
+		main::DEBUGLOG && $log->is_debug && $log->debug( "Executing command: " . Data::Dump::dump(\@p) );
 		$client->execute( \@p );
+		
+		# Abort after the command if requested (allows OPML to execute i.e. button home)
+		if ( $opml->{abort} ) {
+			$log->is_debug && $log->debug('Aborting OPML');
+			return;
+		}
 	}
 
 	# Push staight into remotetrackinfo if asked to replace item or a playlist of one was returned with a parser
@@ -449,6 +465,17 @@ sub gotOPML {
 			elsif ( $item->{type} eq 'radio' ) {
 				$item->{default} = $radioDefault;
 			}
+			elsif ( $item->{type} eq 'textarea' ) {
+				# Skip textarea type, this is for non-ip3k devices
+				splice @{ $opml->{items} }, $index, 1;
+				next;
+			}
+		}
+		
+		# Check for a 'hide' param, if it's 'ip3k' skip the item in this UI
+		if ( $item->{hide} && $item->{hide} =~ /ip3k/ ) {
+			splice @{ $opml->{items} }, $index, 1;
+			next;
 		}
 		
 		# Wrap text if needed
@@ -511,7 +538,7 @@ sub gotOPML {
 								my $valueRef  = $choice->{listRef}->[ $listIndex ];
 								$choice->{valueRef} = \$valueRef;
 							
-								$log->debug('Refreshed menu');
+								main::DEBUGLOG && $log->debug('Refreshed menu');
 							
 								$client->update;
 							} );
@@ -532,7 +559,7 @@ sub gotOPML {
 		return;
 	}
 	
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		if ( $opml->{sorted} ) {
 			$log->debug( 'Treating list as sorted' );
 		}
@@ -549,9 +576,12 @@ sub gotOPML {
 		'modeName' => 
 			( defined $params->{remember} && $params->{remember} == 0 ) 
 			? undef : "XMLBrowser:$url:$title",
+		'windowId'   => $opml->{windowId} || '',
 		'header'     => $title,
 		'headerAddCount' => 1,
 		'listRef'    => $opml->{'items'},
+		
+		'blockPop'   => $client->modeParam('blockPop'),
 
 		'isSorted'   => $opml->{sorted} || 0,
 		'lookupRef'  => sub {
@@ -573,6 +603,22 @@ sub gotOPML {
 			# Set itemURL to value, but only if value was not created from the name above
 			if (!defined $itemURL && $item->{'value'} && $item->{'value'} ne $item->{'name'}) {
 				$itemURL = $item->{'value'};
+			}
+			
+			# Bug 13247, if there is a nextWindow value, pop back until we
+			# find the mode with a matching windowId.
+			# XXX: refresh that item?
+			if ( my $nextWindow = $item->{nextWindow} ) {
+				# Ignore special nextWindow values used by SP
+				if ( $nextWindow !~ /^(?:home|parent)$/ ) {		
+					while ( Slim::Buttons::Common::mode($client) ) {
+						Slim::Buttons::Common::popModeRight($client);
+						if ( $client->modeParam('windowId') eq $nextWindow ) {
+							last;
+						}
+					}
+					return;
+				}
 			}
 			
 			# Type = 'redirect', hack to allow XMLBrowser items to push into
@@ -598,11 +644,11 @@ sub gotOPML {
 					# Submit the URL in the background
 					$client->block();
 					
-					$log->debug("Submitting $itemURL in the background for radio selection");
+					main::DEBUGLOG && $log->debug("Submitting $itemURL in the background for radio selection");
 				
 					Slim::Formats::XML->getFeedAsync(
 						sub { 
-							$log->debug("Status OK for $itemURL");
+							main::DEBUGLOG && $log->debug("Status OK for $itemURL");
 							
 							# Change the default value in all other radio items
 							for my $sibling ( @{ $opml->{items} } ) {
@@ -627,15 +673,16 @@ sub gotOPML {
 			elsif ( $item->{'type'} && $item->{'type'} eq 'text' ) {
 				$client->bumpRight();
 			}
-			elsif ( $item->{'type'} eq 'search' ) {
+			elsif ( $item->{'type'} && $item->{'type'} eq 'search' ) {
 				
-				my $title = $item->{'name'};
+				# Search elements may include alternate title
+				my $title = $item->{title} || $item->{name};
 				
 				my %params = (
 					'header'          => $title,
 					'cursorPos'       => 0,
-					'charsRef'        => 'UPPER',
-					'numberLetterRef' => 'UPPER',
+					'charsRef'        => $item->{kbtype} || 'UPPER',
+					'numberLetterRef' => $item->{kbtype} || 'UPPER',
 					'callback'        => \&handleSearch,
 					'item'            => $item,
 				);
@@ -780,7 +827,7 @@ sub handleSearch {
 		# Don't allow null search string
 		return $client->bumpRight if $searchString eq '';
 		
-		$log->info("Search query [$searchString]");
+		main::INFOLOG && $log->info("Search query [$searchString]");
 			
 		# Replace {QUERY} with search query
 		$searchURL =~ s/{QUERY}/$searchString/g;
@@ -1049,7 +1096,7 @@ sub playItem {
 		} 
 	}
 	
-	$log->debug("Playing item, action: $action, type: $type, $url");
+	main::DEBUGLOG && $log->debug("Playing item, action: $action, type: $type, $url");
 	
 	if ( $type =~ /audio/i ) {
 
@@ -1072,6 +1119,10 @@ sub playItem {
 
 				$string   = $client->string('NOW_PLAYING') . ' (' . $client->string('CONNECTING_FOR') . ')';
 				$duration = 10;
+			}
+
+			if (Slim::Buttons::Common::mode($client) ne 'playlist') {
+				Slim::Buttons::Common::pushModeLeft($client, 'playlist');
 			}
 		}
 
@@ -1181,7 +1232,7 @@ sub playItem {
 			# get passthrough params if supplied
 			my $pt = $item->{'passthrough'} || [];
 			
-			if ( $log->is_debug ) {
+			if ( main::DEBUGLOG && $log->is_debug ) {
 				my $cbname = Slim::Utils::PerlRunTime::realNameForCodeRef($url);
 				$log->debug( "Fetching OPML playlist from coderef $cbname" );
 			}

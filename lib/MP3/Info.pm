@@ -35,7 +35,7 @@ use vars qw(
 	all	=> [@EXPORT, @EXPORT_OK]
 );
 
-# $Id: Info.pm 23862 2008-11-09 01:11:22Z dsully $
+# $Id: Info.pm 28377 2009-08-31 07:19:45Z michael $
 ($REVISION) = ' $Revision$ ' =~ /\$Revision:\s+([^\s]+)/;
 $VERSION = '1.24';
 

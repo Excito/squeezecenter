@@ -1,6 +1,6 @@
 package Slim::Schema::ResultSet::Album;
 
-# $Id: Album.pm 16508 2008-01-21 12:27:40Z mherger $
+# $Id: Album.pm 27975 2009-08-01 03:28:30Z andy $
 
 use strict;
 use base qw(Slim::Schema::ResultSet::Base);
@@ -40,9 +40,9 @@ sub pageBarResults {
 	}
 
 	$self->search(undef, {
-		'select'     => [ \"LEFT($name, 1)", { count => \"DISTINCT($table.id)" } ],
+		'select'     => [ \"SUBSTR($name, 1, 1)", { count => \"DISTINCT($table.id)" } ],
 		as           => [ 'letter', 'count' ],
-		group_by     => \"LEFT($name, 1)",
+		group_by     => \"SUBSTR($name, 1, 1)",
 		result_class => 'Slim::Schema::PageBar',
 	});
 }
@@ -119,8 +119,10 @@ sub browse {
 	}
 
 	# Bug: 2563 - force a numeric compare on an alphanumeric column.
+	my $sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass();
+	
 	return $self->search($cond, {
-		'order_by' => $sort || "concat('0', me.titlesort), me.disc",
+		'order_by' => $sort || $sqlHelperClass->prepend0("me.titlesort") . ", me.disc",
 		'distinct' => 'me.id',
 		'join'     => \@join,
 	});
@@ -137,7 +139,12 @@ sub descendTrack {
 	my $rs = $self->result_source->resultset;
 
 	# Force a specified sort order right now, since Track's aren't sortable.
-	$sort = "concat('0', me.titlesort), tracks.disc, tracks.tracknum, concat('0', tracks.titlesort)";
+	my $sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass();
+	
+	$sort 
+		= $sqlHelperClass->prepend0("me.titlesort") 
+		. ", tracks.disc, tracks.tracknum, "
+		. $sqlHelperClass->prepend0("tracks.titlesort");
 
 	my $attr = {
 		'order_by' => $sort,

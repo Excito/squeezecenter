@@ -1,8 +1,8 @@
 package Slim::Player::Squeezebox1;
 
-# $Id: Squeezebox1.pm 26670 2009-05-18 16:49:53Z michael $
+# $Id: Squeezebox1.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -17,21 +17,19 @@ use strict;
 use base qw(Slim::Player::Squeezebox);
 
 use File::Spec::Functions qw(catdir);
+use Socket;
+
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Utils::Prefs;
-use IO::Socket;
+
+# Not actually referenced in this module but we need to ensure that it is loaded.
+use Slim::Player::SB1SliMP3Sync;
 
 my $prefs = preferences('server');
 
 
 # We inherit new() completely from our parent class.
-
-sub init {
-	my $client = shift;
-
-	$client->SUPER::init();
-}
 
 sub model {
 	return 'squeezebox';
@@ -239,7 +237,7 @@ sub sendPitch {
 				Slim::Hardware::mas35x9::masWrite('IOControlMain', '00015')     # MP3
 		);
 
-		logger('player')->debug("Pitch frequency set to $freq ($freqHex)");
+		main::DEBUGLOG && logger('player')->debug("Pitch frequency set to $freq ($freqHex)");
 	}
 }
 	
@@ -259,7 +257,7 @@ sub decoder {
 sub formats {
 	my $client = shift;
 	
-	return qw(aif wav mp3);
+	return qw(aif pcm mp3);
 }
 
 # periodic screen refresh
@@ -328,7 +326,7 @@ sub upgradeFirmware {
 	$to_version = $client->revision unless $to_version;
 
 	my $file  = catdir( Slim::Utils::OSDetect::dirsFor('Firmware'), "squeezebox_$to_version.bin" );
-	my $file2 = catdir( $prefs->get('cachedir'), "squeezebox_$to_version.bin" );
+	my $file2 = catdir( Slim::Utils::OSDetect::dirsFor('updates'), "squeezebox_$to_version.bin" );
 	my $log   = logger('player.firmware');
 
 	if (!-f $file && !-f $file2) {
@@ -351,7 +349,7 @@ sub upgradeFirmware {
 
 	if ((!ref $client) || ($client->revision <= 10)) {
 
-		$log->info("Using old update mechanism");
+		main::INFOLOG && $log->info("Using old update mechanism");
 
 		# not calling as a client method, because it might just be an
 		# IP address, if triggered from the web page.
@@ -359,7 +357,7 @@ sub upgradeFirmware {
 
 	} else {
 
-		$log->info("Using new update mechanism");
+		main::INFOLOG && $log->info("Using new update mechanism");
 
 		$err = $client->upgradeFirmware_SDK5($file);
 	}
@@ -410,7 +408,7 @@ sub _upgradeFirmware_SDK4 {
 	my $size = -s $filename;	
 	my $log  = logger('player.firmware');
 
-	$log->info("Updating firmware: Sending $size bytes");
+	main::INFOLOG && $log->info("Updating firmware: Sending $size bytes");
 	
 	my $bytesread      = 0;
 	my $totalbytesread = 0;
@@ -421,10 +419,10 @@ sub _upgradeFirmware_SDK4 {
 
 		$totalbytesread += $bytesread;
 
-		$log->info("Updating firmware: $totalbytesread / $size");
+		main::INFOLOG && $log->info("Updating firmware: $totalbytesread / $size");
 	}
 	
-	$log->info("Firmware updated successfully.");
+	main::INFOLOG && $log->info("Firmware updated successfully.");
 
 	close (SOCK) || return("Couldn't close socket to player.");
 

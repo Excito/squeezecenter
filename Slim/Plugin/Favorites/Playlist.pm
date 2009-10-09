@@ -1,11 +1,11 @@
 package Slim::Plugin::Favorites::Playlist;
 
-# $Id: Playlist.pm 13299 2007-09-27 08:59:36Z mherger $
+# $Id: Playlist.pm 27975 2009-08-01 03:28:30Z andy $
 
-# Class to allow importing of playlist formats understood by SqueezeCenter into opml files
+# Class to allow importing of playlist formats understood by Squeezebox Server into opml files
 
-use File::Basename;
-use File::Spec::Functions qw(:ALL);
+use File::Basename qw(dirname);
+use File::Spec::Functions qw(catdir);
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -42,7 +42,7 @@ sub read {
 
 		close($fh);
 
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(sprintf "Imported %d items from playlist %s", scalar @results, $name);
 		}
 

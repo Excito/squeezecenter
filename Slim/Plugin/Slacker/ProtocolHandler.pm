@@ -17,13 +17,13 @@ my $log = Slim::Utils::Log->addLogCategory( {
 	description  => 'PLUGIN_SLACKER_MODULE_NAME',
 } );
 
-my $fav_on   = main::SLIM_SERVICE ? 'static/sc/images/Slacker/btn_slacker_fav_on.gif' : 'html/images/btn_slacker_fav_on.gif'; 
-my $fav_off  = main::SLIM_SERVICE ? 'static/sc/images/Slacker/btn_slacker_fav.gif' : 'html/images/btn_slacker_fav.gif'; 
+my $fav_on   = main::SLIM_SERVICE ? 'static/images/playerControl/slacker_fav_on_button.png' : 'html/images/btn_slacker_fav_on.gif'; 
+my $fav_off  = main::SLIM_SERVICE ? 'static/images/playerControl/slacker_fav_button.png' : 'html/images/btn_slacker_fav.gif'; 
 
 # XXX: Port to new streaming
 
 # To support remote streaming (synced players, slimp3/SB1), we need to subclass Protocols::HTTP
-# XXX: needs testing in SqueezeCenter
+# XXX: needs testing in Squeezebox Server
 sub new {
 	my $class  = shift;
 	my $args   = shift;
@@ -32,7 +32,7 @@ sub new {
 	
 	my $track  = $client->master->pluginData('currentTrack') || {};
 	
-	$log->debug( 'Remote streaming Slacker track: ' . $track->{URL} );
+	main::DEBUGLOG && $log->debug( 'Remote streaming Slacker track: ' . $track->{URL} );
 
 	return unless $track->{URL};
 
@@ -81,7 +81,7 @@ sub transitionType {
 	return unless $current && $prev;
 	
 	if ( $current->{ad} || $prev->{ad} ) {
-		$log->is_debug && $log->debug('Disabling transition because of audio ad');
+		main::DEBUGLOG && $log->is_debug && $log->debug('Disabling transition because of audio ad');
 		return 0;
 	}
 
@@ -146,7 +146,7 @@ sub _getNextTrack {
 		},
 	);
 	
-	$log->is_debug && $log->debug( $client->id . " Getting next track from SqueezeNetwork");
+	main::DEBUGLOG && $log->is_debug && $log->debug( $client->id . " Getting next track from SqueezeNetwork");
 	
 	$http->get( $trackURL );
 }
@@ -169,7 +169,7 @@ sub gotNextTrack {
 	# Add station ID to track info
 	$track->{sid} = $params->{stationId};
 	
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug( "Got Slacker track: " . Data::Dump::dump($track) );
 	}
 	
@@ -220,7 +220,7 @@ sub gotNextTrack {
 	# Save existing repeat setting
 	my $repeat = Slim::Player::Playlist::repeat($client);
 	if ( $repeat != 2 ) {
-		$log->debug( "Saving existing repeat value: $repeat" );
+		main::DEBUGLOG && $log->debug( "Saving existing repeat value: $repeat" );
 		$client->master->pluginData( oldRepeat => $repeat );
 	}
 	
@@ -267,7 +267,7 @@ sub onDecoderUnderrun {
 	if ( $client->isSynced() ) {
 		if ( !Slim::Player::Sync::isMaster($client) ) {
 			# Only the master needs to fetch next track info
-			$log->debug('Letting sync master fetch next Slacker track');
+			main::DEBUGLOG && $log->debug('Letting sync master fetch next Slacker track');
 			return;
 		}
 	}
@@ -292,7 +292,7 @@ sub onJump {
 	# just callback, don't fetch another track.  Checks prevTrack to
 	# make sure there is actually a track ready to be played.
 	if ( $client->isSynced() && $client->master->pluginData('prevTrack') ) {
-		$log->debug( 'onJump while synced, but already got the next track to play' );
+		main::DEBUGLOG && $log->debug( 'onJump while synced, but already got the next track to play' );
 		$callback->();
 		return;
 	}
@@ -340,7 +340,7 @@ sub parseDirectHeaders {
 sub handleDirectError {
 	my ( $class, $client, $url, $response, $status_line ) = @_;
 	
-	$log->info("Direct stream failed: [$response] $status_line");
+	main::INFOLOG && $log->info("Direct stream failed: [$response] $status_line");
 	
 	my $line1 = $client->string('PLUGIN_SLACKER_ERROR');
 	my $line2 = $client->string('PLUGIN_SLACKER_STREAM_FAILED');
@@ -380,7 +380,7 @@ sub canDoAction {
 	
 	if ( $action eq 'stop' && !canSkip($client) ) {
 		# Is skip allowed?
-		$log->debug("Slacker: Skip limit exceeded, disallowing skip");
+		main::DEBUGLOG && $log->debug("Slacker: Skip limit exceeded, disallowing skip");
 		
 		my $line1 = $client->string('PLUGIN_SLACKER_ERROR');
 		my $line2 = $client->string('PLUGIN_SLACKER_SKIPS_EXCEEDED');
@@ -445,24 +445,24 @@ sub playlistCallback {
 		# User stopped playing Slacker, reset old repeat setting if any
 		my $repeat = $client->master->pluginData('oldRepeat');
 		if ( defined $repeat ) {
-			$log->debug( "Stopped Slacker, restoring old repeat setting: $repeat" );
+			main::DEBUGLOG && $log->debug( "Stopped Slacker, restoring old repeat setting: $repeat" );
 			$client->execute(["playlist", "repeat", $repeat]);
 		}
 		
-		$log->debug( "Stopped Slacker, unsubscribing from playlistCallback" );
+		main::DEBUGLOG && $log->debug( "Stopped Slacker, unsubscribing from playlistCallback" );
 		Slim::Control::Request::unsubscribe( \&playlistCallback, $client );
 		
 		return;
 	}
 	
-	$log->debug("Got playlist event: $p1");
+	main::DEBUGLOG && $log->debug("Got playlist event: $p1");
 	
 	# The user has changed the repeat setting.  Pandora requires a repeat
 	# setting of '2' (repeat all) to work properly, or it will cause the
 	# "stops after every song" bug
 	if ( $p1 eq 'repeat' ) {
 		if ( $request->getParam('_newvalue') != 2 ) {
-			$log->debug("User changed repeat setting, forcing back to 2");
+			main::DEBUGLOG && $log->debug("User changed repeat setting, forcing back to 2");
 		
 			$client->execute(["playlist", "repeat", 2]);
 		}
@@ -518,7 +518,7 @@ sub stopCallback {
 			return;
 		}
 		
-		$log->debug("Player stopped, reporting stop to SqueezeNetwork");
+		main::DEBUGLOG && $log->debug("Player stopped, reporting stop to SqueezeNetwork");
 		
 		if ( my $track = $client->master->pluginData('currentTrack') ) {
 			my ($sid)   = $url =~ m{^slacker://([^.]+)\.mp3};
@@ -554,7 +554,7 @@ sub trackGain {
 	
 	my $gain = $currentTrack->{audiogain} || 0;
 	
-	$log->info("Using replaygain value of $gain for Slacker track");
+	main::INFOLOG && $log->info("Using replaygain value of $gain for Slacker track");
 	
 	return $gain;
 }
@@ -615,7 +615,7 @@ sub reinit {
 	
 	my $url = $song->currentTrack->url();
 	
-	$log->debug("Re-init Slacker - $url");
+	main::DEBUGLOG && $log->debug("Re-init Slacker - $url");
 	
 	if ( my $track = $client->master->pluginData('currentTrack') ) {
 		# We have previous data about the currently-playing song
@@ -650,7 +650,7 @@ sub reinit {
 	}
 	else {
 		# No data, just restart the current station
-		$log->debug("No data about playing track, restarting station");
+		main::DEBUGLOG && $log->debug("No data about playing track, restarting station");
 
 		$client->execute( [ 'playlist', 'play', $url ] );
 	}
@@ -696,17 +696,21 @@ sub getMetadataFor {
 			buttons     => {
 				# disable REW/Previous button
 				rew => 0,
+				# disable FWD when you've reached skip limit
+				fwd => canSkip($client) ? 1 : 0,
 
 				# replace repeat with Mark as Fav
 				repeat  => {
 					icon    => $fav_icon,
+					jiveStyle => 'love',
 					tooltip => Slim::Utils::Strings::string($fav_tip),
 					command => [ 'slacker', 'rate', $fav_cmd ],
 				},
 
 				# replace shuffle with Ban Track
 				shuffle => {
-					icon    => main::SLIM_SERVICE ? 'static/sc/images/Slacker/btn_slacker_ban.gif' : 'html/images/btn_slacker_ban.gif',
+					icon    => main::SLIM_SERVICE ? 'static/images/playerControl/ban_button.png' : 'html/images/btn_slacker_ban.gif',
+					jiveStyle => 'hate',
 					tooltip => Slim::Utils::Strings::string('PLUGIN_SLACKER_BAN_TRACK'),
 					command => [ 'slacker', 'rate', 'B' ],
 				},
