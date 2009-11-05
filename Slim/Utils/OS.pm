@@ -50,7 +50,7 @@ sub migratePrefsFolder {};
 sub sqlHelperClass { 'Slim::Utils::MySQLHelper' }
 
 # Skip obsolete plugins, they should be deleted by installers
-sub skipPlugins {return (qw(Picks RadioIO ShoutcastBrowser Webcasters));}
+sub skipPlugins {return (qw(Picks RadioIO ShoutcastBrowser Webcasters Health));}
 
 =head2 initSearchPath( )
 
@@ -65,6 +65,16 @@ sub initSearchPath {
 	# Reduce all the x86 architectures down to i386, including x86_64, so we only need one directory per *nix OS. 
 	$class->{osDetails}->{'binArch'} = $Config::Config{'archname'};
 	$class->{osDetails}->{'binArch'} =~ s/^(?:i[3456]86|x86_64)-([^-]+).*/i386-$1/;
+	
+	# Reduce ARM to arm-linux
+	if ( $class->{osDetails}->{'binArch'} =~ /^arm.*linux/ ) {
+		$class->{osDetails}->{'binArch'} = 'arm-linux';
+	}
+	
+	# Reduce PPC to powerpc-linux
+	if ( $class->{osDetails}->{'binArch'} =~ /^(?:ppc|powerpc).*linux/ ) {
+		$class->{osDetails}->{'binArch'} = 'powerpc-linux';
+	}
 
 	my @paths = ( catdir($class->dirsFor('Bin'), $class->{osDetails}->{'binArch'}), catdir($class->dirsFor('Bin'), $^O), $class->dirsFor('Bin') );
 	

@@ -1,6 +1,6 @@
 package Slim::Player::ProtocolHandlers;
 
-# $Id: ProtocolHandlers.pm 26931 2009-06-07 03:53:36Z michael $
+# $Id: ProtocolHandlers.pm 28761 2009-10-03 02:09:14Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -117,9 +117,12 @@ sub iconForURL {
 
 	if (my $handler = $class->handlerForURL($url)) {
 		if ($client && $handler->can('getMetadataFor')) {
-			return $handler->getMetadataFor($client, $url)->{cover};
+			if ( my $meta = $handler->getMetadataFor($client, $url) ) {
+				return $meta->{cover};
+			}
 		}
-		elsif ($handler->can('getIcon')) {
+		
+		if ($handler->can('getIcon')) {
 			return $handler->getIcon($url);
 		}
 	}

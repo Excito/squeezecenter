@@ -158,11 +158,6 @@ sub alarmsQuery {
 		$request->setStatusBadDispatch();
 		return;
 	}
-
-	if (!Slim::Schema::hasLibrary()) {
-		$request->setStatusNotDispatchable();
-		return;
-	}
 	
 	# get our parameters
 	my $client   = $request->client();
@@ -351,7 +346,7 @@ sub albumsQuery {
 			push @{ $attr->{'join'} }, 'contributor';
 		}
 		
-		$attr->{'cols'} = [ qw(id artwork title contributor.name contributor.namesort titlesort musicmagic_mixable disc discc ) ];
+		$attr->{'cols'} = [ qw(id artwork title contributor.name contributor.namesort titlesort musicmagic_mixable disc discc titlesearch) ];
 	}
 	
 	# Flatten request for lookup in cache, only for Jive menu queries
@@ -539,7 +534,7 @@ sub albumsQuery {
 				# the favorites url to be sent to jive is the album title here
 				# album id would be (much) better, but that would screw up the favorite on a rescan
 				# title is a really stupid thing to use, since there's no assurance it's unique
-				my $url = 'db:album.titlesearch=' . URI::Escape::uri_escape_utf8( Slim::Utils::Text::ignoreCaseArticles($eachitem->title) );
+				my $url = 'db:album.titlesearch=' . URI::Escape::uri_escape_utf8( Slim::Utils::Text::ignoreCaseArticles($eachitem->titlesearch) );
 
 				my $params = {
 					'album_id'        => $id,
@@ -1830,6 +1825,8 @@ sub musicfolderQuery {
 		if ($party || $partyMode) {
 			$base->{'actions'}->{'play'} = $base->{'actions'}->{'go'};
 		}
+		# FIXME: working on BMF CM issue here
+		# $base->{'actions'}{'more'} = _contextMenuBase('folder');
 		$request->addResult('base', $base);
 
 		$request->addResult('window', { text => $topLevelObj->title } ) if $topLevelObj->title;
@@ -2829,16 +2826,11 @@ sub readDirectoryQuery {
 	my $index      = $request->getParam('_index');
 	my $quantity   = $request->getParam('_quantity');
 	my $folder     = $request->getParam('folder');
-	my $folder_b64 = $request->getParam('folder_b64');
 	my $filter     = $request->getParam('filter');
 
 	use File::Spec::Functions qw(catdir);
 	my @fsitems;		# raw list of items 
 	my %fsitems;		# meta data cache
-
-	if ( $folder_b64 ) {
-		$folder = decode_base64($folder_b64);
-	}
 
 	if (main::ISWINDOWS && $folder eq '/') {
 		@fsitems = sort map {
@@ -2918,8 +2910,7 @@ sub readDirectoryQuery {
 					$name = Slim::Music::Info::fileName($path);
 				}
 
-				$request->addResultLoop('fsitems_loop', $cnt, 'path', $path);
-				$request->addResultLoop('fsitems_loop', $cnt, 'path_b64', encode_base64($path, ''));
+				$request->addResultLoop('fsitems_loop', $cnt, 'path', Slim::Utils::Unicode::utf8decode_locale($path));
 				$request->addResultLoop('fsitems_loop', $cnt, 'name', Slim::Utils::Unicode::utf8decode_locale($name));
 				
 				$request->addResultLoop('fsitems_loop', $cnt, 'isfolder', $fsitems{$item}->{d});
@@ -3144,7 +3135,7 @@ sub serverstatusQuery_filter {
 sub serverstatusQuery {
 	my $request = shift;
 	
-	main::INFOLOG && $log->info("serverstatusQuery()");
+	main::INFOLOG && $log->debug("serverstatusQuery()");
 
 	# check this is the correct query
 	if ($request->isNotQuery([['serverstatus']])) {
@@ -3640,6 +3631,18 @@ sub statusQuery {
 			$request->addResult('alarm_state', $alarmComing);
 			$request->addResult('alarm_next', defined $alarmNext ? $alarmNext + 0 : 0);
 		}
+
+		# send which presets are defined
+		my $presets = $prefs->client($client)->get('presets');
+		my $presetLoop;
+		for my $i (0..9) {
+			if (defined $presets->[$i] ) {
+				$presetLoop->[$i] = 1;
+			} else {
+				$presetLoop->[$i] = 0;
+			}
+		}
+		$request->addResult('preset_loop', $presetLoop);
 
 		main::DEBUGLOG && $log->debug("statusQuery(): setup base for jive");
 		$songCount += 0;
@@ -4198,6 +4201,11 @@ sub titlesQuery {
 		
 		my $format = $prefs->get('titleFormat')->[ $prefs->get('titleFormatWeb') ];
 
+		# PLAY ALL item for search results
+		if ( $search && $insertAll ) {
+			$chunkCount = _playAll(start => $start, end => $end, chunkCount => $chunkCount, request => $request, loopname => $loopname, includeArt => ( $menuStyle eq 'album' ) );
+		}
+
 		my $listIndex = 0;
 
 		for my $item ($rs->slice($start, $end)) {
@@ -4598,7 +4606,8 @@ sub dynamicAutoQuery {
 				
 				if ( main::SLIM_SERVICE ) {
 					my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($funcptr);
-					SDI::Service::Control->mailError( "Queries crash: $name", $@ );
+					$@ =~ s/"/'/g;
+					SDI::Util::Syslog::error("service=SS-Queries method=${name} error=\"$@\"");
 				}
 			}
 		}
@@ -5324,6 +5333,7 @@ sub _playAll {
 						'add'  =>  { 'cmd' => 'add',  },
 						'add-hold'  =>  { 'cmd' => 'insert',  },
 					},
+					'nextWindow'  => 'nowPlaying',
 			},
 			allSongs => { 
 					string     => $request->string('JIVE_ALL_SONGS') . "\n" . $artist,
@@ -5359,7 +5369,6 @@ sub _playAll {
 				? Slim::Networking::SqueezeNetwork->url('/static/images/icons/playall.png', 'external')
 				: '/html/images/playall.png';
 				
-			$request->addResultLoop($loopname, $chunkCount, 'style', 'itemplay');
 			$request->addResultLoop($loopname, $chunkCount, 'icon-id', $playallicon);
 		}
 
@@ -5431,6 +5440,9 @@ sub _playAll {
 				'cmd'    => $items{$mode}{'playCmd'},
 				'params' => $items{$mode}{'params'}{'play'},
 			};
+			if ($items{$mode}{'nextWindow'}) {
+				$actions->{'do'}{'nextWindow'} = $items{$mode}{'nextWindow'};
+			}			
 		}
 		$request->addResultLoop($loopname, $chunkCount, 'actions', $actions);
 		$chunkCount++;

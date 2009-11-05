@@ -1,6 +1,6 @@
 package Slim::Plugin::InternetRadio::Plugin;
 
-# $Id: Plugin.pm 28632 2009-09-24 16:40:05Z andy $
+# $Id: Plugin.pm 28803 2009-10-09 09:59:38Z michael $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -62,6 +62,12 @@ sub initPlugin {
 					$http->get($url);
 				}
 			},
+		);
+		
+		# Setup cant_open handler for RadioTime reporting
+		Slim::Control::Request::subscribe(
+			\&cantOpen,
+			[[ 'playlist','cant_open' ]],
 		);
 	}
 
@@ -168,7 +174,10 @@ sub generate {
 	
 	if ( $strings && uc($name) eq $name ) {
 		# Use SN-supplied translations
-		Slim::Utils::Strings::storeString( $name, $strings );
+		Slim::Utils::Strings::storeExtraStrings([{
+			strings => $strings,
+			token   => $name,
+		}]);
 	}
 	
 	my $code = qq{
@@ -356,6 +365,51 @@ sub _pluginDataFor {
 	# The Web::Graphics code will use this special URL to find the
 	# cached icon path.
 	return 'plugins/cache/icons/' . basename( $class->icon );
+}
+
+sub cantOpen {
+	my $request = shift;
+	
+	my $url   = $request->getParam('_url');
+	my $error = $request->getParam('_error');
+	
+	if ( !main::SLIM_SERVICE ) {
+		# Do not report if the user has turned off stats reporting
+		# Reporting is always enabled on SN
+		return if $prefs->get('sn_disable_stats');
+	}
+	
+	if ( $error && $url =~ /radiotime\.com/ ) {
+		my ($id) = $url =~ /id=([^&]+)/;
+		if ( $id ) {
+			my $reportUrl = 'http://opml.radiotime.com/Report.ashx?c=stream&partnerId=16'
+				. '&id=' . uri_escape_utf8($id)
+				. '&message=' . uri_escape_utf8($error);
+		
+			main::INFOLOG && $log->is_info && $log->info("Reporting stream failure to RadioTime: $reportUrl");
+		
+			my $http = Slim::Networking::SimpleAsyncHTTP->new(
+				sub {
+					main::INFOLOG && $log->is_info && $log->info("RadioTime failure report OK");
+				},
+				sub {
+					my $http = shift;
+					main::INFOLOG && $log->is_info && $log->info( "RadioTime failure report failed: " . $http->error );
+				},
+				{
+					timeout => 30,
+				},
+			);
+		
+			$http->get($reportUrl);
+			
+			if ( main::SLIM_SERVICE ) {
+				# Let's log these on SN too
+				$error =~ s/"/'/g;
+				SDI::Util::Syslog::error("service=RadioTime-Error rtid=${id} error=\"${error}\"");
+			}
+		}
+	}
 }
 
 1;

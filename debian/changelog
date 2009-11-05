@@ -1,3 +1,24 @@
+squeezecenter (7.4.1.dfsg1-3) estelle claire; urgency=low
+
+  * fix order of SQL scripts for installation (had taken script 10 before
+    script 1.
+
+ -- Carl Fürstenberg <carl@excito.com>  Thu, 05 Nov 2009 10:18:11 +0100
+
+squeezecenter (7.4.1.dfsg1-2) estelle claire; urgency=low
+
+  * Removing the softsqueeze package as it has been removed 
+
+ -- Carl Fürstenberg <carl@excito.com>  Thu, 05 Nov 2009 09:37:43 +0100
+
+squeezecenter (7.4.1.dfsg1-1) claire; urgency=low
+
+  * New upstream release
+  * Merging squeezecenter-skins into squeezecenter package (no much gain was
+    given by splitting the packages)
+
+ -- Carl Fürstenberg <carl@excito.com>  Thu, 29 Oct 2009 16:18:48 +0100
+
 squeezecenter (7.4.0.dfsg1-2) claire; urgency=low
 
   * update fixtures 

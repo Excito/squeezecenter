@@ -1,6 +1,6 @@
 package Slim::Player::StreamingController;
 
-# $Id: StreamingController.pm 28565 2009-09-18 14:31:06Z ayoung $
+# $Id: StreamingController.pm 28696 2009-09-30 13:11:32Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -419,24 +419,31 @@ sub _Streamout {_setStreamingState($_[0], STREAMOUT);}
 
 sub _CheckPaused {	# only called when PAUSED
 	my ($self, $event, $params) = @_;
+	
+	return if ! $self->isPaused();	# safety check
 
 	my $song = $self->playingSong();
 	if (   $song
 		&& $song->currentTrackHandler()->isRemote()
 		&& $self->master()->usage() > 0.98)
 	{
-		# Bug 7620: stop remote radio streams if they have been paused long enough for the buffer to fill.
-		$log->info("Stopping remote stream upon full buffer when paused");
-
-		if ($self->isPaused() && $song->canSeek() && defined $self->{'resumeTime'}) {
+		if ($song->canSeek() && defined $self->{'resumeTime'}) {
 
 			# Bug 10645: stop only the streaming if there is a chance to restart
-			
+			main::INFOLOG && $log->info("Stopping remote stream upon full buffer when paused");
+				
 			_pauseStreaming($self, $song);
 			
-		} else {
+		} elsif (!$song->duration()) {
+			
+			# Bug 7620: stop remote radio streams if they have been paused long enough for the buffer to fill.
+			# Assume unknown duration means radio and so we shuould stop now
+			main::INFOLOG && $log->info("Stopping remote stream upon full buffer when paused");
+			
 			_Stop(@_);
 		}
+		
+		# else - (bug 14230) just leave it paused and if the remote source disconnects then pick up the pieces later
 	}
 }
 
@@ -2156,7 +2163,7 @@ sub playerStatusHeartbeat {
 sub setState {
 	my ($self, $state) = @_;
 	
-	my ($playing, $streaming) = split /-/, $state;
+	my ($playing, $streaming) = split (/-/, $state);
 	
 	_setPlayingState( $self, $PlayingStateNameMap{ $playing } );
 	_setStreamingState( $self, $StreamingStateNameMap{ $streaming } );

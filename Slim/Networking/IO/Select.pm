@@ -1,6 +1,6 @@
 package Slim::Networking::IO::Select;
 
-# $Id: Select.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Select.pm 28759 2009-10-02 19:20:44Z andy $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -15,6 +15,10 @@ use Exporter::Lite;
 use Slim::Utils::Errno;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
+
+if ( main::SLIM_SERVICE ) {
+	require SDI::Util::Syslog;
+}
 
 our @EXPORT = qw(addRead addWrite addError removeRead removeWrite removeError);
 
@@ -121,12 +125,14 @@ sub _add {
 				local $SIG{__DIE__} = main::SLIM_SERVICE ? sub {
 					my $msg = shift;
 									
-					# Only notify if eval_depth is 2, this avoids emailing for errors inside
+					# Only notify if eval_depth is 2, this avoids logging for errors inside
 					# nested evals
 					
 					if ( _eval_depth() == 2 ) {
 						my $func = Slim::Utils::PerlRunTime::realNameForCodeRef($cb);
-						SDI::Service::Control->mailError( "IO callback crash: $func", $msg );
+						
+						$msg =~ s/"/'/g;
+						SDI::Util::Syslog::error("service=SS-IO method=${func} error=\"${msg}\"");
 					}
 				} : 'DEFAULT';
 				

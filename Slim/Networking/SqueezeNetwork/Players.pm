@@ -1,6 +1,6 @@
 package Slim::Networking::SqueezeNetwork::Players;
 
-# $Id: Players.pm 28622 2009-09-24 01:50:03Z andy $
+# $Id: Players.pm 28801 2009-10-09 09:48:03Z michael $
 
 # Keep track of players that are connected to SN
 
@@ -121,6 +121,13 @@ sub _players_done {
 	# Make a list of all apps for the web UI
 	my $allApps = {};
 	
+	# SN can provide string translations for new menu items
+	if ( $res->{strings} ) {
+		main::DEBUGLOG && $log->is_debug && $log->debug( 'Adding SN-supplied strings: ' . Data::Dump::dump( $res->{strings} ) );
+		
+		Slim::Utils::Strings::storeExtraStrings( $res->{strings} );
+	}
+	
 	# Update enabled apps for each player
 	# This will create new pref entries for players this server has never seen
 	for my $player ( @{ $res->{players} }, @{ $res->{inactive_players} } ) {
@@ -152,13 +159,6 @@ sub _players_done {
 				}
 			}
 		}
-	}
-	
-	# SN can provide string translations for new menu items
-	if ( $res->{strings} ) {
-		main::DEBUGLOG && $log->is_debug && $log->debug( 'Adding SN-supplied strings: ' . Data::Dump::dump( $res->{strings} ) );
-		
-		Slim::Utils::Strings::storeExtraStrings( $res->{strings} );
 	}
 	
 	# Setup apps for the web UI.

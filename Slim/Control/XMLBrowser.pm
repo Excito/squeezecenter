@@ -803,28 +803,6 @@ sub _cliQuery_done {
 		
 		if ($count) {
 		
-			# first, determine whether there should be a "Play All" item in this list
-			# this determination is made by checking if there are 2 or more playable items in the list
-			my $insertAll = 0;
-			if ( $menuMode ) {
-				
-				my $mark = 0;
-				for my $item ( @{$subFeed->{items}}[0..$count] ) {
-					
-					if ( $item->{duration} && hasAudio($item) ) {
-						$mark++;
-						if ($mark > 1) {
-							$insertAll = 1;
-							last;
-						}
-					}
-				}
-			}
-			# second, fix the count, index, and quantity variables if we are adding Play All
-			if ( $menuMode && $insertAll ) {
-				$count = _fixCount($insertAll, \$index, \$quantity, $count);
-			}
-			# finally we can determine $start and $end of the chunk based on the tweaked metrics
 			my ($valid, $start, $end) = $request->normalize(scalar($index), scalar($quantity), $count);
 		
 			my $loopname = $menuMode ? 'item_loop' : 'loop_loop';
@@ -892,46 +870,6 @@ sub _cliQuery_done {
 					$request->addResult('base', $base);
 				}
 
-				# Bug 6874, add a "Play All" item if list contains more than 1 playable item with duration
-				if ( $menuMode && $insertAll ) {
-					my $actions = {
-						go => {
-							player => 0,
-							cmd    => [ $query, 'playlist', 'playall' ],
-							params => $params,
-							nextWindow => 'nowPlaying',
-						},
-						add => {
-							player => 0,
-							cmd    => [ $query, 'playlist', 'addall' ],
-							params => $params,
-							},
-						};
-						
-					$actions->{go}->{params}->{item_id}  = "$item_id"; # stringify for JSON
-					$actions->{add}->{params}->{item_id} = "$item_id"; # stringify for JSON
-					
-					$actions->{play} = $actions->{go};
-						
-					my $text = $request->string('JIVE_PLAY_ALL');
-								
-					# Bug 7517, only add Play All at the top, not in the middle if we're
-					# dealing with a chunked list starting at 200, etc
-					if ( $start == 0 ) {
-						$request->addResultLoop($loopname, $cnt, 'text', $text);
-						$request->addResultLoop($loopname, $cnt, 'style', 'itemplay');
-						$request->addResultLoop($loopname, $cnt, 'actions', $actions);
-						$cnt++;
-					}
-							
-					# Bug 7109, we don't want later items to have the wrong index so we need to
-					# add _slim_id keys to them.
-					my $cnt2 = 0;
-					for my $subitem ( @{$subFeed->{items}}[$start..$end] ) {
-						$subitem->{_slim_id} = $cnt2++;
-					}
-				}
-				
 				# If we have a slideshow param, return all items without chunking, and only
 				# include image and caption data
 				if ( $request->getParam('slideshow') ) {
@@ -1056,9 +994,13 @@ sub _cliQuery_done {
 						my $presetFavSet     = undef;
 						my $favorites_url    = $item->{play} || $item->{url};
 						my $favorites_title  = $item->{title} || $item->{name};
+						my $favorites_type   = $item->{type} || 'audio';
+						
 						if ( $favorites_url && !ref $favorites_url && $favorites_title ) {
-							$itemParams->{favorites_url} = $favorites_url;
+							$itemParams->{favorites_url}   = $favorites_url;
 							$itemParams->{favorites_title} = $favorites_title;
+							$itemParams->{favorites_type}  = $favorites_type;
+							
 							if ( $item->{image} ) {
 								$itemParams->{icon} = $item->{image};
 							}
@@ -1068,9 +1010,7 @@ sub _cliQuery_done {
 							$itemParams->{type} = $item->{type} if $item->{type};
 							$itemParams->{parser} = $item->{parser} if $item->{parser};
 							$presetFavSet = 1;
-
 						}
-
 
 						if ( $isPlayable || $item->{isContextMenu} ) {
 							$itemParams->{'isContextMenu'} = 1;
@@ -1449,11 +1389,14 @@ sub _playlistControlContextMenu {
 	my $params  = $request->{_params};
 	my $itemParams = {
 		favorites_title => $params->{'favorites_title'},
+		favorites_url   => $params->{'favorites_url'},
+		favorites_type  => $params->{'favorites_type'},
 		menu => $params->{'menu'},
 		type => $params->{'type'},
 		icon => $params->{'icon'},
 		item_id => $params->{'item_id'},
 	};
+
 
 	my @contextMenu = (
 		{
@@ -1490,6 +1433,41 @@ sub _playlistControlContextMenu {
 			},
 		},
 	);
+
+	# Favorites handling
+	my $action = 'add';
+ 	my $favIndex = undef;
+	my $token = 'JIVE_SAVE_TO_FAVORITES';
+	if ( Slim::Utils::PluginManager->isEnabled('Slim::Plugin::Favorites::Plugin') ) {
+		my $favs = Slim::Utils::Favorites->new($request->client);
+		$favIndex = $favs->findUrl($itemParams->{favorites_url});
+		if (defined($favIndex)) {
+			$action = 'delete';
+			$token = 'JIVE_DELETE_FROM_FAVORITES';
+		}
+	}
+	my $favoriteActions = {
+		'go' => {
+			player => 0,
+			cmd    => [ 'jivefavorites', $action ],
+			params => {
+				title   => $itemParams->{'favorites_title'},
+				url     => $itemParams->{'favorites_url'},
+				type    => $itemParams->{'favorites_type'},
+				isContextMenu => 1,
+			},
+		},
+	};
+	$favoriteActions->{'go'}{'params'}{'item_id'} = "$favIndex" if defined($favIndex);
+	$favoriteActions->{'go'}{'params'}{'icon'}    = $itemParams->{icon} if defined($itemParams->{icon});
+
+	my $string = $request->string($token);
+
+	push @contextMenu, {
+		text => $request->string($token),
+		actions => $favoriteActions,
+	};
+
 	my $numItems = scalar(@contextMenu);
 	$request->addResult('count', $numItems);
 	$request->addResult('offset', 0);
@@ -1501,6 +1479,7 @@ sub _playlistControlContextMenu {
 
 	$request->setStatusDone();
 }
+
 
 1;
 

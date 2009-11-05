@@ -1,6 +1,6 @@
 # Main Squeezebox Server strings file
 
-# $Id: strings.txt 28624 2009-09-24 06:58:00Z michael $
+# $Id: strings.txt 28887 2009-10-16 09:37:41Z michael $
 
 #
 # This tab-delimited file contains all the text strings used in Squeezebox Server
@@ -87,19 +87,19 @@ CREDITS
 	ZH_CN	Kok-Bin Lee
 
 COPYRIGHT
-	CS	© 2001-2009 Logitech Verze 7.4.0
-	DA	© 2001-2009 Logitech - version 7.4.0
-	DE	© 2001-2009 Logitech Version 7.4.0
-	EN	© 2001-2009 Logitech Version 7.4.0
-	ES	© 2001-2009 Logitech Versión 7.4.0
-	FI	© 2001-2009 Logitechin versio 7.4.0
-	FR	© 2001-2009 Logitech Version 7.4.0
-	IT	© 2001-2009 Logitech Versione 7.4.0
-	NL	© 2001-2009 Logitech Versie 7.4.0
-	NO	© 2001–2009 Logitech versjon 7.4.0
-	PL	© 2001-2009 Logitech wersja 7.4.0
-	RU	© Logitech, 2001-2009. Версия 7.4.0
-	SV	© 2001–2009 Logitech Version 7.4.0
+	CS	© 2001-2009 Logitech Verze 7.4.1
+	DA	© 2001-2009 Logitech - version 7.4.1
+	DE	© 2001-2009 Logitech Version 7.4.1
+	EN	© 2001-2009 Logitech Version 7.4.1
+	ES	© 2001-2009 Logitech Versión 7.4.1
+	FI	© 2001-2009 Logitechin versio 7.4.1
+	FR	© 2001-2009 Logitech Version 7.4.1
+	IT	© 2001-2009 Logitech Versione 7.4.1
+	NL	© 2001-2009 Logitech Versie 7.4.1
+	NO	© 2001–2009 Logitech versjon 7.4.1
+	PL	© 2001-2009 Logitech wersja 7.4.1
+	RU	© Logitech, 2001-2009. Версия 7.4.1
+	SV	© 2001–2009 Logitech Version 7.4.1
 
 COPYRIGHT_LOGITECH
 	CS	© 2001-2009 Logitech
@@ -118,19 +118,19 @@ COPYRIGHT_LOGITECH
 
 
 VERSION
-	CS	Verze 7.4 / %s
-	DA	Version 7.4 / %s
-	DE	Version 7.4 / r%s
-	EN	Version 7.4 / r%s
-	ES	Versión 7.4 / r%s
-	FI	Versio 7.4 / %s
-	FR	Version 7.4 / r%s
-	IT	Versione 7.4 / r%s
-	NL	Versie 7.4 / %s
-	NO	Versjon 7.4 / %s
-	PL	Wersja 7.4 / %s
-	RU	Версия 7.4 / %s
-	SV	Version 7.4 / %s
+	CS	Verze 7.4.1 / %s
+	DA	Version 7.4.1 / %s
+	DE	Version 7.4.1 / r%s
+	EN	Version 7.4.1 / r%s
+	ES	Versión 7.4.1 / r%s
+	FI	Versio 7.4.1 / %s
+	FR	Version 7.4.1 / r%s
+	IT	Versione 7.4.1 / r%s
+	NL	Versie 7.4.1 / %s
+	NO	Versjon 7.4.1 / %s
+	PL	Wersja 7.4.1 / %s
+	RU	Версия 7.4.1 / %s
+	SV	Version 7.4.1 / %s
 
 
 CHOOSE_A_LANGUAGE
@@ -1366,7 +1366,7 @@ SLEEPING_IN_X_MINUTES
 	EN	Sleeping in %s minutes
 	ES	Suspensión dentro de %s minutos
 	FI	Unessa %s minuutin kuluttua
-	FR	Mise en veille dans %s minutes
+	FR	%s minutes avant la mise en veille
 	IT	Sospendi fra %s minuti
 	NL	Sluimermodus over %s minuten
 	NO	Hvilemodus om %s minutter
@@ -7905,9 +7905,10 @@ SETUP_LONGDATEFORMAT_DESC
 	ZH_CN	这个选项决定了显示完整日期所使用的格式（譬如在播放机关机状态时）。以下是各个选择所使用的惯例：<br>WWWW=星期（星期六、星期天、等）<br>WWW=简化的星期（六、日、等）<br>DD=日（主导零被去除）<br>MM=简化的月份<br>YY=两位数的年份<br>YYYY=四位数的年份
 
 SETUP_LONGDATEFORMAT_DEFAULT
+# SLT: a long date format description, eg. "22. Oktober 2009" ([[http://www.opengroup.org/onlinepubs/009695399/functions/strptime.html]])
 	CS	%A, %B |%d, %Y
 	DA	%A, %B |%d, %Y
-	DE	%A, %B |%d, %Y
+	DE	%A, |%d. %B %Y
 	EN	%A, %B |%d, %Y
 	ES	%A, %B |%d, %Y
 	FI	%A, %B |%d, %Y
@@ -7920,19 +7921,20 @@ SETUP_LONGDATEFORMAT_DEFAULT
 	SV	%A, %B |%d, %Y
 
 SETUP_LONGDATEFORMAT_DEFAULT_N
+# SLT: a long date format description, which should fit in to about 20 characters, eg. "22. Okt. 09" ([[http://www.opengroup.org/onlinepubs/009695399/functions/strptime.html]])
 	CS	%a, %b |%d, %Y
 	DA	%a %d. %b %Y
-	DE	%a, %b |%d, %Y
+	DE	%a, |%d. %b %Y
 	EN	%a, %b |%d, %Y
-	ES	%a, %d |%b, %Y
-	FI	%a, %b |%d, %Y
-	FR	%a, %b |%d, %Y
-	IT	%a %d %b %Y
-	NL	%a %d |%b %Y
-	NO	%a, %b |%d, %Y
+	ES	%d/%m/%Y
+	FI	%d/%m/%Y
+	FR	%d/%m/%Y
+	IT	%d/%m/%Y
+	NL	%d-%m-%Y
+	NO	%d/%m/%Y
 	PL	%a, %b |%d, %Y
 	RU	%a, %b |%d, %Y
-	SV	%a, %d |%b %Y
+	SV	%Y/%m/%d
 
 SETUP_SHORTDATEFORMAT
 	CS	Formát krátkého data
@@ -7973,15 +7975,16 @@ SETUP_SHORTDATEFORMAT_DESC
 	ZH_CN	这个选项决定了显示简化日期所使用的格式。以下是各个选择所使用的惯例：<br>YYYY=四位数的年份<br>YY=两位数的年份<br>MM=月份<br>DD=日<br>在末端括弧内的任何信息为备注而将不显示。
 
 SETUP_SHORTDATEFORMAT_DEFAULT
+# SLT: a short date format description, eg. 22.10.2009 ([[http://www.opengroup.org/onlinepubs/009695399/functions/strptime.html]])
 	CS	%m/%d/%Y
 	DA	%m/%d/%Y
-	DE	%m/%d/%Y
+	DE	%m.%d.%y
 	EN	%m/%d/%Y
 	ES	%d/%m/%Y
 	FI	%d/%m/%Y
 	FR	%d/%m/%Y
-	IT	%m/%d/%Y
-	NL	%m/%d/%Y
+	IT	%d/%m/%Y
+	NL	%d-%m-%Y
 	NO	%d/%m/%Y
 	PL	%m/%d/%R
 	RU	%m/%d/%Y
@@ -8026,13 +8029,14 @@ SETUP_TIMEFORMAT_DESC
 	ZH_CN	这个选项决定了显示时间所使用的格式。以下是各个选择所使用的惯例：<br>hh=时<br>h=时（主导零被去除）<br>mm=分<br>ss=秒<br>pm=AM或PM<BR>在末端括弧内的任何信息为备注而将不显示。
 
 SETUP_TIMEFORMAT_DEFAULT
+# SLT: time format description ([[http://www.opengroup.org/onlinepubs/009695399/functions/strptime.html]])
 	CS	|%I:%M %p
 	DA	|%I:%M %p
 	DE	%H:%M
 	EN	|%I:%M %p
 	ES	|%H:%M
 	FI	|%I:%M %p
-	FR	|%I:%M %p
+	FR	%H:%M
 	IT	|%H.%M
 	NL	|%H:%M
 	NO	|%I:%M %p
@@ -8766,6 +8770,21 @@ SETUP_SN_VALID_LOGIN
 	PL	Połączenie z usługą mysqueezebox.com powiodło się.
 	RU	Подключение к mysqueesebox.com успешно установлено.
 	SV	Ansluten till mysqueezebox.com
+
+SETUP_SN_VALIDATION_FAILED
+	CS	Chyba při validaci vašeho účtu mysqueezebox.com.
+	DA	Der opstod en fejl under valideringen af din mysqueezebox.com-konto.
+	DE	Unerwarteter Fehler beim Prüfen des mysqueezebox.com-Kontos. Bitte stellen Sie sicher, dass die Netzwerkverbindung in Ordnung ist.
+	EN	An unexpected error occurred while validating your mysqueezebox.com account. Please make sure network connectivity is working fine.
+	ES	Se ha producido un error al validar la cuenta mysqueezebox.com.
+	FI	Tapahtui virhe vahvistettaessa mysqueezebox.com-tiliä.
+	FR	Une erreur s'est produite lors de la validation de votre compte mysqueezebox.com.
+	IT	Si è verificato un errore durante la convalida dell'account mysqueezebox.com.
+	NL	Er is een fout opgetreden tijdens het valideren van je mysqueezebox.com-account.
+	NO	Det oppsto en feil under bekreftelsen av mysqueezebox.com-kontoen.
+	PL	Podczas sprawdzania poprawności konta w usłudze mysqueezebox.com wystąpił błąd.
+	RU	Произошла ошибка при проверке вашей учетной записи mysqueezebox.com.
+	SV	Ett fel uppstod vid valideringen av ditt mysqueezebox.com-konto.
 
 SETUP_SN_FORGOT_PASSWORD
 	CS	Zapomněl jsem své heslo

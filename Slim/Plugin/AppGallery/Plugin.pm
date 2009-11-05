@@ -1,6 +1,6 @@
 package Slim::Plugin::AppGallery::Plugin;
 
-# $Id: Plugin.pm 28265 2009-08-25 19:58:11Z andy $
+# $Id: Plugin.pm 28823 2009-10-12 19:49:52Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -12,7 +12,7 @@ sub initPlugin {
 		feed   => Slim::Networking::SqueezeNetwork->url( '/api/appgallery/v1/opml' ),
 		tag    => 'appgallery',
 		node   => 'home',
-		weight => 80,
+		weight => 90,
 	);
 }
 

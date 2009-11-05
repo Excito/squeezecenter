@@ -5,9 +5,6 @@ IR						/usr/share/squeezecenter
 SQL						/usr/share/squeezecenter
 strings.txt				/usr/share/squeezecenter
 MySQL					/usr/share/squeezecenter
+HTML					/usr/share/squeezecenter
 Firmware				/usr/share/squeezecenter
 *.conf					/etc/squeezecenter
-
-#Essential skins
-HTML/Default			/usr/share/squeezecenter/HTML
-HTML/EN					/usr/share/squeezecenter/HTML

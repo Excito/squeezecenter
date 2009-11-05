@@ -1121,7 +1121,6 @@ sub playlistSaveCommand {
 	});
 
 	$request->addResult('__playlist_id', $playlistObj->id);
-	$request->addResult('__playlist_obj', $playlistObj);
 
 	$request->setStatusDone();
 }
@@ -1841,7 +1840,7 @@ sub playlistcontrolCommand {
 				$client, ['playlist', $cmd, 'playlist.id=' . $playlist_id]
 			);
 
-			$request->addResult( 'count', scalar ($playlist->tracks) );
+			$request->addResult( 'count', $playlist->tracks->count() );
 
 			$request->setStatusDone();
 			

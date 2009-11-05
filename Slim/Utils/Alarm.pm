@@ -378,7 +378,8 @@ sub title {
 		$self->{_title} = $newValue;
 	}
 	
-	return $self->{_title} || $self->{_playlist};
+	# bug 13622 - don't fall back to the url, as playlist titles aren't stored with the alarm
+	return $self->{_title} || '';
 }
 
 =head3 nextDue( )
@@ -1311,7 +1312,7 @@ sub loadAlarms {
 	my $client = shift;	
 	
 	main::DEBUGLOG && $log->debug('Loading saved alarms from prefs for ' . $client->name);
-	my $prefAlarms = $prefs->client($client)->alarms;
+	my $prefAlarms = $prefs->client($client)->alarms || {};
 
 	$client->alarmData->{alarms} = {};
 
@@ -1324,6 +1325,8 @@ sub loadAlarms {
 
 	foreach my $prefAlarm (keys %$prefAlarms) {
 		$prefAlarm = $prefAlarms->{$prefAlarm};
+		next unless ref $prefAlarm eq 'HASH';
+		
 		my $alarm = $class->new($client, $prefAlarm->{_time});
 		$alarm->{_days} = $prefAlarm->{_days};
 		$alarm->{_enabled} = $prefAlarm->{_enabled};

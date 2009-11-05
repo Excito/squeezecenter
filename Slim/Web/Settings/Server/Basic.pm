@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Basic;
 
-# $Id: Basic.pm 28553 2009-09-17 18:30:46Z michael $
+# $Id: Basic.pm 28825 2009-10-12 20:54:27Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -9,8 +9,6 @@ package Slim::Web::Settings::Server::Basic;
 
 use strict;
 use base qw(Slim::Web::Settings);
-
-use MIME::Base64 qw(decode_base64);
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -42,13 +40,6 @@ sub handler {
 	my ($class, $client, $paramRef) = @_;
 
 	# prefs setting handled by SUPER::handler
-
-	# Use the base64 versions to avoid any encoding issues
-	for my $pref (qw(audiodir playlistdir)) {
-		if ( $paramRef->{"pref_${pref}_b64"} ) {
-			$paramRef->{"pref_$pref"} = decode_base64( $paramRef->{"pref_${pref}_b64"} );
-		}
-	}
 
 	if ($paramRef->{'pref_rescan'}) {
 

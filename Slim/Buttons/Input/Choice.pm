@@ -1,6 +1,6 @@
 package Slim::Buttons::Input::Choice;
 
-# $Id: Choice.pm 28291 2009-08-26 16:55:58Z andy $
+# $Id: Choice.pm 28759 2009-10-02 19:20:44Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -176,7 +176,8 @@ sub getExtVal {
 			
 			if ( main::SLIM_SERVICE ) {
 				my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($value);
-				SDI::Service::Control->mailError( "Button Choice crash: $name", $@ );
+				$@ =~ s/"/'/g;
+				SDI::Util::Syslog::error("service=SS-Choice method=${name} error=\"$@\"");
 			}
 			
 			return '';
@@ -245,7 +246,8 @@ my %functions = (
 					
 					if ( main::SLIM_SERVICE ) {
 						my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($onChange);
-						SDI::Service::Control->mailError( "Button Choice crash: $name", $@ );
+						$@ =~ s/"/'/g;
+						SDI::Util::Syslog::error("service=SS-Choice method=${name} error=\"$@\"");
 					}
 				}
 			}
@@ -315,7 +317,8 @@ sub callCallback {
 			
 			if ( main::SLIM_SERVICE ) {
 				my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($callback);
-				SDI::Service::Control->mailError( "Button Choice crash: $name", $@ );
+				$@ =~ s/"/'/g;
+				SDI::Util::Syslog::error("service=SS-Choice method=${name} error=\"$@\"");
 			}
 		
 		} elsif (getParam($client,'pref')) {

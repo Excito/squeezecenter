@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::File;
 
-# $Id: File.pm 28625 2009-09-24 11:57:12Z andy $
+# $Id: File.pm 28947 2009-10-20 14:46:15Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -169,7 +169,7 @@ sub open {
 		}
 	}
 	
-	if ($seekoffset) {
+	if (defined $seekoffset) {
 		main::INFOLOG && $log->info("Seeking in $seekoffset into $filepath");
 		if (!defined(sysseek($sock, $seekoffset, 0))) {
 			logError("could not seek to $seekoffset for $filepath: $!");

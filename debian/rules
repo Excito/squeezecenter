@@ -12,7 +12,7 @@ install/squeezecenter::
 	install -m0755 debian/squeezecenter_safe debian/squeezecenter/usr/sbin/squeezecenter_safe
 
 	install -d debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/install
-	cat SQL/mysql/schema_*_up.sql > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/install/mysql
+	cat $(foreach idx,$(shell seq 1 100),$(wildcard SQL/mysql/schema_$(idx)_up.sql)) > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/install/mysql
 
 	install -d debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql
 
@@ -28,11 +28,3 @@ binary-post-install/squeezecenter::
 	# Remove errmsg.sys files from the MySQL dir, since they may not match
 	# up with the installed version's
 	rm -f debian/squeezecenter/usr/share/squeezecenter/MySQL/errmsg.*
-
-	# Removing non-eesential parts of the base skin
-	rm -rf debian/squeezecenter/usr/share/squeezecenter/HTML/EN/html/softsqueeze
-	
-binary-post-install/squeezecenter-skins::
-	# Removing essential skins that is included in the main package
-	rm -rf debian/squeezecenter-skins/usr/share/squeezecenter/HTML/Default
-	rm -rf debian/squeezecenter-skins/usr/share/squeezecenter/HTML/EN
