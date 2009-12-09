@@ -7,8 +7,8 @@ Standards-Version: 3.8.0
 
 Package: squeezecenter
 Architecture: all
-Conflicts: slimp3, slimserver
-Replaces: slimp3, slimserver
+Conflicts: slimp3, slimserver, squeezecenter-softsqueeze, squeezecenter-skins
+Replaces: slimp3, slimserver, squeezecenter-softsqueeze, squeezecenter-skins
 Depends: ${perl:Depends},
  dbconfig-common,
  ttf-dejavu | ttf-bitstream-vera,
@@ -67,7 +67,11 @@ Depends: ${perl:Depends},
  libyaml-syck-perl (>= 1.05),
  libclass-xsaccessor-perl (>= 1.03),
  libclass-xsaccessor-array-perl (>= 1.04),
- libpoe-xs-queue-array-perl (>= 0.005)
+ libpoe-xs-queue-array-perl (>= 0.005),
+ libtie-ixhash-perl,
+ libexporter-lite-perl,
+ libtemplate-perl,
+ libtemplate-plugin-class-perl
 Description: Streaming Audio Server
  SlimServer is a cross-platform streaming server that supports a wide range
  of formats, including AAC, AIFF, FLAC, Ogg Vorbis, MP3, WAV, and

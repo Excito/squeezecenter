@@ -1,3 +1,15 @@
+squeezecenter (7.4.1.dfsg1-6) claire; urgency=low
+
+  * missing depends for Tie:IxHash, Exporter::Lite and Template
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 09 Dec 2009 18:32:52 +0100
+
+squeezecenter (7.4.1.dfsg1-4) claire; urgency=low
+
+  * Adding replace and conflict for the old sub-packages 
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 09 Nov 2009 17:59:26 +0100
+
 squeezecenter (7.4.1.dfsg1-3) estelle claire; urgency=low
 
   * fix order of SQL scripts for installation (had taken script 10 before
