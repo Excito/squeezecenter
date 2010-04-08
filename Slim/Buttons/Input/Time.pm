@@ -1,6 +1,6 @@
 package Slim::Buttons::Input::Time;
 
-# $Id: Time.pm 26931 2009-06-07 03:53:36Z michael $
+# $Id: Time.pm 29134 2009-11-02 23:01:20Z kdf $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -451,8 +451,13 @@ sub scrollTime {
 	} elsif ($ampm && $c == 2) { 
 		# Scrolling on am/pm simply alters the hour value by +-12
 		my $p = $h > 11 ? 1 : 0;
-		$p = Slim::Buttons::Common::scroll($client, $dir, 2, $p);
-		$h = ($h + ($p ? 12 : -12)) % 24; 
+		
+		my $newp = Slim::Buttons::Common::scroll($client, $dir, 2, $p);
+		
+		# Bug 12756: recalculate the hours if $p has changed.
+		if ($p != $newp) {
+			$h = ($h + ($p ? 12 : -12)) % 24;
+		}
 	}
 
 	$$valueRef = Slim::Utils::DateTime::hourMinToTime($h, $m);

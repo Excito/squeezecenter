@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::HTTP;
 
-# $Id: HTTP.pm 28583 2009-09-21 18:39:43Z ayoung $
+# $Id: HTTP.pm 30376 2010-03-15 16:49:17Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -8,9 +8,9 @@ package Slim::Player::Protocols::HTTP;
 # version 2.  
 
 use strict;
-use base qw(Slim::Formats::HTTP);
+use base qw(Slim::Formats::RemoteStream);
 
-use IO::String;
+use IO::Socket qw(:crlf);
 use Scalar::Util qw(blessed);
 
 use Slim::Formats::RemoteMetadata;
@@ -28,6 +28,9 @@ my $log       = logger('player.streaming.remote');
 my $directlog = logger('player.streaming.direct');
 my $sourcelog = logger('player.source');
 
+my $prefs = preferences('server');
+
+
 sub new {
 	my $class = shift;
 	my $args  = shift;
@@ -43,7 +46,6 @@ sub new {
 	my $self = $class->open($args);
 
 	if (defined($self)) {
-		${*$self}{'song'}    = $args->{'song'};
 		${*$self}{'client'}  = $args->{'client'};
 		${*$self}{'url'}     = $args->{'url'};
 	}
@@ -127,9 +129,9 @@ sub getFormatForURL {
 }
 
 sub parseMetadata {
-	my ( $class, $client, $url, $metadata ) = @_;
+	my ( $class, $client, undef, $metadata ) = @_;
 
-	$url = Slim::Player::Playlist::url(
+	my $url = Slim::Player::Playlist::url(
 		$client, Slim::Player::Source::streamingSongIndex($client)
 	);
 	
@@ -147,6 +149,9 @@ sub parseMetadata {
 		}
 		return if $handled;
 	}
+	
+	# Bug 15896, a stream had CRLF in the metadata
+	$metadata =~ s/[\r\n]//g;
 
 	if ($metadata =~ (/StreamTitle=\'(.*?)\'(;|$)/)) {
 		
@@ -253,7 +258,7 @@ sub canDirectStream {
 		}
 
 		# Allow user pref to select the method for streaming
-		if ( my $method = preferences('server')->client($client)->get('mp3StreamingMethod') ) {
+		if ( my $method = $prefs->client($client)->get('mp3StreamingMethod') ) {
 			if ( $method == 1 ) {
 				main::DEBUGLOG && $directlog->debug("Not direct streaming because of mp3StreamingMethod pref");
 				return 0;
@@ -308,7 +313,7 @@ sub sysread {
 }
 
 sub parseDirectHeaders {
-	my ( $class, $client, $url, @headers ) = @_;
+	my ( $self, $client, $url, @headers ) = @_;
 	
 	my $isDebug = main::DEBUGLOG && $directlog->is_debug;
 	
@@ -374,8 +379,16 @@ sub parseDirectHeaders {
 		$duration ||= $length * 8 / $bitrate if $bitrate;
 		
 		if ($duration) {
-			main::INFOLOG && $directlog->info("Setting startOffest based on Content-Range to ", $duration * ($startOffset/$length));
-			$client->controller()->songStreamController()->song()->startOffset($duration * ($startOffset/$length));
+			my $song = ${*self}{'song'} if blessed $self;
+			
+			if (!$song && $client->controller()->songStreamController()) {
+				$song = $client->controller()->songStreamController()->song();
+			}
+			
+			if ($song) {
+				main::INFOLOG && $directlog->info("Setting startOffest based on Content-Range to ", $duration * ($startOffset/$length));
+				$song->startOffset($duration * ($startOffset/$length));
+			}
 		}
 	}
 
@@ -389,6 +402,208 @@ sub parseDirectHeaders {
 	}
 		
 	return ($title, $bitrate, $metaint, $redir, $contentType, $length, $body);
+}
+
+=head2 parseHeaders( @headers )
+
+Parse the response headers from an HTTP request, and set instance variables
+based on items in the response, eg: bitrate, content type.
+
+Updates the client's streamingProgressBar with the correct duration.
+
+=cut
+
+# XXX Still a lot of duplication here with Squeezebox2::directHeaders()
+
+sub parseHeaders {
+	my $self    = shift;
+	my $url     = $self->url;
+	my $client  = $self->client;
+	
+	my ($title, $bitrate, $metaint, $redir, $contentType, $length, $body) = $self->parseDirectHeaders($client, $url, @_);
+
+	if ($contentType) {
+		if (($contentType =~ /text/i) && !($contentType =~ /text\/xml/i)) {
+			# webservers often lie about playlists.  This will
+			# make it guess from the suffix.  (unless text/xml)
+			$contentType = '';
+		}
+			
+		${*$self}{'contentType'} = $contentType;
+
+		Slim::Music::Info::setContentType( $url, $contentType );
+	}
+	
+	${*$self}{'redirect'} = $redir;
+	
+	${*$self}{'contentLength'} = $length if $length;
+	${*$self}{'song'}->isLive($length ? 0 : 1) if !$redir;
+
+	# Always prefer the title returned in the headers of a radio station
+	if ( $title ) {
+		main::INFOLOG && $log->is_info && $log->info( "Setting new title for $url, $title" );
+		Slim::Music::Info::setCurrentTitle( $url, $title );
+		
+		# Bug 7979, Only update the database title if this item doesn't already have a title
+		my $curTitle = Slim::Music::Info::title($url);
+		if ( !$curTitle || $curTitle =~ /^(?:http|mms)/ ) {
+			Slim::Music::Info::setTitle( $url, $title );
+		}
+	}
+
+	if ($bitrate) {
+		main::INFOLOG && $log->is_info &&
+				$log->info(sprintf("Bitrate for %s set to %d",
+					$self->infoUrl,
+					$bitrate,
+				));
+		
+		${*$self}{'bitrate'} = $bitrate;
+		Slim::Music::Info::setBitrate( $self->infoUrl, $bitrate );
+	} elsif ( !$self->bitrate ) {
+		# Bitrate may have been set in Scanner by reading the mp3 stream
+		$bitrate = ${*$self}{'bitrate'} = Slim::Music::Info::getBitrate( $url );
+	}
+	
+	
+	if ($metaint) {
+		${*$self}{'metaInterval'} = $metaint;
+		${*$self}{'metaPointer'}  = 0;
+	}
+	
+	# See if we have an existing track object with duration info for this stream.
+	if ( my $secs = Slim::Music::Info::getDuration( $url ) ) {
+		
+		# Display progress bar
+		$client->streamingProgressBar( {
+			'url'      => $url,
+			'duration' => $secs,
+		} );
+	}
+	else {
+	
+		if ( $bitrate > 0 && defined $self->contentLength && $self->contentLength > 0 ) {
+			# if we know the bitrate and length of a stream, display a progress bar
+			if ( $bitrate < 1000 ) {
+				${*$self}{'bitrate'} *= 1000;
+			}
+			$client->streamingProgressBar( {
+				'url'     => $url,
+				'bitrate' => $self->bitrate,
+				'length'  => $self->contentLength,
+			} );
+		}
+	}
+		
+	# Bug 6482, refresh the cached Track object in the client playlist from the database
+	# so it picks up any changed data such as title, bitrate, etc
+	Slim::Player::Playlist::refreshTrack( $client, $url );
+
+	return;
+}
+
+=head2 requestString( $client, $url, [ $post, [ $seekdata ] ] )
+
+Generate a HTTP request string suitable for sending to a HTTP server.
+
+=cut
+
+sub requestString {
+	my $self   = shift;
+	my $client = shift;
+	my $url    = shift;
+	my $post   = shift;
+	my $seekdata = shift;
+
+	my ($server, $port, $path, $user, $password) = Slim::Utils::Misc::crackURL($url);
+ 
+	# Use full path for proxy servers
+	my $proxy;
+	
+	if ( main::SLIM_SERVICE ) {
+		# Let user specify their own proxy to use
+		$proxy = $prefs->client($client)->get('webproxy');
+	}
+	else {
+		$proxy = $prefs->get('webproxy');
+	}
+	
+	if ( $proxy && $server !~ /(?:localhost|127.0.0.1)/ ) {
+		$path = "http://$server:$port$path";
+	}
+
+	my $type = $post ? 'POST' : 'GET';
+
+	# Although the port can be part of the Host: header, some hosts (such
+	# as online.wsj.com don't like it, and will infinitely redirect.
+	# According to the spec, http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html
+	# The port is optional if it's 80, so follow that rule.
+	my $host = $port == 80 ? $server : "$server:$port";
+	
+	# Special case, for the fallback-alarm, disable Icy Metadata, or our own
+	# server will try and send it
+	my $want_icy = 1;
+	if ( $path =~ m{/slim-backup-alarm.mp3$} ) {
+		$want_icy = 0;
+	}
+
+	# make the request
+	my $request = join($CRLF, (
+		"$type $path HTTP/1.0",
+		"Accept: */*",
+		"Cache-Control: no-cache",
+		"User-Agent: " . Slim::Utils::Misc::userAgentString(),
+		"Icy-MetaData: $want_icy",
+		"Connection: close",
+		"Host: $host",
+	));
+	
+	if (defined($user) && defined($password)) {
+		$request .= $CRLF . "Authorization: Basic " . MIME::Base64::encode_base64($user . ":" . $password,'');
+	}
+	
+	# If seeking, add Range header
+	if ($client && $seekdata) {
+		$request .= $CRLF . 'Range: bytes=' . int( $seekdata->{sourceStreamOffset} ) . '-';
+		
+		if (defined $seekdata->{timeOffset}) {
+			# Fix progress bar
+			$client->playingSong()->startOffset($seekdata->{timeOffset});
+			$client->master()->remoteStreamStartTime( Time::HiRes::time() - $seekdata->{timeOffset} );
+		}
+	}
+
+	# Send additional information if we're POSTing
+	if ($post) {
+
+		$request .= $CRLF . "Content-Type: application/x-www-form-urlencoded";
+		$request .= $CRLF . sprintf("Content-Length: %d", length($post));
+		$request .= $CRLF . $CRLF . $post . $CRLF;
+
+	} else {
+		$request .= $CRLF . $CRLF;
+	}
+	
+	# Bug 5858, add cookies to the request
+	if ( !main::SLIM_SERVICE ) {
+		my $request_object = HTTP::Request->parse($request);
+		$request_object->uri($url);
+		Slim::Networking::Async::HTTP::cookie_jar->add_cookie_header( $request_object );
+		$request_object->uri($path);
+			
+		# Bug 9709, strip long cookies from the request
+		$request_object->headers->scan( sub {
+			if ( $_[0] eq 'Cookie' ) {
+				if ( length($_[1]) > 512 ) {
+					$request_object->headers->remove_header('Cookie');
+				}
+			}
+		} );
+		
+		$request = $request_object->as_string( $CRLF );				
+	}
+
+	return $request;
 }
 
 sub scanUrl {

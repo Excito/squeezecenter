@@ -1,6 +1,6 @@
 package Slim::Utils::Misc;
 
-# $Id: Misc.pm 28828 2009-10-13 11:16:09Z michael $
+# $Id: Misc.pm 30042 2010-02-05 21:09:36Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -40,7 +40,6 @@ use File::Which ();
 use File::Slurp;
 use FindBin qw($Bin);
 use Log::Log4perl;
-use Net::IP;
 use POSIX qw(strftime);
 use Scalar::Util qw(blessed);
 use Time::HiRes;
@@ -59,7 +58,6 @@ require Slim::Utils::Unicode;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
-use Slim::Utils::Network ();
 
 my $prefs = preferences('server');
 
@@ -818,7 +816,7 @@ sub readDirectory {
 		$log->info("Directory contains " . scalar(@diritems) . " items");
 	}
 
-	return sort(@diritems);
+	return Slim::Music::Info::sortFilename(@diritems);
 }
 
 =head2 findAndScanDirectoryTree($params)
@@ -870,7 +868,7 @@ sub findAndScanDirectoryTree {
 		});
 	}
 
-	if (Slim::Utils::OSDetect::OS() eq 'mac' && blessed($topLevelObj) && $topLevelObj->can('path')) {
+	if (main::ISMAC && blessed($topLevelObj) && $topLevelObj->can('path')) {
 		my $topPath = $topLevelObj->path;
 
 		if ( my $alias = Slim::Utils::Misc::pathFromMacAlias($topPath) ) {
@@ -929,7 +927,7 @@ sub findAndScanDirectoryTree {
 	}
 
 	# Now read the raw directory and return it. This should always be really fast.
-	my $items = [ Slim::Music::Info::sortFilename( readDirectory($path) ) ];
+	my $items = [ readDirectory($path) ];
 	my $count = scalar @$items;
 
 	return ($topLevelObj, $items, $count);
@@ -1028,6 +1026,8 @@ sub userAgentString {
 # XXXX - this sub is no longer used by SC core code, since system information is available in Slim::Menu::SystemInfo
 sub settingsDiagString {
 
+	require Slim::Utils::Network;
+	
 	my $osDetails = Slim::Utils::OSDetect::details();
 	
 	my @diagString;
@@ -1278,8 +1278,8 @@ sub shouldCacheURL {
 		return 1;
 	}
 	
-	if ( my $ip = Net::IP->new($host) ) {
-		return 0 if $ip->iptype eq 'PRIVATE';
+	if ( Slim::Utils::Network::ip_is_private($host) ) {
+		return 0;
 	}
 	
 	return 1;
@@ -1328,6 +1328,7 @@ Generate a new UUID and return it.
 =cut
 
 sub createUUID {
+	require Slim::Utils::Network;
 	return substr( sha1_hex( Time::HiRes::time() . $$ . Slim::Utils::Network::hostName() ), 0, 8 );
 }
 

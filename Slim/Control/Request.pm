@@ -114,7 +114,7 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
 
  Y    pause           <0|1|>                      <fadeInSecs> (only for resume)
  Y    play            <fadeInSecs>
- Y    playlist        add|append                  <item> (item can be a song, playlist or directory)
+ Y    playlist        add|append                  <item> (item can be a song, playlist or directory) <title> (override)
  Y    playlist        addalbum                    <genre>                     <artist>         <album>  <songtitle>
  Y    playlist        addtracks                   <searchterms>    
  Y    playlist        clear
@@ -198,6 +198,7 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
  Y    alarm           end                         <id>
  Y    alarm           snooze                      <id>
  Y    alarm           snooze_end                  <id>
+ Y    newmetadata
 
 =head2 PLUGINS
 
@@ -540,11 +541,11 @@ sub init {
 	addDispatch(['playerpref',     'validate',       '_prefname',  '_newvalue'],                       [1, 1, 0, \&Slim::Control::Queries::prefValidateQuery]);
 	addDispatch(['playerpref',     '_prefname',      '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::prefCommand]);
 	addDispatch(['players',        '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::playersQuery]);
-	addDispatch(['playlist',       'add',            '_item'],                                         [1, 0, 0, \&Slim::Control::Commands::playlistXitemCommand]);
+	addDispatch(['playlist',       'add',            '_item',      '_title'],                          [1, 0, 0, \&Slim::Control::Commands::playlistXitemCommand]);
 	addDispatch(['playlist',       'addalbum',       '_genre',     '_artist',     '_album', '_title'], [1, 0, 0, \&Slim::Control::Commands::playlistXalbumCommand]);
 	addDispatch(['playlist',       'addtracks',      '_what',      '_listref'],                        [1, 0, 0, \&Slim::Control::Commands::playlistXtracksCommand]);
 	addDispatch(['playlist',       'album',          '_index',     '?'],                               [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
-	addDispatch(['playlist',       'append',         '_item'],                                         [1, 0, 0, \&Slim::Control::Commands::playlistXitemCommand]);
+	addDispatch(['playlist',       'append',         '_item',      '_title'],                          [1, 0, 0, \&Slim::Control::Commands::playlistXitemCommand]);
 	addDispatch(['playlist',       'artist',         '_index',     '?'],                               [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
 	addDispatch(['playlist',       'clear'],                                                           [1, 0, 0, \&Slim::Control::Commands::playlistClearCommand]);
 	addDispatch(['playlist',       'delete',         '_index'],                                        [1, 0, 0, \&Slim::Control::Commands::playlistDeleteCommand]);
@@ -571,7 +572,7 @@ sub init {
 	addDispatch(['playlist',       'play',           '_item',      '_title',      '_fadein'],          [1, 0, 0, \&Slim::Control::Commands::playlistXitemCommand]);
 	addDispatch(['playlist',       'playalbum',      '_genre',     '_artist',     '_album', '_title'], [1, 0, 0, \&Slim::Control::Commands::playlistXalbumCommand]);
 	addDispatch(['playlist',       'playlistsinfo'],                                                   [1, 1, 1, \&Slim::Control::Queries::playlistPlaylistsinfoQuery]);
-	addDispatch(['playlist',       'playtracks',     '_what',      '_listref',    '_fadein'],          [1, 0, 0, \&Slim::Control::Commands::playlistXtracksCommand]);
+	addDispatch(['playlist',       'playtracks',     '_what',      '_listref',    '_fadein', '_index'],[1, 0, 0, \&Slim::Control::Commands::playlistXtracksCommand]);
 	addDispatch(['playlist',       'remote',         '_index',     '?'],                               [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
 	addDispatch(['playlist',       'repeat',         '?'],                                             [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
 	addDispatch(['playlist',       'repeat',         '_newvalue'],                                     [1, 0, 0, \&Slim::Control::Commands::playlistRepeatCommand]);
@@ -650,6 +651,7 @@ sub init {
 	addDispatch(['alarm',          'snooze',         '_id'],                                           [1, 0, 0, undef]);
 	addDispatch(['alarm',          'snooze_end',     '_id'],                                           [1, 0, 0, undef]);
 	addDispatch(['fwdownloaded',   '_machine'],                                                        [0, 0, 0, undef]);
+	addDispatch(['newmetadata'],                                                                       [1, 0, 0, undef]);
 
 # DEPRECATED
 	addDispatch(['mode',           'pause'],                                                           [1, 0, 0, \&Slim::Control::Commands::playcontrolCommand]);
@@ -666,8 +668,7 @@ sub init {
 	
 ######################################################################################################################################################################
 
-	# No web code on SN
-	return if main::SLIM_SERVICE;
+	return if !main::WEBUI;
 
 	# Normal Squeezebox Server commands can be accessed with URLs like
 	#   http://localhost:9000/status.html?p0=pause&player=00%3A00%3A00%3A00%3A00%3A00
@@ -675,6 +676,7 @@ sub init {
 	# not intended for use via the web interface!
 	#
 	# protect some commands regardless of args passed to them
+	require Slim::Web::HTTP::CSRF;
 	Slim::Web::HTTP::CSRF->protectCommand([qw|alarm alarms button client debug display displaynow ir pause play playlist 
 					playlistcontrol playlists stop stopserver restartserver wipecache prefset mode
 					power rescan sleep sync time gototime
@@ -987,6 +989,7 @@ sub new {
 	   _clientid  => $clientid,
 	   _useixhash => $useIxHashes,
 	   _cb_enable => 1,
+	   _langoverride => undef,
 	};
 
 	bless $self, $class;
@@ -1460,6 +1463,20 @@ sub isStatusBadConfig {
 sub getStatusText {
 	return ($statusMap{$_[0]->{'_status'}});
 }
+
+sub setLanguageOverride {
+	my ($self, $lang) = @_;
+	
+	return if $lang eq Slim::Utils::Strings::getLanguage();
+	
+	$self->{'_langoverride'} = $lang;
+}
+
+sub getLanguageOverride {
+	return $_[0]->{'_langoverride'};
+}
+
+
 ################################################################################
 # Request mgmt
 ################################################################################
@@ -1658,11 +1675,20 @@ sub sliceResultLoop {
 }
 
 sub string {
-	my $self   = shift;
+	my $self = shift;
+	my $name = uc(shift);
 
-	my $client = $self->client();
+	if ( my $client = $self->client() ) {
+		return cstring($client, $name, @_);
+	}
 
-	return cstring($client, @_);
+	if ( my $lang = $self->getLanguageOverride() ) {
+		my $strings = Slim::Utils::Strings::loadAdditional( $lang );
+		
+		return sprintf( $strings->{$name}, @_) if $strings->{$name}; 
+	}
+	
+	return Slim::Utils::Strings::string($name, @_);
 }
 
 
@@ -2082,9 +2108,13 @@ sub notify {
 			
 			# If this listener is client-specific, ignore unless we have that client
 			if ( $clientid ) {
-				unless ( blessed( $self->client ) && $self->client->id eq $clientid ) {
-					main::DEBUGLOG && $log->debug( "Skipping notification, only wanted for $clientid" );
-					next;
+				next if !$self->clientid;
+				
+				# Bug 10064: playlist notifications get sent to everyone in the sync-group
+				if ($self->isCommand([['playlist', 'newmetadata']])) {
+					next if !grep($_->id eq $clientid, $self->client()->syncGroupActiveMembers());
+				} else {
+					next if $self->clientid ne $clientid;
 				}
 			}
 
@@ -2418,7 +2448,7 @@ sub dump {
 
 	while (my ($key, $val) = each %{$self->{'_params'}}) {
 
-			main::INFOLOG && $log->info("   Param: [$key] = [$val]");
+			main::INFOLOG && $log->info("   Param: [$key] = ", (defined $val ? "[$val]" : 'undef'));
  	}
 
 	while (my ($key, $val) = each %{$self->{'_results'}}) {
@@ -2434,9 +2464,19 @@ sub dump {
 
 				my $hash = ${$self->{'_results'}}{$key}->[$i];
 
-				while (my ($key2, $val2) = each %{$hash}) {
-					main::INFOLOG && $log->info("   Result:   $i. [$key2] = [$val2]");
-				}	
+				if (ref($hash) eq 'HASH') {
+					
+					while (my ($key2, $val2) = each %{$hash}) {
+						main::INFOLOG && $log->info("   Result:   $i. [$key2] = [$val2]");
+					}
+						
+				}
+				
+				else {
+					
+					main::INFOLOG && $log->info('   Result:   ' . Data::Dump::dump($hash));
+					
+				}
 			}
 
 		} else {

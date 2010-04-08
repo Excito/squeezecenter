@@ -76,10 +76,10 @@
 <div class="homeMenuSection">
 	<div>[% "PLUGIN_MY_APPS_MODULE_NAME" | string | upper %]</div>
 	<ul>
-	[%- FOREACH item = additionalLinksOrder.my_apps %]
-		<li><a href="[% additionalLinks.my_apps.$item | html %]player=[% playerURI %]">[% item | getstring | html %]</a></li>
+	[%- FOREACH item = additionalLinkOrder.my_apps %]
+		<li><a href="[% additionalLinks.my_apps.$item | html %]player=[% playerURI %]" [% IF additionalLinks.my_apps.$item.match('^http:') %]target="mysb"[% END %]>[% item | getstring | html %]</a></li>
 	[%- END %]
-	[%- FOREACH link = additionalLinks.my_apps; IF !additionalLinks.my_apps.grep(link.key).size %]
+	[%- FOREACH link = additionalLinks.apps; IF !additionalLinkOrder.my_apps.grep(link.key).size %]
 		<li><a href="[% link.value | html %]player=[% playerURI %]">[% link.key | getstring | html %]</a></li>
 	[%- END; END %]
 	</ul>
@@ -110,7 +110,7 @@
 	<div>[% "PLUGINS" | string | upper %]</div>
 	<ul>
 		[%- FOREACH link = additionalLinks.plugins %]
-			[% NEXT IF link.key == 'ALARM' && !player %]
+			[% NEXT IF link.key == 'ALARM' && (!player || nosetup) %]
 			<li><a href="[% link.value | html %]player=[% playerURI %][% IF link.key == 'ALARM'%]&playerid=[% playerURI %][% END %]">[% link.key | getstring | html %]</a></li>
 		[%- END %]
 	</ul>

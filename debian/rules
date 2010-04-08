@@ -1,30 +1,25 @@
 #!/usr/bin/make -f
-  
-include /usr/share/cdbs/1/rules/debhelper.mk
-include /usr/share/cdbs/1/rules/dpatch.mk
 
-DEB_DH_INSTALLINIT_ARGS="--noscripts"
-# Add here any variable or target overrides you need.
+%:
+	dh --with quilt $@
 
-install/squeezecenter::
+override_dh_install:
 	install -m0755 slimserver.pl debian/squeezecenter/usr/sbin/squeezecenter-server
 	install -m0755 scanner.pl debian/squeezecenter/usr/sbin/squeezecenter-scanner
 	install -m0755 debian/squeezecenter_safe debian/squeezecenter/usr/sbin/squeezecenter_safe
-
 	install -d debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/install
 	cat $(foreach idx,$(shell seq 1 100),$(wildcard SQL/mysql/schema_$(idx)_up.sql)) > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/install/mysql
-
 	install -d debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql
-
 	cat SQL/mysql/schema_7_up.sql  SQL/mysql/schema_8_up.sql > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql/7.2.99
 	cat SQL/mysql/schema_9_up.sql  SQL/mysql/schema_10_up.sql > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql/7.4.0
-
-
 	# fix changelogs
 	mkdir debian/tmp
 	for i in Changelog?.html; do html2text -style pretty $$i; done > debian/tmp/changelog
-
-binary-post-install/squeezecenter::
+	dh_install
 	# Remove errmsg.sys files from the MySQL dir, since they may not match
 	# up with the installed version's
 	rm -f debian/squeezecenter/usr/share/squeezecenter/MySQL/errmsg.*
+
+override_dh_installinit:
+	dh_installinit --noscripts
+

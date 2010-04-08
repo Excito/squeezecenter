@@ -1,6 +1,6 @@
 package Slim::Plugin::Napster::Plugin;
 
-# $Id: Plugin.pm 28550 2009-09-17 15:42:43Z andy $
+# $Id: Plugin.pm 30040 2010-02-05 19:58:44Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -70,7 +70,7 @@ sub initPlugin {
 		);
 	}
 	
-	if ( !main::SLIM_SERVICE && !$::noweb ) {
+	if ( main::WEBUI ) {
 		# Add a function to view trackinfo in the web
 		Slim::Web::Pages->addPageFunction( 
 			'plugins/napster/trackinfo.html',

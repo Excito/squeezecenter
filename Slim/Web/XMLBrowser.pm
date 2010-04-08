@@ -1,6 +1,6 @@
 package Slim::Web::XMLBrowser;
 
-# $Id: XMLBrowser.pm 28569 2009-09-18 21:28:30Z adrian $
+# $Id: XMLBrowser.pm 30273 2010-02-26 19:17:14Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -273,6 +273,17 @@ sub handleFeed {
 			) {
 				$subFeed->{'type'} = 'playlist';
 				$subFeed->{'url'}  = $subFeed->{'playlist'};
+			}
+			
+			# Bug 15343, if we are at the lowest menu level, and we have already
+			# fetched and cached this menu level, check if we should always
+			# re-fetch this menu. This is used to ensure things like the Pandora
+			# station list are always up to date. The reason we check depth==levels
+			# is so that when you are browsing at a lower level we don't allow
+			# the parent menu to be refreshed out from under the user
+			if ( $depth == $levels && $subFeed->{fetched} && $subFeed->{forceRefresh} && !$params->{fromSubFeed} ) {
+				main::DEBUGLOG && $log->is_debug && $log->debug("  Forcing refresh of menu");
+				delete $subFeed->{fetched};
 			}
 			
 			# If the feed is another URL, fetch it and insert it into the
@@ -738,6 +749,14 @@ sub handleSubFeed {
 
 	# set flag to avoid fetching this url again
 	$subFeed->{'fetched'} = 1;
+	
+	# Pass-through forceRefresh flag
+	if ( $feed->{forceRefresh} ) {
+		$subFeed->{forceRefresh} = 1;
+	}
+	
+	# Mark this as coming from subFeed, so that we know to ignore forceRefresh
+	$params->{fromSubFeed} = 1;
 
 	# cachetime will only be set by parsers which know their content is dynamic
 	if (defined $feed->{'cachetime'}) {

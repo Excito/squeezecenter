@@ -1,6 +1,6 @@
 package Slim::Plugin::RadioTime::Metadata;
 
-# $Id: Metadata.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Metadata.pm 30028 2010-02-05 04:19:06Z andy $
 
 use strict;
 
@@ -38,9 +38,10 @@ sub defaultMeta {
 	my ( $client, $url ) = @_;
 	
 	return {
-		title => Slim::Music::Info::getCurrentTitle($url),
-		icon  => $ICON,
-		type  => $client->string('RADIO'),
+		title     => Slim::Music::Info::getCurrentTitle($url),
+		icon      => $ICON,
+		type      => $client->string('RADIO'),
+		info_link => 'plugins/radiotime/trackinfo.html',
 	};
 }
 

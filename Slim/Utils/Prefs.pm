@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs;
 
-# $Id: Prefs.pm 28819 2009-10-12 17:27:13Z michael $
+# $Id: Prefs.pm 30409 2010-03-24 14:57:32Z mherger $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -76,7 +76,6 @@ use Exporter::Lite;
 use File::Path qw(mkpath);
 use Getopt::Long qw(:config pass_through);
 use Storable;
-use Net::IP qw(ip_is_ipv4);
 
 use Slim::Utils::Prefs::Namespace;
 use Slim::Utils::Prefs::OldPrefs;
@@ -203,9 +202,13 @@ sub init {
 		'scannerPriority'       => 0,
 		'resampleArtwork'       => 1,
 		'precacheArtwork'       => 1,
+		'maxPlaylistLength'     => 500,
 		# Server Settings - Security
 		'filterHosts'           => 0,
-		'allowedHosts'          => sub { join(',', Slim::Utils::Network::hostAddr()) },
+		'allowedHosts'          => sub {
+			require Slim::Utils::Network;
+			return join(',', Slim::Utils::Network::hostAddr());
+		},
 		'csrfProtectionLevel'   => 0,
 		'authorize'             => 0,
 		'username'              => '',
@@ -343,7 +346,6 @@ sub init {
 	$prefs->migrateClient(2, sub {
 		my $cprefs = shift;
 		my $defaults = $Slim::Player::Player::defaultPrefs;
-		$cprefs->set( syncBufferThreshold => $defaults->{'syncBufferThreshold'}) if (defined $cprefs->get('syncBufferThreshold') && $cprefs->get('syncBufferThreshold') > 255);
 		$cprefs->set( minSyncAdjust       => $defaults->{'minSyncAdjust'}      ) if (defined $cprefs->get('minSyncAdjust') && $cprefs->get('minSyncAdjust') < 1);
 		$cprefs->set( packetLatency       => $defaults->{'packetLatency'}      ) if (defined $cprefs->get('packetLatency') && $cprefs->get('packetLatency') < 1);
 		1;
@@ -636,6 +638,36 @@ sub init {
 		
 		1;
 	} );
+	
+	# add global search to menu if client is still using default menu items
+	if ( !main::SLIM_SERVICE ) {
+		$prefs->migrateClient( 13, sub {
+			my ( $cprefs, $client ) = @_;
+			
+			my $defaults = $Slim::Player::Player::defaultPrefs;
+		
+			if ( $client->hasDigitalIn ) {
+				$defaults = $Slim::Player::Transporter::defaultPrefs;
+			}
+		
+			if ( $client->isa('Slim::Player::Boom') ) {
+				$defaults = $Slim::Player::Boom::defaultPrefs;
+			}
+	
+			if ($defaults && defined $defaults->{menuItem}) {
+				
+				my @oldDefaults  = grep { $_ !~ /GLOBAL_SEARCH/ } @{ $defaults->{menuItem} };
+				my @currentPrefs = @{ $cprefs->get('menuItem') };
+
+				# only replace menu if user didn't customize it
+				if ("@oldDefaults" eq "@currentPrefs") {
+					$cprefs->set( menuItem => Storable::dclone($defaults->{menuItem}) );
+				}
+			}
+			1;
+		} );
+	}
+	
 
 	# initialise any new prefs
 	$prefs->init(\%defaults);
@@ -659,25 +691,30 @@ sub init {
 	$prefs->setValidate({ 'validator' => 'intlimit', 'low' =>    0,                 }, 'playDelay'   );
 	$prefs->setValidate({ 'validator' => 'intlimit', 'low' =>    0, 'high' =>  1000 }, 'packetLatency');
 	$prefs->setValidate({ 'validator' => 'intlimit', 'low' =>   10, 'high' =>  1000 }, 'minSyncAdjust');
-	$prefs->setValidate({ 'validator' => 'intlimit', 'low' =>    1, 'high' =>   255 }, 'syncBufferThreshold');
 
 	$prefs->setValidate({ 'validator' => sub { $_[1] ne '' } }, 'playername');
+
+	$prefs->setValidate({ 'validator' => sub {
+											!$_[1]				# covers undefined, 0 or '' cases
+											|| ($_[1] =~ /^\d+$/ && $_[1] >= 10)
+										}
+						}, 'maxPlaylistLength');
 
 	$prefs->setValidate({
 		validator => sub {
 			foreach (split (/,/, $_[1])) {
 				s/\s*//g; 
 
-				next if Net::IP::ip_is_ipv4($_);
+				next if Slim::Utils::Network::ip_is_ipv4($_);
 
 				# allow ranges à la "192.168.0.1-50"
 				if (/(.+)-(\d+)$/) {
-					next if Net::IP::ip_is_ipv4($1);
+					next if Slim::Utils::Network::ip_is_ipv4($1);
 				}
 
 				# 192.168.0.*
 				s/\*/0/g;
-				next if Net::IP::ip_is_ipv4($_);
+				next if Slim::Utils::Network::ip_is_ipv4($_);
 							
 				return 0;
 			}
@@ -823,8 +860,9 @@ sub init {
 	
 	# Rebuild Jive cache if VA setting is changed
 	$prefs->setChange( sub {
+		Slim::Control::Queries::wipeCaches();
 		Slim::Control::Jive::buildCaches();
-	}, 'variousArtistAutoIdentification' );
+	}, 'variousArtistAutoIdentification', 'composerInArtists', 'conductorInArtists', 'bandInArtists');
 
 	# Reset IR state if preference change
 	$prefs->setChange( sub {
@@ -970,6 +1008,8 @@ sub makeCacheDir {
 }
 
 sub homeURL {
+	require Slim::Utils::Network;
+	
 	my $host = $main::httpaddr || Slim::Utils::Network::hostname() || '127.0.0.1';
 	my $port = $prefs->get('httpport');
 

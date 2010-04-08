@@ -74,12 +74,18 @@ if ( main::SLIM_SERVICE ) {
 
 sub get_server {
 	my ($class, $stype) = @_;
+
+	# TODO: remove that code soon...
+	$prefs->migrate( 6, sub {
+		$prefs->set( 'use_sn_test' => 0 );
+		1;
+	} );
 	
 	# Use SN test server if hidden test pref is set
 	if ( $stype eq 'sn' && $prefs->get('use_sn_test') ) {
 		$stype = 'test';
 	}
-
+	
 	return $_Servers->{$stype}
 		|| die "No hostname known for server type '$stype'";
 }
@@ -120,7 +126,7 @@ sub _init_done {
 	my $snTime = $json->{time};
 	
 	if ( $snTime !~ /^\d+$/ ) {
-		$http->error( "Invalid mysqueezebox.com server timestamp" );
+		$http->error( sprintf("Invalid mysqueezebox.com server timestamp (%s)", $http->url) );
 		return _init_error( $http );
 	}
 	
@@ -163,6 +169,11 @@ sub _init_done {
 		}
 	}
 	
+	# Stash the supported protocols
+	if ( $json->{protocolhandlers}  && ref $json->{protocolhandlers} eq 'ARRAY') {
+		$prefs->set( sn_protocolhandlers => $json->{protocolhandlers} );
+	}
+
 	# Init pref syncing
 	Slim::Networking::SqueezeNetwork::PrefSync->init() if $prefs->get('sn_sync');
 	
@@ -171,13 +182,30 @@ sub _init_done {
 	
 	# Init stats
 	Slim::Networking::SqueezeNetwork::Stats->init( $json );
+
+	
+	# add link to mysb.com favorites to our local favorites list
+	if ( !main::SLIM_SERVICE && $json->{favorites_url} ) {
+
+		my $favs = Slim::Utils::Favorites->new();
+		
+		if ( !defined $favs->findUrl($json->{favorites_url}) ) {
+
+			$favs->add( $json->{favorites_url}, Slim::Utils::Strings::string('PLUGIN_FAVORITES_ON_MYSB'), undef, undef, undef, 'html/images/favorites.png' );
+
+		}
+	}
 }
 
 sub _init_error {
 	my $http  = shift;
 	my $error = $http->error;
 	
-	$log->error( "Unable to login to mysqueezebox.com, sync is disabled: $error" );
+	$log->error( sprintf("Unable to login to mysqueezebox.com, sync is disabled: $error (%s)", $http->url) );
+
+	if ( my $proxy = $prefs->get('webproxy') ) {
+		$log->error( sprintf("Please check your proxy configuration (%s)", $proxy) );
+	} 
 	
 	$prefs->remove('sn_timediff');
 	
@@ -187,7 +215,7 @@ sub _init_error {
 	
 	my $retry = 300 * ( $count + 1 );
 	
-	$log->error( "mysqueezebox.com sync init failed: $error, will retry in $retry" );
+	$log->error( sprintf("mysqueezebox.com sync init failed: $error, will retry in $retry (%s)", $http->url) );
 	
 	Slim::Utils::Timers::setTimer(
 		undef,
@@ -286,7 +314,7 @@ sub login {
 		return $params{ecb}->( undef, $error );
 	}
 	
-	main::INFOLOG && $log->is_info && $log->info("Logging in to " . $_Servers->{sn} . " as $username");
+	main::INFOLOG && $log->is_info && $log->info("Logging in to " . $class->get_server('sn') . " as $username");
 	
 	my $self = $class->new(
 		\&_login_done,
@@ -444,7 +472,11 @@ sub _error {
 	my ( $self, $error ) = @_;
 	my $params = $self->params('params');
 	
-	$log->error( "Unable to login to SN: $error" );
+	my $proxy = $prefs->get('webproxy'); 
+
+	$log->error( "Unable to login to SN: $error" 
+		. ($proxy ? sprintf(" - please check your proxy configuration (%s)", $proxy) : '')
+	); 
 	
 	$prefs->remove('sn_session');
 	

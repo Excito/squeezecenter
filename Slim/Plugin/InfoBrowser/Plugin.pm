@@ -2,7 +2,7 @@ package Slim::Plugin::InfoBrowser::Plugin;
 
 # InfoBrowser - an extensible information parser for Squeezebox Server 7.0
 #
-# $Id: Plugin.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Plugin.pm 30040 2010-02-05 19:58:44Z andy $
 #
 # InfoBrowser provides a framework to use Squeezebox Server's xmlbrowser to fetch remote content and convert it into a format
 # which can be displayed via the Squeezebox Server web interface, cli for jive or another cli client or via the player display.
@@ -58,7 +58,7 @@ my $log = Slim::Utils::Log->addLogCategory({
 	'description'  => getDisplayName(),
 });
 
-if ( !main::SLIM_SERVICE && !$::noweb ) {
+if ( main::WEBUI ) {
  	require Slim::Plugin::InfoBrowser::Settings;
 }
 
@@ -71,7 +71,7 @@ my @searchDirs; # search directories for menu opml files
 sub initPlugin {
 	my $class = shift;
 
-	if ( !main::SLIM_SERVICE && !$::noweb ) {
+	if ( main::WEBUI ) {
 		Slim::Plugin::InfoBrowser::Settings->new($class);
 	}
 

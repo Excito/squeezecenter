@@ -1,6 +1,6 @@
 package Slim::Player::Squeezebox2;
 
-# $Id: Squeezebox2.pm 28411 2009-09-02 10:39:48Z michael $
+# $Id: Squeezebox2.pm 30260 2010-02-26 08:42:31Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -78,8 +78,16 @@ sub maxTreble { 50 };
 sub minTreble { 50 };
 sub maxPitch { 100 };
 sub minPitch { 100 };
-sub maxTransitionInterval { 10 };
+sub maxTransitionDuration { 10 };
 sub canDecodeRhapsody { 1 };
+sub hasPreAmp { 1 };
+sub hasDisableDac { 1 };
+sub hasServ { 1 }; 
+
+# SN only, this checks that the player's firmware version supports compression
+sub hasCompression {
+	return shift->revision >= 80;
+}
 
 sub model {
 	my $client       = shift;
@@ -95,6 +103,16 @@ sub model {
 	}
 
 	return 'squeezebox2';
+}
+
+sub modelName {
+	my $client = shift;
+	
+	if ($client->model(1) eq 'squeezebox3') {
+		return 'Squeezebox Classic';
+	}
+
+	return 'Squeezebox2';
 }
 
 # in order of preference based on whether we're connected via wired or wireless...
@@ -251,7 +269,8 @@ sub volume {
 		my $oldGain = $volume_map[int($volume)];
 		
 		my $newGain;
-		if ($volume == 0) {
+		# Negative volume = muting
+		if ($volume <= 0) {
 			$newGain = 0;
 		}
 		else {
@@ -337,9 +356,6 @@ sub upgradeFirmware {
 	}
 }
 
-sub maxTransitionDuration {
-	return 10;
-}
 
 sub requestStatus {
 	shift->stream('t');
@@ -356,6 +372,7 @@ sub flush {
 sub play {
 	my $client = shift;
 	$client->streamBytes(0);
+	$client->closeStream();			# Bug 15477: always use a new stream
 	return $client->SUPER::play(@_);
 }
 
@@ -427,8 +444,16 @@ sub directHeaders {
 	my $controller = $client->controller()->songStreamController();
 	my $handler    = $controller ? $controller->protocolHandler() : undef;
 	
-	if ($handler && $handler->can('handlesStreamHeaders')) {
-		$handler->handlesStreamHeaders($client);
+	if ($handler) {
+
+		if ($handler->can('handlesStreamHeaders')) {
+			$handler->handlesStreamHeaders($client);
+		}
+
+		if ($handler->can('handlesStreamHeadersFully')) {
+			$handler->handlesStreamHeadersFully($client, $headers);
+			return;
+		}
 	}
 
 	unless ($controller && $controller->isDirect()) {return;}
@@ -507,6 +532,10 @@ sub directHeaders {
 				($title, $bitrate, $metaint, $redir, $contentType, $length, $body) = $handler->parseDirectHeaders($client, $url, @headers);
 			}
 
+			$controller->song()->isLive($length ? 0 : 1) if !$redir;
+			# XXX maybe should (also) check $song->scanData()->{$url}->{metadata}->{info}->{broadcast}
+			# for WMA streams here.
+			
 			# update bitrate, content-type title for this URL...
 			Slim::Music::Info::setContentType($url, $contentType) if $contentType;
 			Slim::Music::Info::setBitrate($url, $bitrate) if $bitrate;
@@ -747,15 +776,9 @@ sub directMetadata {
 	# Will also get called for proxy streaming
 	# unless ($controller && $controller->isDirect()) {return;}
 
-	my $url = $controller->streamUrl();
-	
-	my $type = Slim::Music::Info::contentType($url);
-	
-	if ( $type eq 'wma' ) {
-		$controller->song()->currentTrackHandler()->parseMetadata( $client, $controller->song(), $metadata );
-	}
-	else {
-		Slim::Player::Protocols::HTTP->parseMetadata( $client, Slim::Player::Playlist::url($client), $metadata );
+	my $handler = $controller->song()->currentTrackHandler();
+	if ( $handler->can('parseMetadata') ) {
+		$handler->parseMetadata( $client, $controller->song(), $metadata );
 	}
 	
 	# new song, so reset counters
@@ -825,22 +848,6 @@ sub canDoReplayGain {
 	return 0;
 }
 
-sub hasPreAmp {
-	return 1;
-}
-
-sub hasDisableDac() {
-	return 1;
-}
-
-sub hasServ {
-	return 1;
-}
-
-# SN only, this checks that the player's firmware version supports compression
-sub hasCompression {
-	return shift->revision >= 80;
-}
 
 sub audio_outputs_enable { 
 	my $client = shift;

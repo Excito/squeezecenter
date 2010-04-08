@@ -150,7 +150,9 @@ sub connected {
 
 sub closeStream {
 	if ( !main::SLIM_SERVICE ) {
-		Slim::Web::HTTP::forgetClient(shift);
+		my $client = shift;
+		Slim::Web::HTTP::forgetClient($client);
+		@{$client->chunks} = (); # Bug 15477: flush old data
 	}
 }
 
@@ -548,8 +550,10 @@ sub opened {
 #	u8_t spdif_enable;	// [1]  '0' = auto, '1' = on, '2' = off
 #	u8_t transition_period;	// [1]	seconds over which transition should happen
 #	u8_t transition_type;	// [1]	'0' = none, '1' = crossfade, '2' = fade in, '3' = fade out, '4' fade in & fade out
-#	u8_t flags;		// [1]	0x80 - loop infinitely
-#                               //      0x40 - stream without restarting decoder
+#	u8_t flags;	// [1]	0x80 - loop infinitely
+#               //      0x40 - stream without restarting decoder
+#               //  0x20 - Rtmp (SqueezePlay only)
+#               //  0x10 - SqueezePlay direct protocol handler - pass direct to SqueezePlay
 #				//	0x01 - polarity inversion left
 #				//	0x02 - polarity inversion right
 #	u8_t output_threshold;	// [1]	Amount of output buffer data before playback starts in tenths of second.
@@ -586,14 +590,7 @@ sub stream_s {
 	# autostart off when pausing, otherwise 75%
 	my $autostart = $params->{'paused'} ? 0 : 1;
 
-	my $bufferThreshold;
-
-	if ($params->{'paused'}) {
-		$bufferThreshold = $params->{bufferThreshold} || $prefs->client($client)->get('syncBufferThreshold');
-	}
-	else {
-		$bufferThreshold = $params->{bufferThreshold} || $prefs->client($client)->get('bufferThreshold');
-	}
+	my $bufferThreshold = $params->{bufferThreshold} || $prefs->client($client)->get('bufferThreshold');
 	
 	my $formatbyte;
 	my $pcmsamplesize;
@@ -723,16 +720,26 @@ sub stream_s {
 		# '4' (rawpkts), '5' (mp4ff), '6' (latm within rawpkts)
 		#
 		# This is a hack that assumes:
-		# (1) If the original content-type of the track is MP4 then we are streaming an MP4 file (without any transcoding);
+		# (1) If the original content-type of the track is MP4 or SLS then we are streaming an MP4 file (without any transcoding);
 		# (2) All other AAC streams will be adts.
 		
-		$pcmsamplesize   = Slim::Music::Info::contentType($track) eq 'mp4' ? '5' : '2';
+		$pcmsamplesize   = Slim::Music::Info::contentType($track) =~ /^(?:mp4|sls)$/ ? '5' : '2';
 		
 		$pcmsamplerate   = '?';
 		$pcmendian       = '?';
 		$pcmchannels     = '?';
 		$outputThreshold = 0;
 
+	} elsif ($format eq 'spdr') {
+
+		# Format handled by squeezeplay to allow custom squeezeplay protocol handlers
+		$formatbyte      = 's';
+		$pcmsamplesize   = '?';
+		$pcmsamplerate   = '?';
+		$pcmendian       = '?';
+		$pcmchannels     = '?';
+		$outputThreshold = 1;
+		
 	} else {
 
 		# assume MP3
@@ -761,8 +768,15 @@ sub stream_s {
 	# When streaming a new song, we reset the buffer fullness value so buffering()
 	# doesn't get an outdated fullness result
 	Slim::Networking::Slimproto::fullness( $client, 0 );
-			
-	if ($isDirect) {
+	
+	if ($format eq 'spdr') {
+
+		main::INFOLOG && logger('player.streaming.direct')->info("SqueezePlay direct stream: $url");
+
+		$request_string = $handler->requestString($client, $url, undef, $params->{'seekdata'});  
+		$autostart += 2; # will be 2 for direct streaming with no autostart, or 3 for direct with autostart
+
+	} elsif ($isDirect) {
 
 		# Logger for direct streaming
 		my $log = logger('player.streaming.direct');
@@ -781,7 +795,7 @@ sub stream_s {
 		}
 		
 		if ( $proxy ) {
-			my ($pserver, $pport) = split /:/, $proxy;
+			my ($pserver, $pport) = split (/:/, $proxy);
 			$server = $pserver;
 			$port   = $pport;
 		}
@@ -858,8 +872,12 @@ sub stream_s {
 	my $flags = 0;
 	$flags |= 0x40 if $params->{reconnect};
 	$flags |= 0x80 if $params->{loop};
-	$flags |= ($prefs->client($client)->get('polarityInversion') || 0);
-		
+	$flags |= 0x03 & ($prefs->client($client)->get('polarityInversion') || 0);
+
+	if ($handler->can('slimprotoFlags')) {
+		$flags |= $handler->slimprotoFlags($client, $url, $isDirect);
+	}
+
 	my $replayGain = $client->canDoReplayGain($params->{replay_gain});
 		
 	# Reduce buffer threshold if a file is really small

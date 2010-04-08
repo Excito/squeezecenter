@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::File;
 
-# $Id: File.pm 28947 2009-10-20 14:46:15Z andy $
+# $Id: File.pm 28949 2009-10-20 14:47:37Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or

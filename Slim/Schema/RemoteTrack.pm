@@ -1,6 +1,6 @@
 package Slim::Schema::RemoteTrack;
 
-# $Id: RemoteTrack.pm 28822 2009-10-12 19:47:16Z andy $
+# $Id: RemoteTrack.pm 28826 2009-10-12 23:44:49Z andy $
 
 # This is an emulation of the Slim::Schema::Track API for remote tracks
 

@@ -34,6 +34,7 @@ use constant PERFMON       => 0;
 use constant DEBUGLOG      => ( grep { /--no(?:debug|info)log/ } @ARGV ) ? 0 : 1;
 use constant INFOLOG       => ( grep { /--noinfolog/ } @ARGV ) ? 0 : 1;
 use constant SB1SLIMP3SYNC => 0;
+use constant WEBUI         => 0;
 use constant ISWINDOWS     => ( $^O =~ /^m?s?win/i ) ? 1 : 0;
 use constant ISMAC         => ( $^O =~ /darwin/i ) ? 1 : 0;
 
@@ -162,6 +163,7 @@ use Slim::Menu::GenreInfo;
 use Slim::Menu::YearInfo;
 use Slim::Menu::SystemInfo;
 use Slim::Menu::PlaylistInfo;
+use Slim::Menu::GlobalSearch;
 use Slim::Music::Info;
 #use Slim::Music::Import;
 #use Slim::Music::MusicFolderScan;
@@ -220,7 +222,7 @@ our @AUTHORS = (
 );
 my $prefs        = preferences('server');
 
-our $VERSION     = '7.4.1-sn';
+our $VERSION     = '7.5.0-sn';
 our $REVISION    = undef;
 our $audiodir    = undef;
 our $playlistdir = undef;
@@ -391,6 +393,7 @@ sub init {
 	Slim::Menu::YearInfo->init();
 	Slim::Menu::SystemInfo->init();
 	Slim::Menu::PlaylistInfo->init();
+	Slim::Menu::GlobalSearch->init();
 	
 	main::INFOLOG && $log->info('Squeezebox Server Alarms init...');
 	Slim::Utils::Alarm->init();

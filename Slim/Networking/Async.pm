@@ -1,6 +1,6 @@
 package Slim::Networking::Async;
 
-# $Id: Async.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Async.pm 30042 2010-02-05 21:09:36Z andy $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -14,7 +14,6 @@ use strict;
 
 use base qw(Slim::Utils::Accessor);
 
-use Net::IP;
 use Scalar::Util qw(blessed weaken);
 use Socket qw(inet_ntoa);
 
@@ -47,7 +46,7 @@ sub open {
 	$args->{Timeout} ||= preferences('server')->get('remotestreamtimeout') || 10;
 
 	# Skip async DNS if we know the IP address or are using a proxy (skipDNS)
-	if ( $args->{skipDNS} || $args->{PeerAddr} || Net::IP::ip_is_ipv4( $args->{Host} ) ) {
+	if ( $args->{skipDNS} || $args->{PeerAddr} || Slim::Utils::Network::ip_is_ipv4( $args->{Host} ) ) {
 		
 		# If caller only wanted to lookup the DNS, callback now
 		if ( my $onDNS = $args->{onDNS} ) {

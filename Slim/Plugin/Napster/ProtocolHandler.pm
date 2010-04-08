@@ -1,6 +1,6 @@
 package Slim::Plugin::Napster::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 28837 2009-10-13 16:48:40Z andy $
+# $Id: ProtocolHandler.pm 28991 2009-10-23 14:46:48Z ayoung $
 
 # Napster handler for napster:// URLs.
 
@@ -423,7 +423,7 @@ sub getMetadataFor {
 		# Go fetch metadata for all tracks on the playlist without metadata
 		my @need;
 		
-		for my $track ( @{ $client->playlist } ) {
+		for my $track ( @{ Slim::Player::Playlist::playList($client) } ) {
 			my $trackURL = blessed($track) ? $track->url : $track;
 			if ( $trackURL =~ m{napster://(.+)\.wma} ) {
 				my $id = $1;

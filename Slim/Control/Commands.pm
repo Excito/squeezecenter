@@ -30,7 +30,6 @@ use strict;
 use Scalar::Util qw(blessed);
 use File::Spec::Functions qw(catfile);
 use File::Basename qw(basename);
-use Net::IP;
 use Digest::SHA1 qw(sha1_base64);
 use JSON::XS::VersionOneAndTwo;
 
@@ -276,13 +275,12 @@ sub clientConnectCommand {
 			# Squeezebox Server (used on SN)
 		}
 		else {
-			my $ip = Net::IP->new($host);
-			if ( !defined $ip ) {
+			$host = Slim::Utils::Network::intip($host);
+			
+			if ( !$host ) {
 				$request->setStatusBadParams();
 				return;
 			}
-			
-			$host = $ip->intip;
 		}
 		
 		if ($client->controller()->allPlayers() > 1) {
@@ -295,15 +293,17 @@ sub clientConnectCommand {
 		$client->execute([ 'stop' ]);
 		
 		foreach ($client->controller()->allPlayers()) {
-		
-			$_->sendFrame( serv => \$packed );
 			
-			if ( main::SLIM_SERVICE ) {
-				# Bug 7973, forget client immediately
-				$_->forgetClient;
-			}
-			else {
-				$_->execute([ 'client', 'forget' ]);
+			if ($_->hasServ()) {
+
+				$_->sendFrame( serv => \$packed );
+				
+				# Give player time to disconnect
+				Slim::Utils::Timers::setTimer($_, time() + 3,
+					sub { shift->execute([ 'client', 'forget' ]); }
+				);
+			} else {
+				$log->warn('Cannot switch player to new server as player not capable: ', $_->id());
 			}
 		}
 	}
@@ -798,8 +798,6 @@ sub playlistDeleteCommand {
 		return;
 	}
 
-	my $song = Slim::Player::Playlist::song($client, $index);
-
 	Slim::Player::Playlist::removeTrack($client, $index);
 
 	$client->currentPlaylistModified(1);
@@ -1088,7 +1086,7 @@ sub playlistSaveCommand {
 	if ($prefs->get('saveShuffled')) {
 
 		for my $shuffleitem (@{Slim::Player::Playlist::shuffleList($client)}) {
-			push @$annotatedList, @{Slim::Player::Playlist::playList($client)}[$shuffleitem];
+			push @$annotatedList, Slim::Player::Playlist::song($client, $shuffleitem, 0, 0);
 		}
 				
 	} else {
@@ -1338,6 +1336,37 @@ sub playlistXitemCommand {
 	}
 
 	main::INFOLOG && $log->info("path: $path");
+	
+	# bug 14760 - just continue where we already were if what we are about to play is the
+	# same as the single thing we are already playing
+	if ( $cmd =~ /^(play|load)$/
+		&& Slim::Player::Playlist::count($client) == 1
+		&& $client->playingSong()	
+		&& $path eq $client->playingSong()->track()->url() )
+	{
+		if ( Slim::Player::Source::playmode($client) eq 'pause' ) {
+			Slim::Player::Source::playmode($client, 'resume');
+		} elsif ( Slim::Player::Source::playmode($client) ne 'play' ) {
+			Slim::Player::Source::playmode($client, 'play');
+		}
+		
+		# XXX: this should not be calling a request callback directly!
+		# It should be handled by $request->setStatusDone
+		if ( my $callbackf = $request->callbackFunction ) {
+			if ( my $callbackargs = $request->callbackArguments ) {
+				$callbackf->( @{$callbackargs} );
+			}
+			else {
+				$callbackf->( $request );
+			}
+		}
+		
+		playlistXitemCommand_done($client, $request, $path);
+		
+		main::DEBUGLOG && $log->debug("done.");
+		
+		return;
+	}
 
 	if ($cmd =~ /^(play|load|resume)$/) {
 
@@ -1387,10 +1416,7 @@ sub playlistXitemCommand {
 
 	if ($cmd =~ /^(insert|insertlist)$/) {
 
-		my $playListSize = Slim::Player::Playlist::count($client);
 		my @dirItems     = ();
-
-		main::INFOLOG && $log->info("inserting, playListSize: $playListSize");
 
 		Slim::Utils::Scanner->scanPathOrURL({
 			'url'      => $path,
@@ -1399,12 +1425,11 @@ sub playlistXitemCommand {
 			'callback' => sub {
 				my $foundItems = shift;
 
-				push @{ Slim::Player::Playlist::playList($client) }, @{$foundItems};
+				my $added = Slim::Player::Playlist::addTracks($client, $foundItems, 1);
 
 				_insert_done(
 					$client,
-					$playListSize,
-					scalar @{$foundItems},
+					$added,
 					$request->callbackFunction,
 					$request->callbackArguments,
 				);
@@ -1467,13 +1492,13 @@ sub playlistXitemCommand {
 					$noShuffle = 1;
 				}
 
-				push @{ Slim::Player::Playlist::playList($client) }, @{$foundItems};
+				Slim::Player::Playlist::addTracks($client, $foundItems, 0);
 
 				_playlistXitem_load_done(
 					$client,
 					$jumpToIndex,
 					$request,
-					scalar @{Slim::Player::Playlist::playList($client)},
+					Slim::Player::Playlist::count($client),
 					$path,
 					$error,
 					$noShuffle,
@@ -1524,11 +1549,12 @@ sub playlistXtracksCommand {
 	}
 
 	# get the parameters
-	my $client   = $request->client();
-	my $cmd      = $request->getRequest(1); #p1
-	my $what     = $request->getParam('_what'); #p2
-	my $listref  = $request->getParam('_listref');#p3
-	my $fadeIn   = $request->getParam('_fadein');#p4
+	my $client      = $request->client();
+	my $cmd         = $request->getRequest(1); #p1
+	my $what        = $request->getParam('_what'); #p2
+	my $listref     = $request->getParam('_listref');#p3
+	my $fadeIn      = $request->getParam('_fadein');#p4
+	my $jumpToIndex = $request->getParam('_index');#p5, by default undef - see bug 2085
 
 	my $playlistMode = Slim::Player::Playlist::playlistMode($client);
 
@@ -1536,9 +1562,6 @@ sub playlistXtracksCommand {
 		$request->setStatusBadParams();
 		return;
 	}
-
-	# This should be undef - see bug 2085
-	my $jumpToIndex = undef;
 
 	# when playlistmode is on/party, replace 'playlistcontrol load' with 'playlistcontrol insert'
 	if ( ($playlistMode eq 'on' || $playlistMode eq 'party') && $cmd eq 'loadtracks' ) {
@@ -1560,6 +1583,7 @@ sub playlistXtracksCommand {
 
 	if ($what =~ /urllist/i) {
 		@tracks = _playlistXtracksCommand_constructTrackList($client, $what, $listref);
+		
 	} elsif ($what =~ /listRef/i) {
 		@tracks = _playlistXtracksCommand_parseListRef($client, $what, $listref);
 
@@ -1572,16 +1596,15 @@ sub playlistXtracksCommand {
 		@tracks = _playlistXtracksCommand_parseSearchTerms($client, $what);
 	}
 
-	my $size  = scalar(@tracks);
-	my $playListSize = Slim::Player::Playlist::count($client);
+	my $size;
 
 	# add or remove the found songs
 	if ($load || $add || $insert) {
-		push(@{Slim::Player::Playlist::playList($client)}, @tracks);
+		$size = Slim::Player::Playlist::addTracks($client, \@tracks, $insert);
 	}
 
 	if ($insert) {
-		_insert_done($client, $playListSize, $size);
+		_insert_done($client, $size);
 		if ( ($playlistMode eq 'on' || $playlistMode eq 'party') ) {
 			if ( Slim::Player::Source::playmode($client) ne 'play' ) {
 				Slim::Player::Source::playmode($client, 'play');
@@ -1596,7 +1619,7 @@ sub playlistXtracksCommand {
 
 	if ($load || $add) {
 		Slim::Player::Playlist::reshuffle($client, $load ? 1 : undef);
-		$request->addResult(index => $playListSize);	# does not mean much if shuffled
+		$request->addResult(index => (Slim::Player::Playlist::count($client) - $size));	# does not mean much if shuffled
 	}
 
 	if ($load) {
@@ -1606,7 +1629,7 @@ sub playlistXtracksCommand {
 
 		if ($playlistObj && ref($playlistObj) && $playlistObj->content_type =~ /^(?:ssp|m3u)$/) {
 
-			if (!Slim::Player::Playlist::shuffle($client)) {
+			if (!defined $jumpToIndex && !Slim::Player::Playlist::shuffle($client)) {
 				$jumpToIndex = Slim::Formats::Playlists::M3U->readCurTrackForM3U( $client->currentPlaylist->path );
 			}
 
@@ -1760,15 +1783,17 @@ sub playlistcontrolCommand {
 			} elsif ($insert) {
 				$token = 'JIVE_POPUP_ADDING_TO_PLAY_NEXT';
 			} else {
-				$token = 'JIVE_POPUP_NOW_PLAYING';
+				$token = undef;
 			}
-			my $string = $client->string($token, $folder->title);
-			$client->showBriefly({ 
-				'jive' => { 
-					'type'    => 'popupplay',
-					'text'    => [ $string ],
-				}
-			});
+			if ( defined($token) ) {
+				my $string = $client->string($token, $folder->title);
+				$client->showBriefly({ 
+					'jive' => { 
+						'type'    => 'popupplay',
+						'text'    => [ $string ],
+					}
+				});
+			}
 		} 
 
 		Slim::Control::Request::executeRequest(
@@ -2648,6 +2673,15 @@ sub sleepCommand {
 					'text'    => [ $will_sleep_in_minutes ],
 				}
 			});
+		} else {
+			my $sleepTime = $client->prettySleepTime;
+                	$client->showBriefly( {
+				'jive' =>
+					{
+						'type'    => 'popupplay',
+						'text'    => [ $sleepTime ],
+					},
+			});
 		}
 		
 	} else {
@@ -2905,40 +2939,11 @@ sub _playlistXitem_load_done {
 
 
 sub _insert_done {
-	my ($client, $listsize, $size, $callbackf, $callbackargs) = @_;
-
-	my $playlistIndex = Slim::Player::Source::streamingSongIndex($client)+1;
-	my @reshuffled;
-
-	if (Slim::Player::Playlist::shuffle($client)) {
-
-		for (my $i = 0; $i < $size; $i++) {
-			push @reshuffled, ($listsize + $i);
-		};
-			
-		$client = $client->master();
-		
-		if (Slim::Player::Playlist::count($client) != $size) {	
-			splice @{$client->shufflelist}, $playlistIndex, 0, @reshuffled;
-		}
-		else {
-			push @{$client->shufflelist}, @reshuffled;
-		}
-	} else {
-
-		if (Slim::Player::Playlist::count($client) != $size) {
-			Slim::Player::Playlist::moveSong($client, $listsize, $playlistIndex, $size);
-		}
-
-		Slim::Player::Playlist::reshuffle($client);
-	}
-
-	Slim::Player::Playlist::refreshPlaylist($client);
+	my ($client, $size, $callbackf, $callbackargs) = @_;
 
 	$callbackf && (&$callbackf(@$callbackargs));
 
 	Slim::Control::Request::notifyFromArray($client, ['playlist', 'load_done']);
-
 }
 
 
@@ -3175,7 +3180,7 @@ sub _playlistXtracksCommand_constructTrackList {
 	my $term    = shift;
 	my $list    = shift;
 	
-	my @list = split /,/, $list;
+	my @list = split (/,/, $list);
 	my @tracks = ();
 	for my $url ( @list ) {
 		my $track = Slim::Schema->objectForUrl($url);
@@ -3199,6 +3204,8 @@ sub _playlistXtracksCommand_parseListRef {
 
 		return @$listRef;
 	}
+
+	return ();
 }
 
 sub _playlistXtracksCommand_parseSearchRef {
@@ -3248,7 +3255,9 @@ sub _playlistXtracksCommand_parseDbItem {
 			if ($term =~ /^(\w+)\.(\w+)=(.*)$/) {
 
 				my $key   = URI::Escape::uri_unescape($2);
-				my $value = Slim::Utils::Unicode::utf8decode( URI::Escape::uri_unescape($3) );
+				my $value = URI::Escape::uri_unescape($3);
+
+				if (!utf8::decode($value)) { $log->warn("The following value is not UTF-8 encoded: $value"); }
 
 				$class = ucfirst($1);
 				$obj   = Slim::Schema->single( $class, { $key => $value } );

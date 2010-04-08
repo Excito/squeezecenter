@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Performance;
 
-# $Id: Performance.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Performance.pm 28991 2009-10-23 14:46:48Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -21,7 +21,7 @@ sub page {
 }
 
 sub prefs {
- 	return (preferences('server'), qw(disableStatistics serverPriority scannerPriority resampleArtwork precacheArtwork) );
+ 	return (preferences('server'), qw(disableStatistics serverPriority scannerPriority resampleArtwork precacheArtwork maxPlaylistLength) );
 }
 
 sub handler {

@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner::Remote;
 
-# $Id: Remote.pm 28759 2009-10-02 19:20:44Z andy $
+# $Id: Remote.pm 30247 2010-02-25 01:22:03Z agrundman $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -105,7 +105,7 @@ sub scanURL {
 	
 	# Make sure it has a title
 	if ( !$track->title ) {
-		$track = Slim::Music::Info::setTitle( $url, $url );
+		$track = Slim::Music::Info::setTitle( $url, $args->{'title'} ? $args->{'title'} : $url );
 	}
 
 	# Check if the protocol handler has a custom scanning method
@@ -209,6 +209,18 @@ sub scanURL {
 	if ( main::SLIM_SERVICE && $url =~ /radiotime/ ) {
 		# Add real client IP for Radiotime so they can do proper geo-location
 		$request->header( 'X-Forwarded-For' => $client->ip );
+	}
+	
+	# If the URL is on SqueezeNetwork, add session headers
+	if ( Slim::Networking::SqueezeNetwork->isSNURL($url) ) {
+		my %snHeaders = Slim::Networking::SqueezeNetwork->getHeaders($client);
+		while ( my ($k, $v) = each %snHeaders ) {
+			$request->header( $k => $v );
+		}
+	
+		if ( my $snCookie = Slim::Networking::SqueezeNetwork->getCookie($client) ) {
+			$request->header( Cookie => $snCookie );
+		}
 	}
 	
 	my $timeout = preferences('server')->get('remotestreamtimeout') || 10;
@@ -344,15 +356,21 @@ sub readRemoteHeaders {
 	if ( $url =~ /(m4a|aac)$/i && $type eq 'mp3' ) {
 		$type = 'mov';
 	}
+
+	# bug 15491 - some radio services are too lazy to correctly configure their servers
+	# thus serve playlists with content-type text/html or text/plain
+	elsif ( $type =~ /(?:htm|txt)/ && $url =~ /\.(asx|m3u|pls|wpl)$/i ) {
+		$type = $1;
+	}
+	
+	# fall back to m3u for html and text
+	elsif ( $type =~ /(?:htm|txt)/ ) {
+		$type = 'm3u';
+	}
 	
 	# Some Shoutcast/Icecast servers don't send content-type
 	if ( !$type && $http->response->header('icy-name') ) {
 		$type = 'mp3';
-	}
-	
-	# Seen some ASX playlists served with text/plain content-type
-	if ( $url =~ /\.asx$/i && $type eq 'txt' ) {
-		$type = 'asx';
 	}
 	
 	if ( main::DEBUGLOG && $log->is_debug ) {
@@ -402,6 +420,8 @@ sub readRemoteHeaders {
 	if ( Slim::Music::Info::isSong( $track, $type ) ) {
 		main::INFOLOG && $log->is_info && $log->info("This URL is an audio stream [$type]: " . $track->url);
 		
+		$track->content_type($type);
+		
 		if ( $type eq 'wma' ) {
 			# WMA streams require extra processing, we must parse the Describe header info
 			
@@ -426,6 +446,8 @@ sub readRemoteHeaders {
 		else {
 			# If URL was mms but content-type is not wma, change URL
 			if ( $track->url =~ /^mms/i ) {
+				main::DEBUGLOG && $log->is_debug && $log->debug("URL was mms:// but content-type is $type, fixing URL to http://");
+				
 				# XXX: may create duplicate track entries
 				my $httpURL = $track->url;
 				$httpURL =~ s/^mms/http/i;
@@ -464,7 +486,7 @@ sub readRemoteHeaders {
 					$bitrate *= 1000;
 				}
 							
-				$track = Slim::Music::Info::setBitrate( $track->url, $bitrate, $vbr );
+				Slim::Music::Info::setBitrate( $track, $bitrate, $vbr );
 				
 				if ( $track->url ne $url ) {
 					Slim::Music::Info::setBitrate( $url, $bitrate, $vbr );
@@ -541,6 +563,7 @@ sub parseWMAHeader {
 	# WMA file is not a live stream
 	my $fh = File::Temp->new();
 	$fh->write( $header, length($header) );
+	$fh->seek(0, 0);
 	
 	my $wma = Audio::Scan->scan_fh( asf => $fh );
 	
@@ -618,7 +641,7 @@ sub parseWMAHeader {
 		}
 		
 		if ( $bitrate ) {
-			$track = Slim::Music::Info::setBitrate( $track->url, $bitrate );
+			Slim::Music::Info::setBitrate( $track, $bitrate );
 		}
 
 		if ( main::DEBUGLOG && $log->is_debug ) {
@@ -631,7 +654,7 @@ sub parseWMAHeader {
 	
 	# Set duration if available (this is not a broadcast stream)
 	if ( my $ms = $wma->{info}->{song_length_ms} ) {	
-		$track= Slim::Music::Info::setDuration( $track->url, int($ms / 1000) );
+		Slim::Music::Info::setDuration( $track, int($ms / 1000) );
 	}
 	
 	# Save this metadata for the MMS protocol handler to use
@@ -723,9 +746,9 @@ sub streamAudioData {
 		}
 		
 		if ( $bitrate > 0 ) {
-			$track = Slim::Music::Info::setBitrate( $track->url, $bitrate, $vbr );
+			Slim::Music::Info::setBitrate( $track, $bitrate, $vbr );
 			if ($cl) {
-				$track = Slim::Music::Info::setDuration( $track->url, ( $cl * 8 ) / $bitrate );
+				Slim::Music::Info::setDuration( $track, ( $cl * 8 ) / $bitrate );
 			}	
 			
 			# Copy bitrate to redirected URL
@@ -824,6 +847,7 @@ sub parsePlaylist {
 			song   => $args->{song},
 			depth  => $args->{depth} + 1,
 			delay  => $delay,
+			title  => (($playlist->title && $playlist->title =~ /^(?:http|mms)/i) ? undef : $playlist->title),
 			cb     => sub {
 				my ( $result, $error ) = @_;
 				
@@ -843,7 +867,7 @@ sub parsePlaylist {
 					
 					# Get the $playlist object again, as it may have changed
 					$playlist = Slim::Schema->objectForUrl( {
-						url => $playlist->url,
+						url      => $playlist->url,
 						playlist => 1,
 					} );
 					

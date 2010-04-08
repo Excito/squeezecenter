@@ -1,6 +1,6 @@
 package Slim::Schema::Track;
 
-# $Id: Track.pm 28507 2009-09-14 14:51:15Z andy $
+# $Id: Track.pm 30145 2010-02-12 18:46:49Z agrundman $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -143,7 +143,7 @@ sub artistName {
 	return undef;
 }
 
-sub artistid {
+sub _artistid {
 	my $self = shift;
 	
 	return if main::SLIM_SERVICE;
@@ -168,12 +168,18 @@ sub artistid {
 	return wantarray ? ($id, $artist) : $id;
 }
 
+sub artistid {
+	my $artistid = shift->_artistid();
+	
+	return $artistid;
+}
+
 sub artist {
 	my $self = shift;
 	
 	return if main::SLIM_SERVICE;
 	
-	my ($id, $artist) = $self->artistid;
+	my ($id, $artist) = $self->_artistid;
 	
 	return $artist;
 }
@@ -437,7 +443,7 @@ sub coverArtMtime {
 sub coverArtExists {
 	my $self = shift;
 
-	return defined($self->cover) ? $self->cover : defined($self->coverArt);
+	return defined($self->cover) ? 1 : defined($self->coverArt);
 }
 
 sub path {

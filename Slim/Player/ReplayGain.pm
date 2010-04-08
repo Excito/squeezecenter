@@ -1,6 +1,6 @@
 package Slim::Player::ReplayGain;
 
-# $Id: ReplayGain.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: ReplayGain.pm 29291 2009-11-17 12:40:50Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -178,7 +178,7 @@ sub trackAlbumMatch {
 sub preventClipping {
 	my ( $gain, $peak ) = @_;
 	
-	if ( $peak > 0 ) {
+	if ( defined $peak && defined $gain && $peak > 0 ) {
 		my $noclip = -20 * ( log($peak) / log(10) );
 		if ( $noclip < $gain ) {
 			return $noclip;

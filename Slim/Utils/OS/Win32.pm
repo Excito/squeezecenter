@@ -227,7 +227,11 @@ sub getFileName {
 	my $path  = shift;
 
 	my $locale = Slim::Utils::Unicode->currentLocale();
-	my $fsObj = Win32::OLE->new('Scripting.FileSystemObject') || die "$@ wtf?!?";
+	my $fsObj;
+	
+	if ($locale ne 'cp1252') {
+		$fsObj = Win32::OLE->new('Scripting.FileSystemObject') or Slim::Utils::Log::logger('database.info')->error("$@ - cannot load Scripting.FileSystemObject?!?");
+	}
 	
 	# display full name if we got a Windows 8.3 file name
 	if ($path =~ /~/) {
@@ -241,13 +245,13 @@ sub getFileName {
 
 	}
 
-	elsif ( $locale ne 'cp2152' && -d $path && (my $folderObj = $fsObj->GetFolder($path)) ) {
+	elsif ( $locale ne 'cp1252' && $fsObj && -d $path && (my $folderObj = $fsObj->GetFolder($path)) ) {
 
 		main::INFOLOG && Slim::Utils::Log::logger('database.info')->info("Running Windows with non-Western codepage, trying to convert folder name: $path -> " . $folderObj->{Name});
 		$path = $folderObj->{Name};
 	}
 
-	elsif ( $locale ne 'cp2152' && -f $path && (my $fileObj = $fsObj->GetFile($path)) ) {
+	elsif ( $locale ne 'cp1252' && $fsObj && -f $path && (my $fileObj = $fsObj->GetFile($path)) ) {
 
 		main::INFOLOG && Slim::Utils::Log::logger('database.info')->info("Running Windows with non-Western codepage, trying to convert file name: $path -> " . $fileObj->{Name});
 		$path = $fileObj->{Name};
@@ -309,8 +313,9 @@ sub ignoredItems {
 	return (
 		# Items we should ignore  on a Windows volume
 		'System Volume Information' => '/',
-		'RECYCLER' => '/',
-		'Recycled' => '/',	
+		'RECYCLER'     => '/',
+		'Recycled'     => '/',
+		'$Recycle.Bin' => '/',	
 	);
 }
 
@@ -626,7 +631,16 @@ Get the current priority of the server.
 =cut
 
 sub getPriority {
+	return _priorityFromPriorityClass( getPriorityClass() );
+}
 
+=head1 getPriorityClass()
+
+Get the current Win32 priority class of the server.
+
+=cut
+
+sub getPriorityClass {
 	Slim::bootstrap::tryModuleLoad('Scalar::Util', 'Win32::API', 'Win32::Process', 'nowarn');
 
 	my $getCurrentProcess = Win32::API->new('kernel32', 'GetCurrentProcess', ['V'], 'N');
@@ -648,8 +662,10 @@ sub getPriority {
 			Slim::Utils::Log->logError("Can't get priority class ($^E) [$@]");
 		}
 
-		return _priorityFromPriorityClass($priorityClass);
+		return $priorityClass;
 	}
+	
+	return;
 }
 
 # Translation between win32 and *nix priorities

@@ -1,6 +1,6 @@
 package Slim::Schema::Playlist;
 
-# $Id: Playlist.pm 28033 2009-08-04 02:03:53Z andy $
+# $Id: Playlist.pm 29870 2010-01-21 19:17:22Z andy $
 
 use strict;
 use base 'Slim::Schema::Track';
@@ -9,6 +9,9 @@ use Slim::Schema::ResultSet::Playlist;
 
 use Scalar::Util qw(blessed);
 use Slim::Utils::Log;
+use Slim::Utils::Prefs;
+
+my $prefs = preferences('server');
 
 {
 	my $class = __PACKAGE__;
@@ -23,8 +26,14 @@ use Slim::Utils::Log;
 
 sub tracks {
 	my $self = shift;
+	
+	my %attributes = (order_by => 'me.position');
+	
+	if (my $maxPlaylistLength = $prefs->get('maxPlaylistLength')) {
+		$attributes{'rows'} = $maxPlaylistLength;
+	}
 
-	return $self->playlist_tracks(undef, { order_by => 'me.position'});
+	return $self->playlist_tracks(undef, \%attributes);
 }
 
 sub setTracks {
@@ -130,7 +139,7 @@ sub _addTracksToPlaylist {
 }
 
 # Return the next audio URL from a remote playlist
-# XXX probably obsolete
+# XXX probably obsolete, see RemotePlaylist
 sub getNextEntry {
 	my ( $self, $args ) = @_;
 	

@@ -1,6 +1,6 @@
 package Slim::Formats::MP3;
 
-# $Id: MP3.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: MP3.pm 30354 2010-03-09 16:55:53Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -91,6 +91,7 @@ my %tagMapping = (
 	'TST ' => "TITLESORT",     # broken iTunes tag
 	TSO2 => "ALBUMARTISTSORT",
 	YTS2 => "ALBUMARTISTSORT", # non-standard iTunes tag
+	TSOC => "COMPOSERSORT",
 	YTSC => "COMPOSERSORT",    # non-standard iTunes tag
 	YRVA => "RVAD",
 	UFID => "MUSICBRAINZ_ID",
@@ -128,7 +129,7 @@ sub getTag {
 	# Map info into tags
 	$tags->{TAGVERSION} = $info->{id3_version};
 	$tags->{OFFSET}     = $info->{audio_offset};
-	$tags->{SIZE}       = $info->{audio_offset} + $info->{audio_size}; # XXX: not really correct, leaves off id3v1 size
+	$tags->{SIZE}       = $info->{audio_size};
 	$tags->{SECS}       = $info->{song_length_ms} / 1000;
 	$tags->{BITRATE}    = $info->{bitrate};
 	$tags->{STEREO}     = $info->{stereo};
@@ -186,6 +187,12 @@ sub getInitialAudioBlock {
 	# Find the location of the next frame past the audio offset
 	my $second_frame = Audio::Scan->find_frame_fh( mp3 => $localFh, $track->audio_offset + 1 );
 	
+	# If unable to find the second frame for some reason, $second_frame will be -1
+	# We'll check for less than audio_offset to be safe although this should never happen
+	if ( $second_frame < $track->audio_offset ) {
+		return '';
+	}
+	
 	seek $localFh, $track->audio_offset, 0;
 	
 	read $localFh, my $buffer, $second_frame - $track->audio_offset;
@@ -226,6 +233,8 @@ sub scanBitrate {
 	my ( $class, $fh, $url ) = @_;
 	
 	# Scan the header for info/tags
+	seek $fh, 0, 0;
+	
 	my $s = Audio::Scan->scan_fh( mp3 => $fh );
 	
 	my $info = $s->{info};
@@ -290,7 +299,7 @@ sub scanBitrate {
 }
 
 sub doTagMapping {
-	my ( $class, $tags ) = @_;
+	my ( $class, $tags, $no_overwrite ) = @_;
 	
 	# Bug 8001, remap TPE2 if user wants it to mean Album Artist
 	# XXX: move this out to another function, no need to call it on every tag scan
@@ -303,6 +312,10 @@ sub doTagMapping {
 	
 	while ( my ($old, $new) = each %tagMapping ) {
 		if ( exists $tags->{$old} ) {
+			# Caller can set $no_overwrite if ID3 tags should not replace
+			# existing tags, i.e. FLAC tags
+			next if $no_overwrite && exists $tags->{$new};
+				
 			$tags->{$new} = delete $tags->{$old};
 		}
 	}
@@ -388,11 +401,22 @@ sub doTagMapping {
 		
 		if ( ref $tags->{COMMENT}->[0] eq 'ARRAY' ) {
 			for my $comment ( @{ $tags->{COMMENT} } ) {
-				push @{$fixed}, ( $comment->[2] || '' ) . $comment->[3];
+				if ( $comment->[2] ) {
+					# Comment has a description
+					push @{$fixed}, $comment->[2] . ': ' . $comment->[3];
+				}
+				else {
+					push @{$fixed}, $comment->[3];
+				}
 			}
 		}
 		else {
-			push @{$fixed}, ( $tags->{COMMENT}->[2] || '' ) . $tags->{COMMENT}->[3];
+			if ( $tags->{COMMENT}->[2] ) {
+				push @{$fixed}, $tags->{COMMENT}->[2] . ': ' . $tags->{COMMENT}->[3];
+			}
+			else {
+				push @{$fixed}, $tags->{COMMENT}->[3];
+			}
 		}
 		
 		$tags->{COMMENT} = $fixed;

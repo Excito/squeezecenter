@@ -31,6 +31,7 @@ use Fcntl qw(:seek);
 use File::Basename;
 use MIME::Base64 qw(decode_base64);
 
+use Slim::Formats::MP3;
 use Slim::Formats::Playlists::CUE;
 use Slim::Schema::Contributor;
 use Slim::Utils::Log;
@@ -90,7 +91,7 @@ sub getTag {
 	
 	my $s = Audio::Scan->scan($file);
 	
-	return unless $s->{info}->{song_length_ms};
+	return unless $s->{info}->{samplerate};
 	
 	my $tags = $class->_getStandardTag($s);
 	
@@ -125,9 +126,12 @@ sub getTag {
 
 	$tags->{FILENAME} = $file;
 
+	# Bug 14386, $file is raw UTF-8, need to decode it here
+	utf8::decode($file);
+
 	# get the tracks from the cuesheet - tell parseCUE that we're dealing
-	# with an embedded cue sheet.
-	my $tracks = Slim::Formats::Playlists::CUE->parse($cuesheet, dirname($file), 1);
+	# with an embedded cue sheet by passing in the filename
+	my $tracks = Slim::Formats::Playlists::CUE->parse($cuesheet, dirname($file), $file);
 	
 	# Fail if bad cuesheet was found
 	if ( !$tracks || !scalar keys %{$tracks} ) {
@@ -212,11 +216,8 @@ sub _getStandardTag {
 
 	my $tags = $s->{tags} || {};
 
-	# Note: We used to read ID3v2 tags in FLAC here,
-	# but this is no longer supported.
-
-	$class->_doTagMapping($tags);
 	$class->_addInfoTags($s, $tags);
+	$class->_doTagMapping($tags);
 	$class->_addArtworkTags($s, $tags);
 
 	return $tags;
@@ -224,6 +225,12 @@ sub _getStandardTag {
 
 sub _doTagMapping {
 	my ($class, $tags) = @_;
+	
+	# Map ID3 tags first, so FLAC tags win out
+	if ( $tags->{TAGVERSION} ) {
+		# Tell MP3 tag mapper to not overwrite existing tags
+		Slim::Formats::MP3->doTagMapping( $tags, 1 );
+	}
 
 	# map the existing tag names to the expected tag names
 	while ( my ($old, $new) = each %tagMapping ) {
@@ -254,6 +261,11 @@ sub _addInfoTags {
 	$tags->{SAMPLESIZE} = $info->{bits_per_sample};
 	$tags->{CHANNELS}   = $info->{channels};
 	$tags->{LOSSLESS}   = 1;
+	
+	# Map ID3 tags if file has them
+	if ( $info->{id3_version} ) {
+		$tags->{TAGVERSION} = 'FLAC, ' . $info->{id3_version};
+	}
 }
 
 sub _addArtworkTags {
@@ -894,6 +906,8 @@ so we use this to set the track duaration value.
 
 sub scanBitrate {
 	my ( $class, $fh, $url ) = @_;
+	
+	seek $fh, 0, 0;
 	
 	my $s = Audio::Scan->scan_fh( flac => $fh );
 	

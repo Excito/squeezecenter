@@ -93,7 +93,7 @@
 			<div id="header_content">
 				<span><a href="[% webroot %]"><img src="[% webroot %]html/images/spacer.gif" id="squeezeboxLogo"></a></span>
 				<span id="playerChooser"></span>
-				<span><a href="http://www.slimdevices.com" target="_blank"><img src="[% webroot %]html/images/spacer.gif" id="logitechLogo"></a></span>
+				<span><a href="http://www.logitech.com" target="_blank"><img src="[% webroot %]html/images/spacer.gif" id="logitechLogo"></a></span>
 			</div>
 		</div>
 
@@ -174,6 +174,12 @@
 						[% IF newVersion %]
 							<span id="newVersion">
 								<img src="[% webroot %]html/images/btn_info.gif"/> [% newVersion %]
+							</span>
+						[% END %]
+
+						[% IF newPlugins %]
+							<span id="newPlugins">
+								<img src="[% webroot %]html/images/btn_info.gif"/> <a href="[% webroot %]settings/index.html?activePage=SETUP_PLUGINS" target="sc_settings">[% newPlugins %]</a>
 							</span>
 						[% END %]
 

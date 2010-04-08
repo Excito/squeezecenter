@@ -1,6 +1,6 @@
 package Slim::Schema;
 
-# $Id: Schema.pm 28391 2009-08-31 18:11:58Z andy $
+# $Id: Schema.pm 30292 2010-03-02 10:59:00Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -40,7 +40,6 @@ use Tie::Cache::LRU::Expires;
 use URI;
 
 use Slim::Formats;
-use Slim::Networking::SimpleAsyncHTTP;
 use Slim::Player::ProtocolHandlers;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
@@ -226,7 +225,7 @@ sub init {
 		my $text = File::Slurp::read_file( "$FindBin::Bin/SQL/slimservice/slimservice-sqlite.sql" );
 		
 		$text =~ s/\s*--.*$//g;
-		for my $sql ( split /;/, $text ) {
+		for my $sql ( split (/;/, $text) ) {
 			next unless $sql =~ /\w/;
 			$dbh->do($sql);
 		}
@@ -668,6 +667,13 @@ database if we can get a simple file extension match.
 sub contentType {
 	my ($self, $urlOrObj) = @_;
 
+	# Bug 15779 - if we have it in the cache then just use it
+	# This does not even check that $urlOrObj is actually a URL
+	# but there should be no practical chance of a key-space clash if it is not.
+	if (defined $contentTypeCache{$urlOrObj}) {
+		return $contentTypeCache{$urlOrObj};
+	}
+
 	my $defaultType = 'unk';
 	my $contentType = $defaultType;
 
@@ -679,7 +685,7 @@ sub contentType {
 		return $defaultType;
 	}
 
-	# Cache hit - return immediately.
+	# Try again for a cache hit - return immediately.
 	if (defined $contentTypeCache{$url}) {
 		return $contentTypeCache{$url};
 	}
@@ -778,6 +784,7 @@ sub objectForUrl {
 	my $commit     = 0;
 	my $playlist   = 0;
 	my $checkMTime = 1;
+	my $playlistId;
 
 	if (@_) {
 
@@ -793,6 +800,7 @@ sub objectForUrl {
 		$commit     = $args->{'commit'};
 		$playlist   = $args->{'playlist'};
 		$checkMTime = $args->{'checkMTime'} if defined $args->{'checkMTime'};
+		$playlistId = $args->{'playlistId'};
 	}
 
 	# Confirm that the URL itself isn't an object (see bug 1811)
@@ -816,9 +824,21 @@ sub objectForUrl {
 
 	# Pull the track object for the DB
 	my $track = $self->_retrieveTrack($url, $playlist);
+	
+	# Bug 14648: Check to see if we have a playlist with remote tracks
+	if (!$track && defined $playlistId && Slim::Music::Info::isRemoteURL($url)) {
+
+		if (my $playlistObj = $self->find('Playlist', $playlistId)) {
+			# Parse the playlist file to cause the RemoteTrack objects to be created
+			Slim::Formats::Playlists->parseList($playlistObj->url);
+			
+			# try again
+			$track = $self->_retrieveTrack($url, $playlist);
+		}
+	}
 
 	# _retrieveTrack will always return undef or a track object
-	if ($track && $checkMTime && !$create && !$playlist) {
+	elsif ($track && $checkMTime && !$create && !$playlist) {
 		$track = $self->_checkValidity($track);
 	}
 
@@ -1406,6 +1426,8 @@ Returns the total (cumulative) time in seconds of all audio tracks in the databa
 sub totalTime {
 	my $self = shift;
 
+	return 0 unless $self->trackCount();
+
 	# Pull out the total time dynamically.
 	# What a breath of fresh air. :)
 	return $self->search('Track', { 'audio' => 1 }, {
@@ -1888,7 +1910,7 @@ sub _hasChanged {
 				}
 			}
 		}
-		elsif ( Slim::Utils::OSDetect::OS() eq 'mac' ) {
+		elsif ( main::ISMAC ) {
 			# Mac, check if path is in /Volumes
 			if ( $filepath =~ m{^/Volumes/([^/]+)} ) {
 				if ( !-d "/Volumes/$1" ) {
@@ -2053,10 +2075,18 @@ sub _preCheckAttributes {
 		   $shortTag =~ s/^REPLAYGAIN_TRACK_(\w+)$/REPLAY_$1/;
 
 		if (defined $attributes->{$gainTag}) {
-
+		    
 			$attributes->{$shortTag} = delete $attributes->{$gainTag};
 			$attributes->{$shortTag} =~ s/\s*dB//gi;
 			$attributes->{$shortTag} =~ s/,/\./g; # bug 6900, change comma to period
+			
+			# Bug 15483, remove non-numeric gain tags
+			if ( $attributes->{$shortTag} !~ /^[\d\-\+\.]+$/ ) {
+				my $file = Slim::Utils::Misc::pathFromFileURL($url);
+				$log->error("Invalid ReplayGain tag found in $file: $gainTag -> " . $attributes->{$shortTag} );
+				
+				delete $attributes->{$shortTag};
+			}
 		}
 	}
 
@@ -2081,7 +2111,11 @@ sub _preCheckAttributes {
 	}
 
 	# Look for tags we don't want to expose in comments, and splice them out.
-	for my $c(@$rawcomments) {
+	for my $c ( @{$rawcomments} ) {
+		next unless defined $c;
+		
+		# Bug 15630, ignore strings which have the utf8 flag on but are in fact invalid utf8
+		next if utf8::is_utf8($c) && !Slim::Utils::Unicode::looks_like_utf8($c);
 
 		#ignore SoundJam and iTunes CDDB comments, iTunSMPB, iTunPGAP
 		if ($c =~ /SoundJam_CDDB_/ ||
@@ -2092,6 +2126,7 @@ sub _preCheckAttributes {
 
 			next;
 		}
+		
 		push @$comments, $c;
 	}
 
@@ -2268,7 +2303,10 @@ sub _postCheckAttributes {
 
 	# Walk through the valid contributor roles, adding them to the database for each track.
 	my $contributors     = $self->_mergeAndCreateContributors($track, $attributes, $isCompilation, $isLocal);
-	my $foundContributor = scalar keys %{$contributors};
+	
+	# Bug 15553, Primary contributor can only be Album Artist or Artist,
+	# so only check for those roles and assign No Artist otherwise
+	my $foundContributor = ($contributors->{'ALBUMARTIST'}->[0] || $contributors->{'ARTIST'}->[0]) ? scalar( keys %{$contributors} ) : 0;
 
 	main::DEBUGLOG && $isDebug && $log->debug("-- Track has $foundContributor contributor(s)");
 
@@ -2613,6 +2651,14 @@ sub _postCheckAttributes {
 				$attributes->{$gainTag} =~ s/,/\./g; # bug 6900, change comma to period
 
 				$set{$shortTag} = $attributes->{$gainTag};
+				
+				# Bug 15483, remove non-numeric gain tags
+				if ( $set{$shortTag} !~ /^[\d\-\+\.]+$/ ) {
+					my $file = Slim::Utils::Misc::pathFromFileURL($trackUrl);
+					$log->error("Invalid ReplayGain tag found in $file: $gainTag -> " . $set{$shortTag} );
+
+					delete $set{$shortTag};
+				}
 
 			} else {
 
@@ -2742,26 +2788,15 @@ sub _postCheckAttributes {
 
 	if ( !main::SLIM_SERVICE ) {
 		# Add comments if we have them:
-		for my $comment (@{$attributes->{'COMMENT'}}) {
-			
-			my $sth = $dbh->prepare_cached('SELECT id FROM comments WHERE track = ?');
-			$sth->execute($trackId);
-			my ($id) = $sth->fetchrow_array;
-			$sth->finish;
-			
-			if ( !$id ) {
-				$sth = $dbh->prepare_cached( qq{
-					INSERT INTO comments
-					(track, value)
-					VALUES
-					(?, ?)
-				} );
-				$sth->execute( $trackId, $comment );
-			}
-			else {
-				$sth = $dbh->prepare_cached('UPDATE comments SET value = ? WHERE id = ?');
-				$sth->execute( $comment, $id );
-			}
+		my $sth = $dbh->prepare_cached( qq{
+			REPLACE INTO comments
+			(track, value)
+			VALUES
+			(?, ?)
+		} );
+		
+		for my $comment (@{$attributes->{'COMMENT'}}) {	
+			$sth->execute( $trackId, $comment );
 
 			main::DEBUGLOG && $isDebug && $log->debug("-- Track has comment '$comment'");
 		}

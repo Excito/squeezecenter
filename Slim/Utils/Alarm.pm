@@ -594,6 +594,10 @@ sub sound {
 
 		my $request = $client->execute(['stop']);
 		$request->source('ALARM');
+		
+		# Bug 12760, 9569 - Grab power condition before alarm so we can return later on a timeout.
+		main::DEBUGLOG && $log->debug("Current Power State: " . ($client->power ? 'On' : 'Off'));
+		$self->{_originalPower} = $client->power;
 		$request = $client->execute(['power', 1]);
 		$request->source('ALARM');
 
@@ -640,7 +644,12 @@ sub sound {
 		}
 
 		# Set a callback to check we managed to play something
-		Slim::Utils::Timers::setTimer($self, Time::HiRes::time() + 20, \&_checkPlaying);
+		if ( $client->isa('Slim::Player::SqueezePlay') && $client->revisionNumber >= 8312 ) {
+			# if this is a squeezeplay-based player on or after r8312, fallback alarm comes from client-side only
+		}
+		else {
+			Slim::Utils::Timers::setTimer($self, Time::HiRes::time() + 20, \&_checkPlaying);
+		}
 
 		# Allow a slight delay for things to load up then tell the user what's going on
 		Slim::Utils::Timers::setTimer($client, Time::HiRes::time() + 2, sub {
@@ -881,6 +890,9 @@ sub stop {
 			main::DEBUGLOG && $log->debug('Restoring pre-alarm volume level: ' . $self->{_originalVolume});
 			$client->volume($self->{_originalVolume});
 		}
+		# Bug: 12760, 9569 - Return power state to that prior to the alarm
+		main::DEBUGLOG && $log->debug('Restoring pre-alarm power state: ' . ($self->{_originalPower} ? 'on' : 'off'));
+		$client->power($self->{_originalPower});
 	});
 	
 
@@ -890,6 +902,7 @@ sub stop {
 	$client->showBriefly({
 		line => [$client->string('ALARM_STOPPED')],
 		duration => $SHOW_BRIEFLY_DUR,
+		jive => undef,
 	});
 
 	# Send notifications
@@ -1406,9 +1419,8 @@ sub scheduleNext {
 			main::DEBUGLOG && $log->debug(sub {'Next alarm is at ' . _timeStr($nextAlarm->{'_nextDue'})});
 
 			if ($nextAlarm->{_nextDue} == $now) {
-				# The alarm is for this minute - sound it immediately
-				main::DEBUGLOG && $log->debug('Sounding alarm immediately');
-				$nextAlarm->sound;
+				# The alarm is for this minute, expectation here is that a client-side fallback (ip3K and squeezeplay-based both) will handle this failure
+				main::DEBUGLOG && $log->debug('Alarm time is now; let client handle this failure');
 			} else {
 				# TODO: schedule a bit early to allow for timers firing late.  Once this is done and the early
 				# timer fires, check every second to see if the alarm should sound.  10 secs early should be more
@@ -1821,7 +1833,7 @@ sub pushAlarmScreensaver {
 	my $client = shift;
 
 	my $currentMode = Slim::Buttons::Common::mode($client);
-	my $alarmScreensaver = $class->alarmScreensaver;
+	my $alarmScreensaver = $class->alarmScreensaver($client);
 	if ($client->display->isa('Slim::Display::NoDisplay')) {
 		$alarmScreensaver = undef;
 	}
@@ -1852,7 +1864,7 @@ sub popAlarmScreensaver {
 
 	my $currentMode = Slim::Buttons::Common::mode($client);
 	main::DEBUGLOG && $log->debug("Attempting to pop alarm screensaver.  Current mode: $currentMode");
-	if ($currentMode eq $class->alarmScreensaver) {
+	if ($currentMode eq $class->alarmScreensaver($client)) {
 		main::DEBUGLOG && $log->debug('Popping alarm screensaver');
 		Slim::Buttons::Common::popMode($client);
 	}

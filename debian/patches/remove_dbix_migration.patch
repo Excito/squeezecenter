@@ -1,14 +1,8 @@
-#! /bin/sh /usr/share/dpatch/dpatch-run
-## remove_dbix_migration.dpatch by Carl Fürstenberg <carl@excito.com>
-##
-## All lines beginning with `## DP:' are a description of the patch.
-## DP: Remove the DBIx::Migration, as it's not anything we want, 
-## DP: we take care of the migration at packager level instead
-
-@DPATCH@
-diff -urNad squeezecenter~/Slim/Schema.pm squeezecenter/Slim/Schema.pm
---- squeezecenter~/Slim/Schema.pm	2009-10-07 14:46:41.000000000 +0200
-+++ squeezecenter/Slim/Schema.pm	2009-10-08 17:53:09.000000000 +0200
+Author: Carl Fürstenberg <carl@excito.com>
+Description: Remove the DBIx::Migration, as it's not anything we want, 
+we take care of the migration at packager level instead
+--- squeezecenter.orig/Slim/Schema.pm
++++ squeezecenter/Slim/Schema.pm
 @@ -28,7 +28,6 @@
  
  use base qw(DBIx::Class::Schema);
@@ -17,7 +11,7 @@ diff -urNad squeezecenter~/Slim/Schema.pm squeezecenter/Slim/Schema.pm
  use File::Basename qw(basename dirname);
  use File::Copy qw(move);
  use File::Spec::Functions qw(:ALL);
-@@ -451,76 +450,7 @@
+@@ -450,76 +449,7 @@
  =cut
  
  sub migrateDB {

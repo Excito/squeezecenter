@@ -1,14 +1,10 @@
-#! /bin/sh /usr/share/dpatch/dpatch-run
-## custom_os_detect.dpatch by Carl Fürstenberg <carl@excito.com>
-##
-## All lines beginning with `## DP:' are a description of the patch.
-## DP: No description.
-
-@DPATCH@
-diff -urNad squeezecenter~/Slim/Utils/OS/Custom.pm squeezecenter/Slim/Utils/OS/Custom.pm
---- squeezecenter~/Slim/Utils/OS/Custom.pm	1970-01-01 01:00:00.000000000 +0100
-+++ squeezecenter/Slim/Utils/OS/Custom.pm	2009-10-08 17:45:40.000000000 +0200
-@@ -0,0 +1,134 @@
+Author: Carl Fürstenberg <carl@excito.com>
+Description: No description.
+Index: squeezecenter/Slim/Utils/OS/Custom.pm
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ squeezecenter/Slim/Utils/OS/Custom.pm	2010-04-07 16:54:52.000000000 +0200
+@@ -0,0 +1,136 @@
 +
 +
 +package Slim::Utils::OS::Custom;
@@ -33,7 +29,7 @@ diff -urNad squeezecenter~/Slim/Utils/OS/Custom.pm squeezecenter/Slim/Utils/OS/C
 +
 +	{
 +		our ( $dbuser, $dbpass, $dbtype, $dbname, $dbserver, $dbport );
-+		
++
 +		use lib '/etc/squeezecenter';
 +		require 'debian-db.pm';
 +
@@ -76,8 +72,8 @@ diff -urNad squeezecenter~/Slim/Utils/OS/Custom.pm squeezecenter/Slim/Utils/OS/C
 +	my ($class, $dir) = @_;
 +
 +	my @dirs = ();
-+	
-+	if ($dir =~ /^(?:oldprefs|updates)$/) {
++
++	if ($dir =~ /^(?:oldprefs|updates|scprefs)$/) {
 +
 +		push @dirs, $class->SUPER::dirsFor($dir);
 +
@@ -86,10 +82,10 @@ diff -urNad squeezecenter~/Slim/Utils/OS/Custom.pm squeezecenter/Slim/Utils/OS/C
 +		push @dirs, "/usr/share/squeezecenter/$dir";
 +
 +	} elsif ($dir eq 'Plugins') {
-+			
++
 +		push @dirs, $class->SUPER::dirsFor($dir);
 +		push @dirs, "/usr/share/perl5/Slim/Plugin", "/usr/share/squeezecenter/Plugins";
-+		
++
 +	} elsif ($dir =~ /^(?:strings|revision)$/) {
 +
 +		push @dirs, "/usr/share/squeezecenter";
@@ -125,8 +121,7 @@ diff -urNad squeezecenter~/Slim/Utils/OS/Custom.pm squeezecenter/Slim/Utils/OS/C
 +		push @dirs, '';
 +
 +	} else {
-+
-+		warn "dirsFor: Didn't find a match request: [$dir]\n";
++		push @dirs, $class->SUPER::dirsFor($dir);
 +	}
 +
 +	return wantarray() ? @dirs : $dirs[0];
@@ -135,6 +130,9 @@ diff -urNad squeezecenter~/Slim/Utils/OS/Custom.pm squeezecenter/Slim/Utils/OS/C
 +# Bug 9488, always decode on Ubuntu/Debian
 +sub decodeExternalHelperPath {
 +	return Slim::Utils::Unicode::utf8decode_locale($_[1]);
++}
++sub migratePrefsFolder {
++	# just dont!
 +}
 +
 +sub scanner {

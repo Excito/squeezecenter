@@ -7,7 +7,7 @@ path=$PWD
 tmpdir=$(mktemp -d);
 (
 cd $tmpdir;
-tar -zxf $path/../$filename;
+tar -zxf $path/$filename;
 rm -f */Graphics/CODE2000.*;
 rm -f */Graphics/FreeSans.ttf;
 rm -rf */CPAN;

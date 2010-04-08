@@ -1,6 +1,6 @@
 package Slim::Player::Source;
 
-# $Id: Source.pm 28570 2009-09-18 21:48:16Z adrian $
+# $Id: Source.pm 30393 2010-03-19 13:30:04Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -330,6 +330,12 @@ bail:
 			$log->info($msg);
 		}
 
+		# Mark the end of stream
+		for my $buddy ($client->syncGroupActiveMembers()) {
+			main::INFOLOG && $log->info($buddy->id() . " mark end of stream");
+			push @{$buddy->chunks}, \'';
+		}
+
 		if ($client->streamBytes() == 0 && $client->reportsTrackStart()) {
 
 			# If we haven't streamed any bytes, then it is most likely an error
@@ -339,12 +345,6 @@ bail:
 			return;
 		}
 		
-		# Mark the end of stream
-		for my $buddy ($client->syncGroupActiveMembers()) {
-			main::INFOLOG && $log->info($buddy->id() . " mark end of stream");
-			push @{$buddy->chunks}, \'';
-		}
-
 		$client->controller()->localEndOfStream();
 		
 		return undef;

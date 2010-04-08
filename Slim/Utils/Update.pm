@@ -16,7 +16,7 @@ my $prefs = preferences('server');
 
 my $log = Slim::Utils::Log->addLogCategory({
 	'category'     => 'server.update',
-	'defaultLevel' => 'WARN',
+	'defaultLevel' => 'ERROR',
 });
 
 my $os = Slim::Utils::OSDetect->getOS();
@@ -126,7 +126,12 @@ sub checkVersionCB {
 sub checkVersionError {
 	my $http = shift;
 
-	$log->error(Slim::Utils::Strings::string('CHECKVERSION_ERROR') . "\n" . $http->error);
+	my $proxy = $prefs->get('webproxy');
+
+	$log->error(Slim::Utils::Strings::string('CHECKVERSION_ERROR')
+		. "\n" . $http->error
+		. ($proxy ? sprintf("\nPlease check your proxy configuration (%s)", $proxy) : '')
+	);
 }
 
 
@@ -295,8 +300,7 @@ sub installerIsUpToDate {
 	my $installer = shift || '';
 
 	return ( $::REVISION eq 'TRUNK'											# we'll consider TRUNK to always be up to date
-		|| ($installer !~ /\d{5,}/ && $installer =~ /$::VERSION/)			# no revision number, but same version
-		|| ($installer =~ /$::REVISION/ && $installer =~ /$::VERSION/) )	# same revision
+		|| ($installer =~ /$::REVISION/ && $installer =~ /$::VERSION/) )	# same revision and revision
 	
 }
 

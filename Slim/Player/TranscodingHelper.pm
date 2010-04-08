@@ -1,6 +1,6 @@
 package Slim::Player::TranscodingHelper;
 
-# $Id: TranscodingHelper.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: TranscodingHelper.pm 29223 2009-11-10 14:02:22Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -320,15 +320,6 @@ sub getConvertCommand2 {
 	
 	# make sure we only test formats that are supported.
 	@supportedformats = Slim::Player::CapabilitiesHelper::supportedFormats($client);
-	
-	# Switch Apple Lossless files from a CT of 'aac' to 'alc' for
-	# conversion purposes, so we can use 'alac' if it's available.
-	# 
-	# Bug: 2095, 10602
-	if (($type eq 'mov' || $type eq 'mp4' || $type eq 'aac') && blessed($track) && $track->lossless) {
-		main::DEBUGLOG && $log->debug("Track is alac - updating type!");
-		$type = 'alc';
-	}
 
 	# Build the full list of possible profiles
 	my @profiles = ();

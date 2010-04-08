@@ -29,11 +29,7 @@ CLI commands used by Jive.
 
 =cut
 
-my $log = Slim::Utils::Log->addLogCategory({
-	'category'     => 'player.jive',
-	'defaultLevel' => 'ERROR',
-	'description'  => getDisplayName(),
-});
+my $log = logger('player.jive');
 
 # additional top level menus registered by plugins
 my @appMenus           = (); # all available apps
@@ -101,6 +97,9 @@ sub init {
 	Slim::Control::Request::addDispatch(['jivefavorites', '_cmd' ],
 		[1, 0, 1, \&jiveFavoritesCommand]);
 
+	Slim::Control::Request::addDispatch(['jivealarmvolume'],
+		[1, 0, 1, \&jiveAlarmVolumeSlider ]);
+
 	Slim::Control::Request::addDispatch(['jiveplayerbrightnesssettings', '_index', '_quantity'],
 		[1, 1, 0, \&playerBrightnessMenu]);
 
@@ -144,6 +143,9 @@ sub init {
 		[0, 1, 1, \&extensionsQuery]);
 
 	Slim::Control::Request::addDispatch(['jivesounds'],
+		[0, 1, 1, \&extensionsQuery]);
+
+	Slim::Control::Request::addDispatch(['jivepatches'],
 		[0, 1, 1, \&extensionsQuery]);
 	
 	# setup the menustatus dispatch and subscription
@@ -287,23 +289,6 @@ sub menuQuery {
 			$client->forgetClient;
 		}
 	}
-	else {
-		# a single dummy item to keep jive happy with _merge
-		my $upgradeText = 
-		"Please upgrade your firmware at:\n\nSettings->\nController Settings->\nAdvanced->\nSoftware Update\n\nThere have been updates to better support the communication between your remote and Squeezebox Server, and this requires a newer version of firmware.";
-	        my $upgradeMessage = {
-			text      => 'READ ME',
-			weight    => 1,
-	                offset    => 0,
-	                count     => 1,
-	                window    => { titleStyle => 'settings' },
-	                textArea =>  $upgradeText,
-	        };
-
-		$request->addResult("count", 1);
-		$request->addResult("offset", 0);
-		$request->setResultLoopHash('item_loop', 0, $upgradeMessage);
-	}
 	
 	$request->setStatusDone();
 }
@@ -334,7 +319,6 @@ sub mainMenu {
 			id             => 'myMusic',
 			isANode        => 1,
 			node           => 'home',
-			window         => { titleStyle => 'mymusic', },
 		},
 		{
 			stringToken    => 'FAVORITES',
@@ -348,9 +332,6 @@ sub mainMenu {
 						menu     => 'favorites',
 					},
 				},
-			},
-			window        => {
-					titleStyle => 'favorites',
 			},
 		},
 
@@ -386,6 +367,8 @@ sub mainMenu {
 		main::SLIM_SERVICE ? () : @{myMusicMenu(1, $client)},
 		main::SLIM_SERVICE ? () : @{recentSearchMenu($client, 1)},
 		@{appMenus($client, 1)},
+
+		@{globalSearchMenu($client)},		
 	);
 
 	if ( !$direct ) {
@@ -516,9 +499,6 @@ sub albumSortSettingsItem {
 					menu => 'radio',
 				},
 			},
-		},
-		window        => {
-				titleStyle => 'settings',
 		},
 	};
 
@@ -787,6 +767,35 @@ sub alarmSettingsQuery {
 		push @menu, $defaultVolumeLevels;
 	}
 
+	my $fadeEnabled = $prefs->client($client)->get('alarmfadeseconds');
+	if (!defined ($fadeEnabled) || $fadeEnabled == 0) {
+		$fadeEnabled = 0;
+	} else {
+		$fadeEnabled = 1;
+	}
+
+	my $fadeInAlarm = {
+		text           => $client->string("ALARM_FADE"),
+		checkbox => ($fadeEnabled == 1) + 0,
+		actions  => {
+			on  => {
+				player => 0,
+				cmd    => [ 'jivealarm' ],
+				params => {
+					fadein => 1,
+				},
+			},
+			off => {
+				player => 0,
+				cmd    => [ 'jivealarm' ],
+				params => {
+					fadein => 0,
+				},
+			},
+		},		
+	};
+	push @menu, $fadeInAlarm;
+
 	sliceAndShip($request, $client, \@menu);
 
 }
@@ -807,9 +816,9 @@ sub alarmUpdateMenu {
 
 	my $enabled = $alarm->enabled();
 	my $onOff = {
-		window   => { titleStyle => 'settings' },
 		text     => $client->string("ALARM_ALARM_ENABLED"),
 		checkbox => ($enabled == 1) + 0,
+		onClick  => 'refreshOrigin',
 		actions  => {
 			on  => {
 				player => 0,
@@ -828,7 +837,6 @@ sub alarmUpdateMenu {
 				},
 			},
 		},		
-		nextWindow => 'refresh',
 	};
 	push @menu, $onOff;
 
@@ -854,7 +862,6 @@ sub alarmUpdateMenu {
 			},
 		},
 		nextWindow => 'parent',
-		window         => { titleStyle => 'settings' },
 	};
 	push @menu, $setTime;
 
@@ -870,7 +877,6 @@ sub alarmUpdateMenu {
 				},
 			},
 		},
-		window    => { titleStyle => 'settings' },
 	};
 	push @menu, $setDays;
 
@@ -886,15 +892,14 @@ sub alarmUpdateMenu {
 				},
 			},
 		},
-		window    => { titleStyle => 'settings' },
 	};
 	push @menu, $playlistChoice;
 
 	my $repeat = $alarm->repeat();
 	my $repeatOn = {
-		window   => { titleStyle => 'settings' },
 		text     => $client->string("ALARM_ALARM_REPEAT"),
 		radio    => ($repeat == 1) + 0,
+		onClick  => 'refreshOrigin',
 		actions  => {
 			do  => {
 				player => 0,
@@ -905,14 +910,13 @@ sub alarmUpdateMenu {
 				},
 			},
 		},		
-		nextWindow => 'refresh',
 	};
 	push @menu, $repeatOn;
 
 	my $repeatOff = {
-		window   => { titleStyle => 'settings' },
 		text     => $client->string("ALARM_ALARM_ONETIME"),
 		radio    => ($repeat == 0) + 0,
+		onClick  => 'refreshOrigin',
 		actions  => {
 			do => {
 				player => 0,
@@ -923,7 +927,6 @@ sub alarmUpdateMenu {
 				},
 			},
 		},
-		nextWindow => 'refresh',
 	};
 	push @menu, $repeatOff;
 
@@ -984,7 +987,7 @@ sub alarmUpdateDays {
 		my $day = {
 			text       => $client->string($string),
 			checkbox   => $dayActive + 0,
-			nextWindow => 'refreshOrigin',
+			onClick    => 'refreshGrandparent',
 			actions => {
 				on => {
 					player => 0,
@@ -1042,7 +1045,6 @@ sub getCurrentAlarms {
 					player => 0,
 				},
 			},
-			window         => { titleStyle => 'settings' },
 		};
 		push @return, $thisAlarm;
 		$count++;
@@ -1056,15 +1058,34 @@ sub alarmVolumeSettings {
 	my $id              = shift || 0;
 	my $string          = shift;
 
-	my @vol_settings;
+	my $return = { 
+		text      => $string,
+		actions   => {
+			go => {
+				player => 0,
+				cmd    => [ 'jivealarmvolume' ],
+			},
+		},
+	};
+	return $return;
+}
 
+sub jiveAlarmVolumeSlider {
+
+	my $request = shift;
+	my $client  = $request->client();
+
+	my $current_setting = Slim::Utils::Alarm->defaultVolume($client) || 50;
+	my $id              = shift || 0;
+	my $string          = shift;
+
+	my @vol_settings;
 	my $slider = {
 		slider      => 1,
 		min         => 1,
 		max         => 100,
 		sliderIcons => 'volume',
 		initial     => $current_setting,
-		#help    => NO_HELP_STRING_YET,
 		actions => {
 			do => {
 				player => 0,
@@ -1076,16 +1097,13 @@ sub alarmVolumeSettings {
 		},
 	};
 
-	push @vol_settings, $slider;
+	$request->addResult('offset', 0);
+	$request->addResult('count', 1);
+	$request->addResult('item_loop', [ $slider ] );
+	$request->setStatusDone();
 
-	my $return = { 
-		text      => $string,
-		count     => scalar(@vol_settings),
-		offset    => 0,
-		item_loop => \@vol_settings,
-	};
-	return $return;
 }
+
 
 sub syncSettingsQuery {
 
@@ -1111,16 +1129,6 @@ sub endOfTrackSleepCommand {
 		my $dur = $client->controller()->playingSongDuration();
 		my $remaining = $dur - Slim::Player::Source::songTime($client);
 		$client->execute( ['sleep', $remaining ] );
-		# an intentional showBriefly stomp of SLEEPING_IN_X_MINUTES with SLEEPING_AT_END_OF_SONG
-		$request->client->showBriefly(
-			{ 
-			'jive' =>
-				{
-					'type'    => 'popupplay',
-					'text'    => [ $request->string('SLEEPING_AT_END_OF_SONG') ],
-				},
-			}
-		);
 	} else {
 		$request->client->showBriefly(
 			{ 
@@ -1158,7 +1166,8 @@ sub sleepSettingsQuery {
 		push @menu, sleepInXHash($client, $val, 0);
 	}
 
-	if ($client->isPlaying()) {
+	#bug 15675 - don't display 'end of song' option for radio streams
+	if ($client->isPlaying() && $client->controller()->playingSongDuration()) {
 
 		push @menu, {
 			text    => $client->string('SLEEP_AT_END_OF_SONG'),
@@ -1169,6 +1178,7 @@ sub sleepSettingsQuery {
 				},
 			},
 			nextWindow => 'refresh',
+			setSelectedIndex => 1,
 		};
 	}
 
@@ -1365,7 +1375,6 @@ sub internetRadioMenu {
 			},
 			window        => {
 					menuStyle => 'album',
-					titleStyle => 'internetradio',
 			},
 		};
 	}
@@ -1389,7 +1398,6 @@ sub playerSettingsMenu {
 		node           => 'settings',
 		isANode        => 1,
 		weight         => 35,
-		window         => { titleStyle => 'settings', },
 	};
 	
 	# always add repeat
@@ -1436,7 +1444,6 @@ sub playerSettingsMenu {
 					},
 				},
 			},
-			window         => { titleStyle => 'settings' },
 		};
 	}
 
@@ -1456,7 +1463,6 @@ sub playerSettingsMenu {
 					},
 				},
 			},
-			window         => { titleStyle => 'settings' },
 		};
 	}
 
@@ -1473,7 +1479,6 @@ sub playerSettingsMenu {
 					player => 0,
 				},
 			},
-			window         => { titleStyle => 'settings' },
 		};
 	}
 
@@ -1490,7 +1495,6 @@ sub playerSettingsMenu {
 					player => 0,
 				},
 			},
-			window         => { titleStyle => 'settings' },
 		};
 	}
 
@@ -1507,7 +1511,6 @@ sub playerSettingsMenu {
 				player => 0,
 			},
 		},
-		window         => { titleStyle => 'settings' },
 	};	
 
 	# synchronization. only if numberOfPlayers > 1
@@ -1524,7 +1527,6 @@ sub playerSettingsMenu {
 					player => 0,
 				},
 			},
-			window         => { titleStyle => 'settings' },
 		};	
 	}
 
@@ -1534,7 +1536,6 @@ sub playerSettingsMenu {
 		id             => 'settingsInformation',
 		node           => 'advancedSettings',
 		weight         => 100,
-		window         => { titleStyle => 'settings' },
 		actions        => {
 				go =>	{
 						cmd    => ['systeminfo', 'items'],
@@ -1570,7 +1571,6 @@ sub playerSettingsMenu {
 						},
                                         },
                                   },
-		window         => { titleStyle => 'settings' },
 	};
 
 
@@ -1587,7 +1587,6 @@ sub playerSettingsMenu {
 					player => 0,
 				},
 			},
-			window         => { titleStyle => 'settings' },
 		};	
 	}
 
@@ -1604,7 +1603,6 @@ sub playerSettingsMenu {
 					player => 0,
 				  },
 			},
-			window         => { titleStyle => 'settings' },
 		};	
 	}
 
@@ -1616,7 +1614,6 @@ sub playerSettingsMenu {
 			id             => 'squeezeboxDisplaySettings',
 			isANode        => 1,
 			node           => 'advancedSettings',
-			window         => { titleStyle => 'settings', },
 		},
 		{
 			text           => $client->string("PLAYER_BRIGHTNESS"),
@@ -1628,7 +1625,6 @@ sub playerSettingsMenu {
 					player => 0,
 				  },
 			},
-			window         => { titleStyle => 'settings' },
 		},
 	}
 
@@ -1645,7 +1641,6 @@ sub playerSettingsMenu {
 					player => 0,
 				  },
 			},
-			window         => { titleStyle => 'settings' },
 		},
 		{
 			text           => $client->string("OFFDISPLAYSIZE"),
@@ -1657,7 +1652,6 @@ sub playerSettingsMenu {
 					player => 0,
 				  },
 			},
-			window         => { titleStyle => 'settings' },
 		},
 	}
 
@@ -1865,9 +1859,6 @@ sub browseMusicFolder {
 						},
 					},
 				},
-				window        => {
-					titleStyle => 'musicfolder',
-				},
 			};
 	} else {
 		# if it disappeared, send a notification to get rid of it if it exists
@@ -1887,7 +1878,7 @@ sub repeatSettings {
 	my $batch = shift;
 
 	my $repeat_setting = Slim::Player::Playlist::repeat($client);
-	my @repeat_strings = ('OFF', 'SONG', 'PLAYLIST',);
+	my @repeat_strings = ('OFF', 'SONG', 'PLAYLIST_SHORT',);
 	my @translated_repeat_strings = map { ucfirst($client->string($_)) } @repeat_strings;
 	my @repeatChoiceActions;
 	for my $i (0..$#repeat_strings) {
@@ -1948,7 +1939,6 @@ sub shuffleSettings {
 				],
 			},
 		},
-		window         => { titleStyle => 'settings' },
 	};
 
 	if ($batch) {
@@ -2183,75 +2173,20 @@ sub dateQuery {
 		return;
 	}
 
-	# one concept of "now" for the whole func
-	my $time = time();
-	
-	if ( main::SLIM_SERVICE ) {
-		# Use timezone on user's account
-		my $client = $request->client;
-		
-		my $tz 
-			=  preferences('server')->client($client)->get('timezone')
-			|| $client->playerData->userid->timezone 
-			|| 'America/Los_Angeles';
-		
-		my $datestr = DateTime->from_epoch( epoch => $time, time_zone => $tz )->strftime("%Y-%m-%dT%H:%M:%S%z");
-		$datestr =~ s/(\d\d)$/:$1/; # change -0500 to -05:00
-		$request->addResult( 'date', $datestr );
+	# 7.5+ SP devices use epoch time now, much simpler
+	$request->addResult( 'date_epoch', time() );
 
-		$datestr = DateTime->from_epoch( epoch => $time )->strftime("%Y-%m-%dT%H:%M:%S%z");
-		$datestr =~ s/(\d\d)$/:$1/; # change -0500 to -05:00
-		$request->addResult( 'date_utc', $datestr );
-		
-		$request->setStatusDone();
-		
-		return;
-	}
-	
-	# Calculate the time zone offset, taken from Time::Timezone
-	my @l    = localtime($time);
-	my @g    = gmtime($time);
-
-	my $off 
-		= $l[0] - $g[0]
-		+ ( $l[1] - $g[1] ) * 60
-		+ ( $l[2] - $g[2] ) * 3600;
-
-	# subscript 7 is yday.
-
-	if ( $l[7] == $g[7] ) {
-		# done
-	}
-	elsif ( $l[7] == $g[7] + 1 ) {
-		$off += 86400;
-	}
-	elsif ( $l[7] == $g[7] - 1 ) {
-			$off -= 86400;
-	} 
-	elsif ( $l[7] < $g[7] ) {
-		# crossed over a year boundry!
-		# localtime is beginning of year, gmt is end
-		# therefore local is ahead
-		$off += 86400;
-	}
-	else {
-		$off -= 86400;
-	}
-
-	my $hour = int($off / 3600);
-	if ( $hour > -10 && $hour < 10 ) {
-		$hour = "0" . abs($hour);
-	}
-	else {
-		$hour = abs($hour);
-	}
-
-	my $tzoff = ( $off >= 0 ) ? '+' : '-';
-	$tzoff .= sprintf( "%s:%02d", $hour, int( $off % 3600 / 60 ) );
-
-	# Return time in http://www.w3.org/TR/NOTE-datetime format
-	$request->addResult( 'date', strftime("%Y-%m-%dT%H:%M:%S", @l) . $tzoff );
-	$request->addResult( 'date_utc', strftime("%Y-%m-%dT%H:%M:%S+00:00", @g));
+	# This is the field 7.3 and earlier players expect.
+	#  7.4 is smart enough to take no action when missing
+	#  the date_utc field it expects.
+	# If they are hitting 7.5 SN/SC code, they're about to
+	#  be upgraded anyways, but we should avoid mucking
+	#  with their clock in the meantime.  These crafted "all-zeros"
+	#  responses will avoid Lua errors, but the "date"
+	#  command implemented by busybox will fail out on this
+	#  data and take no action due to it resulting in a
+	#  negative time_t value.
+	$request->addResult( 'date', '0000-00-00T00:00:00+00:00' );
 
 	# manage the subscription
 	if (defined(my $timeout = $request->getParam('subscribe'))) {
@@ -2372,6 +2307,7 @@ sub sleepInXHash {
 			},
 		},
 		nextWindow => 'refresh',
+		setSelectedIndex => '1',
 	);
 	return \%return;
 }
@@ -2434,9 +2370,6 @@ sub myMusicMenu {
 						},
 					},
 				},
-				window        => {
-					titleStyle => 'artists',
-				},
 			},		
 			{
 				text           => $client->string('BROWSE_BY_ALBUM'),
@@ -2457,7 +2390,6 @@ sub myMusicMenu {
 				window         => {
 					menuStyle => 'album',
 					menuStyle => 'album',
-					titleStyle => 'albumlist',
 				},
 			},
 			{
@@ -2475,9 +2407,6 @@ sub myMusicMenu {
 						},
 					},
 				},
-				window        => {
-					titleStyle => 'genres',
-				},
 			},
 			{
 				text           => $client->string('BROWSE_BY_YEAR'),
@@ -2493,9 +2422,6 @@ sub myMusicMenu {
 							party => $party,
 						},
 					},
-				},
-				window        => {
-					titleStyle => 'years',
 				},
 			},
 			{
@@ -2515,7 +2441,6 @@ sub myMusicMenu {
 				},
 				window        => {
 					menuStyle => 'album',
-					titleStyle => 'newmusic',
 				},
 			},
 			{
@@ -2532,9 +2457,6 @@ sub myMusicMenu {
 						},
 					},
 				},
-				window        => {
-					titleStyle => 'playlist',
-				},
 			},
 			{
 				text           => $client->string('SEARCH'),
@@ -2542,7 +2464,6 @@ sub myMusicMenu {
 				node           => 'myMusic',
 				isANode        => 1,
 				weight         => 90,
-				window         => { titleStyle => 'search', },
 			},
 		);
 		# add the items for under mymusicSearch
@@ -2618,7 +2539,6 @@ sub searchMenu {
 		},
                 window => {
                         text => $client->string('SEARCHFOR_ARTISTS'),
-                        titleStyle => 'search',
                 },
 	},
 	{
@@ -2651,7 +2571,6 @@ sub searchMenu {
 		},
 		window => {
 			text => $client->string('SEARCHFOR_ALBUMS'),
-			titleStyle => 'search',
 			menuStyle  => 'album',
 		},
 	},
@@ -2685,7 +2604,6 @@ sub searchMenu {
 		},
 		window => {
 			text => $client->string('SEARCHFOR_SONGS'),
-			titleStyle => 'search',
 			menuStyle => 'album',
 		},
 	},
@@ -2717,7 +2635,6 @@ sub searchMenu {
 		},
 		window => {
 			text => $client->string('SEARCHFOR_PLAYLISTS'),
-			titleStyle => 'search',
 		},
 	},
 
@@ -2730,6 +2647,43 @@ sub searchMenu {
 	}
 
 }
+
+sub globalSearchMenu {
+	my $client = shift || undef;
+
+	my @searchMenu = ({
+		stringToken	   => 'SEARCH',
+		text           => $client->string('SEARCH'),
+		homeMenuText   => $client->string('SEARCH'),
+		id             => 'globalSearch',
+		node           => 'home',
+		weight         => 110,
+		input => {
+			len  => 1, #bug 5318
+			processingPopup => {
+				text => $client->string('SEARCHING'),
+			},
+			help => {
+				text => $client->string('JIVE_SEARCHFOR_HELP')
+			},
+		},
+		actions => {
+			go => {
+				cmd => ['globalsearch', 'items'],
+				params => {
+					menu     => 'globalsearch',
+					search   => '__TAGGEDINPUT__',
+				},
+			},
+		},
+		window => {
+			text => $client->string('SEARCH'),
+		},
+	});
+
+	return \@searchMenu;	
+}
+
 # send a notification for menustatus
 sub menuNotification {
 	# the lines below are needed as menu notifications are done via notifyFromArray, but
@@ -2773,6 +2727,7 @@ sub jivePlayTrackAlbumCommand {
 	my $request    = shift;
 	my $client     = $request->client || return;
 	my $albumID    = $request->getParam('album_id');
+	my $artistID   = $request->getParam('artist_id');
 	my $trackID    = $request->getParam('track_id');
 	my $playlistID = $request->getParam('playlist_id');
 	my $folder     = $request->getParam('folder')|| undef;
@@ -2789,7 +2744,11 @@ sub jivePlayTrackAlbumCommand {
 
 	# Database album browse is the simple case
 	if ( $albumID ) {
-		$client->execute( ["playlist", "addtracks", { 'album.id' => $albumID } ] );
+		if ($artistID) {
+			$client->execute( ["playlist", "addtracks", { 'contributor.id' => $artistID, 'album.id' => $albumID } ] );
+		} else {
+			$client->execute( ["playlist", "addtracks", { 'album.id' => $albumID } ] );
+		}
 		$client->execute( ["playlist", "jump", $listIndex] );
 
 	}
@@ -2875,7 +2834,6 @@ sub jivePlaylistsCommand {
 	$request->addResult('offset', 0);
 	$request->addResult('count', 2);
 	$request->addResult('item_loop', \@delete_menu);
-	$request->addResult('window', { titleStyle => 'playlist' } );
 
 	$request->setStatusDone();
 
@@ -2885,18 +2843,28 @@ sub jiveUnmixableMessage {
 	my $request = shift;
 	my $service = $request->getParam('contextToken');
 	my $serviceString = $request->string($service);
-	$request->client->showBriefly(
-		{ 'jive' =>
-			{
-				'type'    => 'popupplay',
-				'text'    => [ $request->string('UNMIXABLE', $serviceString) ],
-			},
-		}
-	);
+
+       my @menu = (
+               {
+                       text    => $request->string('OK'),
+                       actions => {
+                               go => {
+                                       player => 0,
+                                       cmd    => [ 'jiveblankcommand' ],
+                               },
+                       },
+                       nextWindow => 'parent',
+               }
+       );
+
+       $request->addResult('offset', 0);
+       $request->addResult('count', 1);
+       $request->addResult('item_loop', \@menu);
+       $request->addResult('window', { textarea => $request->string('UNMIXABLE', $serviceString), });
+
         $request->setStatusDone();
 }
 
-# currently just for snooze but this could be extended with other tagged params as needed
 sub jiveAlarmCommand {
 	main::INFOLOG && $log->info("Begin function");
 
@@ -2905,15 +2873,24 @@ sub jiveAlarmCommand {
 
 	# this command can issue either a snooze or a cancel
 	my $snooze      = $request->getParam('snooze') ? 1 : undef;
+	my $stop        = $request->getParam('stop')   ? 1 : undef;
+	my $fadein      = $request->getParam('fadein');
 
 	my $alarm       = Slim::Utils::Alarm->getCurrentAlarm($client);
 
 	if ( defined($alarm) ) {
 		if ( defined($snooze) ) {
 			$alarm->snooze();
+		} elsif ( defined ($stop) ) {
+			$alarm->stop();
 		}
 	}
 
+	# a fadein:1 tag needs to set a clientpref for alarmfadeseconds
+	if ( defined($fadein) ) {
+		$log->error('Fade in alarm being set to ', $fadein);
+		$prefs->client($client)->set('alarmfadeseconds', $fadein);
+	}
 	$request->setStatusDone();
 }
 
@@ -3007,7 +2984,6 @@ sub jiveFavoritesCommand {
 		$request->addResult('offset', 0);
 		$request->addResult('count', 2);
 		$request->addResult('item_loop', \@favorites_menu);
-		$request->addResult('window', { titleStyle => 'favorites' } );
 	}
 	
 	
@@ -3050,7 +3026,7 @@ sub recentSearchMenu {
 			text           => $client->string('RECENT_SEARCHES'),
 			id             => 'homeSearchRecent',
 			node           => 'home',
-			weight         => 80,
+			weight         => 111,
 			actions => {
 				go => {
 					cmd => ['jiverecentsearches'],
@@ -3058,7 +3034,6 @@ sub recentSearchMenu {
 			},
 			window => {
 				text => $client->string('RECENT_SEARCHES'),
-				titleStyle => 'search',
 			},
 		};
 		push @recentSearchMenu,
@@ -3075,7 +3050,6 @@ sub recentSearchMenu {
 			},
 			window => {
 				text => $client->string('RECENT_SEARCHES'),
-				titleStyle => 'search',
 			},
 		};	
 		if (!$batch) {
@@ -3130,10 +3104,11 @@ my %extensionProviders = ();
 sub registerExtensionProvider {
 	my $name     = shift;
 	my $provider = shift;
+	my $optstr   = shift;
 
-	main::INFOLOG && $log->info("adding extension provider $name $provider");
+	main::INFOLOG && $log->info("adding extension provider $name" . ($optstr ? " optstr: $optstr" : ""));
 
-	$extensionProviders{ $name } = $provider;
+	$extensionProviders{ $name } = { provider => $provider, optstr => $optstr };
 }
 
 sub removeExtensionProvider {
@@ -3150,17 +3125,26 @@ sub removeExtensionProvider {
 sub extensionsQuery {
 	my $request = shift;
  
-	my ($type) = $request->getRequest(0) =~ /jive(applet|wallpaper|sound)s/;
+	my ($type) = $request->getRequest(0) =~ /jive(applet|wallpaper|sound|patche)s/; # S:P:Extensions always appends 's' to type
 	my $version= $request->getParam('version');
 	my $target = $request->getParam('target');
+	my $optstr = $request->getParam('optstr');
 
 	if (!defined $type) {
 		$request->setStatusBadDispatch();
 		return;
 	}
 
-	my @providers = keys %extensionProviders;
+	my @providers;
 	my $language  = $Slim::Utils::Strings::currentLang;
+
+	# remove optional providers if key is included in the query and it does not match
+	# this allows SP to select whether optional providers are used to build the list
+	for my $provider (keys %extensionProviders) {
+		if (!$optstr || !defined $extensionProviders{$provider}->{'optstr'} || $optstr =~ /$extensionProviders{$provider}->{optstr}/) {
+			push @providers, $provider;
+		}
+	}
 
 	if (scalar @providers) {
 
@@ -3170,7 +3154,7 @@ sub extensionsQuery {
 
 		for my $provider (@providers) {
 
-			$extensionProviders{$provider}->( {
+			$extensionProviders{$provider}->{'provider'}->( {
 				'name'   => $provider, 
 				'type'   => $type, 
 				'target' => $target,
@@ -3199,9 +3183,39 @@ sub _extensionsQueryCB {
 
 	if ( ! --$data->{'remaining'} ) {
 
+		# create a list of entries with the duplicates removed, favoring higher version numbers
+
+		# pass 1 - find max versions
+		my $max = {};
+
+		for my $entry (@{$data->{'results'}}) {
+
+			my $name = $entry->{'name'};
+
+			if (!defined $max->{$name} || Slim::Utils::Versions->compareVersions($entry->{'version'}, $max->{$name}) > 0) {
+
+				$max->{$name} = $entry->{'version'};
+			}
+		}
+
+		# pass 2 - build list containing single entry for per extension
+		my @results = ();
+
+		for my $entry (@{$data->{'results'}}) {
+
+			my $name = $entry->{'name'};
+
+			if (exists $max->{$name} && (!defined $max->{$name} || $max->{$name} eq $entry->{'version'})) {
+
+				push @results, $entry;
+
+				delete $max->{$name};
+			}
+		}
+
 		my $cnt = 0;
 
-		for my $entry ( sort { $a->{'title'} cmp $b->{'title'} } @{$data->{'results'}} ) {
+		for my $entry ( sort { $a->{'title'} cmp $b->{'title'} } @results ) {
 
 			$request->setResultLoopHash('item_loop', $cnt++, $entry);
 		}
@@ -3239,7 +3253,7 @@ sub appMenus {
 			# Make sure it's enabled
 			if ( my $pluginInfo = Slim::Utils::PluginManager->isEnabled($plugin) ) {
 				# Get the predefined menu for this plugin
-				if ( my ($globalMenu) = grep { $_->{text} eq $pluginInfo->{name} } @appMenus ) {				
+				if ( my ($globalMenu) = grep { $_->{text} && $_->{text} eq $pluginInfo->{name} } @appMenus ) {				
 					main::INFOLOG && $isInfo && $log->info( "App: $app, using plugin $plugin" );
 				
 					# Clone the existing menu and set the node
@@ -3294,7 +3308,6 @@ sub appMenus {
 					text           => $apps->{$app}->{title},
 					window         => {
 						'icon-id'  => $icon,
-						titleStyle => 'album',
 					},
 				};
 			}
@@ -3351,6 +3364,7 @@ sub _localizeMenuItemText {
 		if ( $input->{title} && $input->{title} eq uc( $input->{title} ) ) {
 			$input->{title}        = $client->string( $input->{title} );
 			$input->{help}->{text} = $client->string( $input->{help}->{text} );
+			$input->{processingPopup}->{text} = $client->string( $input->{processingPopup}->{text} );
 			$input->{softbutton1}  = $client->string( $input->{softbutton1} );
 			$input->{softbutton2}  = $client->string( $input->{softbutton2} );
 		}

@@ -1,8 +1,8 @@
 #!/bin/sh
 
-# $Id$
-
 # postinst script for SqueezeCenter
+
+set -e
 
 # source debconf stuff
 . /usr/share/debconf/confmodule

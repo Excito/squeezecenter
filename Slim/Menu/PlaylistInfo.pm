@@ -44,7 +44,7 @@ sub init {
 }
 
 sub name {
-	return 'GENRE_INFO';
+	return 'PLAYLIST_INFO';
 }
 
 ##
@@ -210,6 +210,7 @@ sub playPlaylist {
 	$actions->{play} = $actions->{go};
 
 	$jive->{actions} = $actions;
+	$jive->{style} = 'itemplay';
 	push @{$items}, {
 		type => 'text',
 		name => $play_string,

@@ -1,6 +1,6 @@
 package Slim::Networking::SqueezeNetwork::Players;
 
-# $Id: Players.pm 28801 2009-10-09 09:48:03Z michael $
+# $Id: Players.pm 30040 2010-02-05 19:58:44Z andy $
 
 # Keep track of players that are connected to SN
 
@@ -57,7 +57,7 @@ sub init {
 		sub {
 			Slim::Utils::Timers::setTimer(
 				undef,
-				time() + 5,
+				time() + 2,
 				\&fetch_players,
 			);			
 		},
@@ -161,8 +161,8 @@ sub _players_done {
 		}
 	}
 	
-	# Setup apps for the web UI.
-	if ( !main::SLIM_SERVICE && !$::noweb ) {
+	# Setup apps for the web and classic player UI.
+	if ( main::WEBUI ) {
 		# Clear all existing my_apps items on the web, we'll build a new list
 		Slim::Web::Pages->delPageCategory('my_apps');
 		
@@ -179,37 +179,91 @@ sub _players_done {
 			}
 			elsif ( $info->{type} eq 'opml' ) {
 				# Setup a generic OPML menu for this app
-				my $url = 'apps/' . $app . '/index.html';
-				
-				Slim::Web::Pages->addPageLinks( 'my_apps', { $info->{title} => $url } );
-				
+
 				my $icon = $info->{icon};
 				if ( $icon !~ /^http/ ) {
 					# XXX: fix the template to use imageproxy to resize this icon
 					$icon = Slim::Networking::SqueezeNetwork->url($icon);
 				}
-				Slim::Web::Pages->addPageLinks( 'icons', { $info->{title} => $icon } );
 				
 				my $feed = $info->{url};
 				if ( $feed !~ /^http/ ) {
 					$feed = Slim::Networking::SqueezeNetwork->url($feed);
 				}
 				
-				Slim::Web::Pages->addPageFunction( $url, sub {
-					my $client = $_[0];
+				my $tag = lc($app);
 
-					Slim::Web::XMLBrowser->handleWebIndex( {
-						client  => $client,
-						feed    => $feed,
-						type    => 'link',
-						title   => $info->{title},
-						timeout => 35,
-						args    => \@_
-					} );
-				} );
+				# dynamically create plugin code for mysb.com based apps
+				my $subclass = "Slim::Plugin::MySB::$app";
+
+				# don't re-run plugin init if it already exists
+				eval { $subclass->getDisplayName() };
+
+				if (!$@) {
+					$log->debug("Plugin $subclass already initialized - skipping");
+					next; 
+				}
+
+				$log->debug("Initializing plugin for mysqueezebox.com based app '$app'");
+				
+				my $code = qq{
+					package ${subclass};
+					
+					use strict;
+					use base qw(Slim::Plugin::OPMLBased);
+					
+					sub initPlugin {
+						my \$class = shift;
+						
+						\$class->SUPER::initPlugin(
+							tag    => '$tag',
+							menu   => 'apps',
+							type   => 'link',
+							feed   => '$feed',
+							is_app => 1,
+						);
+					}
+					
+					sub _pluginDataFor {
+						my ( \$class, \$key ) = \@_;
+						
+						return '$icon' if \$key eq 'icon';
+						
+						return \$class->SUPER::_pluginDataFor(\$key);
+					}
+
+					sub getDisplayName { '$info->{title}' }
+					
+					sub playerMenu { }
+					
+					1;				
+				};
+				
+				eval $code;
+				
+				if ($@) {
+					$log->error( "Unable to dynamically create plugin class $subclass: $@" );
+				}
+				else {
+					$subclass->initPlugin();
+
+					foreach my $client ( Slim::Player::Client::clients() ) {
+						if ( !$client->isa('Slim::Player::SqueezePlay') ) {
+							Slim::Buttons::Home::updateMenu($client);
+						}
+					}
+				}
 			}
 		}
 	}
+
+	# SN can provide string translations for new menu items
+	if ( $res->{search_providers} ) {
+		main::DEBUGLOG && $log->is_debug && $log->debug( 'Adding search providers: ' . Data::Dump::dump( $res->{search_providers} ) );
+
+		Slim::Menu::GlobalSearch->registerSearchProviders( $res->{search_providers} );		
+	}
+	
 	
 	# Clear error count if any
 	if ( $prefs->get('snPlayersErrors') ) {

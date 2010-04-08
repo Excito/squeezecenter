@@ -1,6 +1,6 @@
 package Slim::Formats::Movie;
 
-# $Id: Movie.pm 28829 2009-10-13 11:37:58Z michael $
+# $Id: Movie.pm 29401 2009-11-22 23:59:51Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -56,14 +56,14 @@ sub getTag {
 	# map the existing tag names to the expected tag names
 	$class->_doTagMapping($tags);
 
-	$tags->{OFFSET} = 0;
-	$tags->{SIZE}   = $info->{file_size};
-	$tags->{SECS}   = $info->{song_length_ms} / 1000;
+	$tags->{OFFSET}  = 0;
+	$tags->{RATE}    = $info->{samplerate};
+	$tags->{SIZE}    = $info->{file_size};
+	$tags->{SECS}    = $info->{song_length_ms} / 1000;
+	$tags->{BITRATE} = $info->{avg_bitrate};
 	
 	if ( my $track = $info->{tracks}->[0] ) {
 		# MP4 file	
-		$tags->{BITRATE}    = $track->{avg_bitrate};
-		$tags->{RATE}       = $track->{samplerate};
 		$tags->{SAMPLESIZE} = $track->{bits_per_sample};
 		$tags->{CHANNELS}   = $track->{channels};
 
@@ -80,9 +80,9 @@ sub getTag {
 		# Check for HD-AAC file, if the file has 2 tracks and AOTs of 2/37
 		if ( defined $track->{audio_object_type} && (my $track2 = $info->{tracks}->[1]) ) {
 			if ( $track->{audio_object_type} == 2 && $track2->{audio_object_type} == 37 ) {
-				$tags->{LOSSLESS}  = 1;
-				$tags->{VBR_SCALE} = 1;
-				# XXX: may want to use a different content-type for HD?
+				$tags->{LOSSLESS}     = 1;
+				$tags->{VBR_SCALE}    = 1;
+				$tags->{CONTENT_TYPE} = 'sls';
 			}
 		}
 	}
@@ -90,7 +90,6 @@ sub getTag {
 		# ADTS file
 		$tags->{OFFSET}   = $info->{audio_offset}; # ID3v2 tags may be present
 		$tags->{BITRATE}  = $info->{bitrate};
-		$tags->{RATE}     = $info->{samplerate};
 		$tags->{CHANNELS} = $info->{channels};
 		
 		if ( $info->{id3_version} ) {

@@ -1,6 +1,6 @@
 package Slim::Player::Pipeline;
 
-# $Id: Pipeline.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Pipeline.pm 30113 2010-02-09 22:26:54Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -69,16 +69,19 @@ sub new {
 		$command =~ s/"/\\"/g;
 
 		my $newcommand = '"' . Slim::Utils::Misc::findbin('socketwrapper') .  '" ';
+		
+		# Bug 15650, Run transcoders with the same priority as the server
+		# XXX this sets the priority of the socketwrapper.exe process but not the actual transcoder process(es).
+		my $priority = Slim::Utils::OS::Win32::getPriorityClass() || Win32::Process::NORMAL_PRIORITY_CLASS();
 
-		my $createMode = Win32::Process::NORMAL_PRIORITY_CLASS() | Win32::Process::CREATE_NO_WINDOW();
+		my $createMode = $priority | Win32::Process::CREATE_NO_WINDOW();
 
 		if ($log->is_info || $log->is_debug) {
 
 			$newcommand .= $log->is_debug ? ' -D ' : ' -d ';       # socketwrapper debugging (-D = verbose)
 
-			$createMode = Win32::Process::NORMAL_PRIORITY_CLASS(); # create window so it is seen
+			$createMode = $priority; # create window so it is seen
 		}
-
 
 		if ($listenWriter) {
 			$newcommand .= '-i ' . $writerPort . ' ';

@@ -1,6 +1,6 @@
 package Slim::Buttons::Search;
 
-# $Id: Search.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Search.pm 29579 2009-12-09 12:01:59Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -219,9 +219,12 @@ sub startSearch {
 
 sub searchTerm {
 	my $client = shift;
+	my $search = shift;
+	
+	$search = $context{$client} if !defined $search;
 
 	# do the search!
-	@{$client->searchTerm} = split(//, Slim::Utils::Text::ignoreCaseArticles($context{$client}));
+	@{$client->searchTerm} = split(//, Slim::Utils::Text::ignoreCaseArticles($search));
 
 	my $term = '';
 

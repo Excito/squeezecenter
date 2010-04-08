@@ -1,6 +1,6 @@
 package Slim::Buttons::XMLBrowser;
 
-# $Id: XMLBrowser.pm 28615 2009-09-23 15:15:03Z andy $
+# $Id: XMLBrowser.pm 28627 2009-09-24 12:22:32Z andy $
 
 # Copyright 2005-2009 Logitech.
 

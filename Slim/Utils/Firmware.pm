@@ -5,7 +5,7 @@ package Slim::Utils::Firmware;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Firmware.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Firmware.pm 29758 2010-01-09 08:05:27Z michael $
 
 =head1 NAME
 
@@ -559,6 +559,10 @@ sub downloadAsyncError {
 			$error,
 			int( $CHECK_TIME / 60 ),
 		));
+
+		if ( my $proxy = $prefs->get('webproxy') ) {
+			$log->error( sprintf("Please check your proxy configuration (%s)", $proxy) );
+		} 
 	
 		Slim::Utils::Timers::killTimers( $file, \&downloadAsync );
 		Slim::Utils::Timers::setTimer( $file, time() + $CHECK_TIME, \&downloadAsync,

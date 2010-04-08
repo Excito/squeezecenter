@@ -1,5 +1,5 @@
 
 version=3
-
+opts=dversionmangle=s/\.dfsg\d*// \
 http://downloads.slimdevices.com/SqueezeboxServer_v([\d\.]+)/squeezeboxserver-([\d\.]+)(?-:\d+)?-noCPAN.tgz debian debian/make_dpkg_source
 

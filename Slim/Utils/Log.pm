@@ -1,6 +1,6 @@
 package Slim::Utils::Log;
 
-# $Id: Log.pm 28231 2009-08-20 13:36:51Z michael $
+# $Id: Log.pm 30141 2010-02-12 10:42:47Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Dan Sully, Logitech.
 # This program is free software; you can redistribute it and/or
@@ -148,7 +148,7 @@ sub init {
 	%runningConfig = %config;
 
 	# And finally call l4p's initialization method.
-  	Log::Log4perl->init(\%config);
+	Log::Log4perl->init(\%config);
 
 	$rootLogger = $class->get_logger('');
 }
@@ -396,13 +396,13 @@ sub setLogLevelForCategory {
 		$category = "log4perl.logger.$category";
 	}
 
+	$categories{$category} = $level;
+
 	# If the level is the same, it's a no-op.
-	if (defined $categories{$category} && $categories{$category} eq $level) {
+	if (defined $runningConfig{$category} && $runningConfig{$category} eq $level) {
 
 		return -1;
 	}
-
-	$categories{$category} = $level;
 
 	$needsReInit = 1;
 
@@ -815,10 +815,11 @@ sub getScannerLogOptions {
 	my $class = shift;
 	
 	my $options = $class->logGroups()->{SCANNER}->{categories};
+	my $defaults = $class->logLevels();
 	
 	foreach my $key (keys %$options) {
 
-		$options->{$key} = $runningConfig{"log4perl.logger.$key"};
+		$options->{$key} = $runningConfig{"log4perl.logger.$key"} || $defaults->{$key};
 		
 	}
 	
@@ -890,6 +891,7 @@ sub logLevels {
 		'player.display'             => 'ERROR',
 		'player.fonts'               => 'ERROR',
 		'player.firmware'            => 'ERROR',
+		'player.jive'                => 'ERROR',
 		'player.ir'                  => 'ERROR',
 		'player.menu'                => 'ERROR',
 		'player.playlist'            => 'ERROR',

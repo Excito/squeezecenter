@@ -41,6 +41,7 @@ use constant DEBUG        => 1;
 use constant ISWINDOWS    => ( $^O =~ /^m?s?win/i ) ? 1 : 0;
 use constant ISMAC        => ( $^O =~ /darwin/i ) ? 1 : 0;
 use constant INFOLOG      => 0;
+use constant WEBUI        => 0;
 
 # load these later, don't need them right now
 require File::Path;
@@ -50,7 +51,7 @@ require Getopt::Long;
 require Slim::Utils::OSDetect;
 require Slim::Utils::Light;
 
-our $VERSION = '7.4.1';
+our $VERSION = '7.5.0';
 
 BEGIN {
 	if (ISWINDOWS) {

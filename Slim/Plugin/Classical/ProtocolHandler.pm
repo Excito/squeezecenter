@@ -1,6 +1,6 @@
 package Slim::Plugin::Classical::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: ProtocolHandler.pm 28991 2009-10-23 14:46:48Z ayoung $
 
 # Handler for classical:// URLs
 
@@ -255,7 +255,7 @@ sub getMetadataFor {
 		# Go fetch metadata for all tracks on the playlist without metadata
 		my @need;
 		
-		for my $track ( @{ $client->playlist } ) {
+		for my $track ( @{ Slim::Player::Playlist::playList($client) } ) {
 			my $trackURL = blessed($track) ? $track->url : $track;
 			if ( $trackURL =~ m{classical://(.+)\.mp3} ) {
 				my $id = $1;

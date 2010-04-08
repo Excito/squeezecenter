@@ -1,6 +1,6 @@
 package Slim::Schema::RemotePlaylist;
 
-# $Id: RemotePlaylist.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: RemotePlaylist.pm 29870 2010-01-21 19:17:22Z andy $
 
 # This is an emulation of the Slim::Schema::Playlist API for remote tracks
 
@@ -51,7 +51,7 @@ sub getNextEntry {
 		my $type = $track->content_type;
 		
 		if ( main::DEBUGLOG && $log->is_debug ) {
-			$log->debug( "Considering " . $track->url . " ($type)" );
+			$log->debug( "Considering " . $track->url . " (type: $type)" );
 		}
 		
 		if ( Slim::Music::Info::isSong( $track, $type ) ) {

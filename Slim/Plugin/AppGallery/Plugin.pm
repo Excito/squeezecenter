@@ -1,6 +1,6 @@
 package Slim::Plugin::AppGallery::Plugin;
 
-# $Id: Plugin.pm 28823 2009-10-12 19:49:52Z andy $
+# $Id: Plugin.pm 28826 2009-10-12 23:44:49Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);

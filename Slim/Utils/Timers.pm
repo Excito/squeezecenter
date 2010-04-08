@@ -1,6 +1,6 @@
 package Slim::Utils::Timers;
 
-# $Id: Timers.pm 28759 2009-10-02 19:20:44Z andy $
+# $Id: Timers.pm 30418 2010-03-25 15:18:06Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -318,11 +318,11 @@ sub _storeTimer {
 	my ( $subptr, $objRef, $w ) = @_;
 	
 	$TIMERS{$subptr} ||= {};
-	$TIMERS{$subptr}->{$objRef} ||= [];
-	push @{ $TIMERS{$subptr}->{$objRef} }, $w;
+	my $slot = $TIMERS{$subptr}->{$objRef} ||= [];
+	push @{$slot}, $w;
 	
 	# Ensure the timer is destroyed after it fires (by undef $w above)
-	Scalar::Util::weaken( $TIMERS{$subptr}->{$objRef}->[-1] );
+	Scalar::Util::weaken( $slot->[-1] );
 }
 
 1;

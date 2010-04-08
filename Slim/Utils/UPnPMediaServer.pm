@@ -312,7 +312,7 @@ sub gotContainer {
 								# some Rhapsody titles contain '??'
 								$title =~ s/\?\?/ /g;
 							}
-							if ( $node =~ m{<upnp:class>([^<]+)</upnp:class>} ) {
+							if ( $node =~ m{<upnp:class[^>]*>([^<]+)</upnp:class>} ) {
 								$type = $1;
 							}
 							if ( $node =~ /id="([^"]+)"/ ) {
@@ -345,12 +345,18 @@ sub gotContainer {
 							if ($url) {
 								Slim::Music::Info::setTitle($url, $title);
 							}
+							
+							# Cache artwork if any
+							if ( $props->{albumArtURI} ) {
+								my $artcache = Slim::Utils::Cache->new( 'Artwork', 1, 1 );
+								$artcache->set( "remote_image_$url" => $props->{albumArtURI}, '1 day' );
+							}
 
 							$cache->set( "upnp_item_info_${udn}_${id}", $props, '1 hour' );
 
 							push @children, $props;
 						}
-						elsif ( $chunk =~ m{<TotalMatches>([^<]+)</TotalMatches>} ) {
+						elsif ( $chunk =~ m{<TotalMatches[^>]*>([^<]+)</TotalMatches>} ) {
 							# total browse results, used for building pagination links
 							my $matches = $1;
 							my $id      = $args->{id};
@@ -358,7 +364,7 @@ sub gotContainer {
 						}
 					}
 				}
-				elsif ( $chunk =~ m{<TotalMatches>([^<]+)</TotalMatches>} ) {
+				elsif ( $chunk =~ m{<TotalMatches[^>]*>([^<]+)</TotalMatches>} ) {
 					# total browse results, used for building pagination links
 					my $matches = $1;
 					my $id      = $args->{id};

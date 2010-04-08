@@ -1,6 +1,6 @@
 package Slim::Utils::MySQLHelper;
 
-# $Id: MySQLHelper.pm 28582 2009-09-21 14:41:59Z andy $
+# $Id: MySQLHelper.pm 29591 2009-12-11 15:57:30Z michael $
 
 =head1 NAME
 
@@ -68,6 +68,12 @@ Initializes the entire MySQL subsystem - creates the config file, and starts the
 
 sub init {
 	my $class = shift;
+
+	# Reset dbsource pref if it's not for MySQL
+	if ( $prefs->get('dbsource') !~ /^dbi:mysql/ ) {
+		$prefs->set( dbsource => default_dbsource() );
+		$prefs->set( dbsource => $class->source() );
+	}
 
 	# Check to see if our private port is being used. If not, we'll assume
 	# the user has setup their own copy of MySQL.

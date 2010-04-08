@@ -1,6 +1,6 @@
 package Slim::Plugin::Queen::Plugin;
 
-# $Id: Plugin.pm 28682 2009-09-29 17:52:02Z andy $
+# $Id: Plugin.pm 28697 2009-09-30 13:43:08Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);

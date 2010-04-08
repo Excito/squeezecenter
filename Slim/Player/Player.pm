@@ -10,7 +10,7 @@ package Slim::Player::Player;
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# $Id: Player.pm 28578 2009-09-20 15:53:37Z tom $
+# $Id: Player.pm 30176 2010-02-16 21:00:51Z adrian $
 #
 
 use strict;
@@ -48,6 +48,7 @@ our $defaultPrefs = {
 		PLUGIN_MY_APPS_MODULE_NAME
 		PLUGIN_APP_GALLERY_MODULE_NAME
 		FAVORITES
+		GLOBAL_SEARCH
 		PLUGINS
 		SETTINGS
 		SQUEEZENETWORK_CONNECT
@@ -64,7 +65,6 @@ our $defaultPrefs = {
 	'syncVolume'           => 0,
 	'treble'               => 50,
 	'volume'               => 50,
-	'syncBufferThreshold'  => 4, 	# KB, 1/4s @ 128kb/s
 	'bufferThreshold'      => 255,	# KB
 	'powerOnResume'        => 'PauseOff-NoneOn',
 	'maintainSync'         => 1,
@@ -113,6 +113,8 @@ sub init {
 	$client->power($prefs->client($client)->get('power'));
 	$client->startup($syncgroupid);
 
+	return if $client->display->isa('Slim::Display::NoDisplay');
+		
 	# start the screen saver
 	Slim::Buttons::ScreenSaver::screenSaver($client);
 	$client->brightness($prefs->client($client)->get($client->power() ? 'powerOnBrightness' : 'powerOffBrightness'));
@@ -275,27 +277,30 @@ sub power {
 		Slim::Buttons::Common::setMode($client, 'home');
 
 		$client->updateMode(0); # unblock updates
-		
-		# restore the saved brightness, unless its completely dark...
-		my $powerOnBrightness = $prefs->client($client)->get('powerOnBrightness');
-
-		if ($powerOnBrightness < 1) {
-			$powerOnBrightness = 1;
-			$prefs->client($client)->set('powerOnBrightness', $powerOnBrightness);
+			
+		# no need to initialize brightness if no display is available
+		if ( !$client->display->isa('Slim::Display::NoDisplay') ) {
+			# restore the saved brightness, unless its completely dark...
+			my $powerOnBrightness = $prefs->client($client)->get('powerOnBrightness');
+	
+			if ($powerOnBrightness < 1) {
+				$powerOnBrightness = 1;
+				$prefs->client($client)->set('powerOnBrightness', $powerOnBrightness);
+			}
+			$client->brightness($powerOnBrightness);
+	
+			my $oneline = ($client->linesPerScreen() == 1);
+	
+			$client->welcomeScreen();
 		}
-		$client->brightness($powerOnBrightness);
-
-		my $oneline = ($client->linesPerScreen() == 1);
-
-		$client->welcomeScreen();
 
 		$controller->playerActive($client);
 
 		if (!$controller->isPlaying() && !$noplay) {
 			
 			if ($resumeOn =~ /Reset/) {
-				# reset playlist to start
-				$client->execute(["playlist","jump", 0, 1]);
+				# reset playlist to start, but don't start the playback yet
+				$client->execute(["playlist","jump", 0, 1, 1]);
 			}
 			
 			if ($resumeOn =~ /Play/ && Slim::Player::Playlist::song($client)
@@ -849,6 +854,11 @@ sub mixerDisplay {
 
 	} elsif ($feature eq 'volume') {
 
+		# Negative value = muting
+		if ($featureValue < 0) {
+			$featureValue = 0;
+		}
+
 		if (my $linefunc = $client->customVolumeLines()) {
 
 			$parts = &$linefunc($client, { value => $featureValue });
@@ -903,7 +913,8 @@ sub packetLatency {
 	return $prefs->client(shift)->get('packetLatency') / 1000;
 }
 
-use constant JIFFIES_OFFSET_TRACKING_LIST_SIZE => 10;
+use constant JIFFIES_OFFSET_TRACKING_LIST_SIZE => 50;	# Must be this big for large forward jumps
+use constant JIFFIES_OFFSET_TRACKING_LIST_MIN  => 10;	# Must be this big to use at all
 use constant JIFFIES_EPOCH_MIN_ADJUST          => 0.001;
 use constant JIFFIES_EPOCH_MAX_ADJUST          => 0.005;
 
@@ -941,12 +952,15 @@ sub trackJiffiesEpoch {
 		if (@{$jiffiesOffsetList} > JIFFIES_OFFSET_TRACKING_LIST_SIZE);
 
 	if (   $diff > 0.001
-		&& (@{$jiffiesOffsetList} == JIFFIES_OFFSET_TRACKING_LIST_SIZE)
+		&& (@{$jiffiesOffsetList} >= JIFFIES_OFFSET_TRACKING_LIST_MIN)
 	) {
 		my $min_diff = Math::VecStat::min($jiffiesOffsetList);
 		if ( $min_diff > JIFFIES_EPOCH_MIN_ADJUST ) {
-			if ( $min_diff > JIFFIES_EPOCH_MAX_ADJUST ) {
-				$min_diff = JIFFIES_EPOCH_MAX_ADJUST;
+			
+			# We only make jumps larger than JIFFIES_EPOCH_MAX_ADJUST if we have a full sequence of offsets.
+			if ( $min_diff > JIFFIES_EPOCH_MAX_ADJUST  && @{$jiffiesOffsetList} < JIFFIES_OFFSET_TRACKING_LIST_SIZE ) {
+				# wait until we have a full list
+				return $diff;
 			}
 			if ( main::DEBUGLOG && $synclog->is_debug ) {
 				$synclog->debug( sprintf("%s adjust jiffies epoch +%.3fs", $client->id(), $min_diff) );
@@ -1010,7 +1024,7 @@ sub publishPlayPoint {
 }
 
 sub isReadyToStream {
-	my ($client, $song) = @_;
+	my $client = shift; # ignore $song, $playingSong
 	return $client->readyToStream();
 }
 
@@ -1155,7 +1169,7 @@ sub _buffering {
 	}
 
 	if ( $percent == 0 && $buffering == 1) {
-		my $status = $client->string('CONNECTING_FOR');
+		$status = $client->string('CONNECTING_FOR');
   		if ( $client->linesPerScreen() == 1 ) {
 			$line2 = $status;
 		} else {
@@ -1196,7 +1210,7 @@ sub _buffering {
 		$client->display->updateMode(0);
 		$client->showBriefly({
 			line => [ $line1, $line2 ],
-			jive => { type => 'song', text => [ $status, $args->{'title'} ], 'icon-id' => $args->{'cover'}, duration => 500 },
+			jive => { type => 'song', text => [ $status, $args->{'title'} ], duration => 500 },
 			cli  => undef,
 		}, { duration => 1, block => 1 });
 	}

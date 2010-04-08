@@ -1,6 +1,6 @@
 package Slim::Web::Pages::BrowseTree;
 
-# $Id: BrowseTree.pm 28819 2009-10-12 17:27:13Z michael $
+# $Id: BrowseTree.pm 28826 2009-10-12 23:44:49Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

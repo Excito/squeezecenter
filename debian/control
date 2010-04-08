@@ -2,14 +2,14 @@ Source: squeezecenter
 Section: sound
 Priority: optional
 Maintainer: Carl Fürstenberg <carl@excito.com>
-Build-Depends: debhelper (>= 4.0.0), html2text, cdbs, dpatch
-Standards-Version: 3.8.0
+Build-Depends: debhelper (>= 7.2), html2text, quilt (>= 0.40)
+Standards-Version: 3.8.3
 
 Package: squeezecenter
 Architecture: all
 Conflicts: slimp3, slimserver, squeezecenter-softsqueeze, squeezecenter-skins
 Replaces: slimp3, slimserver, squeezecenter-softsqueeze, squeezecenter-skins
-Depends: ${perl:Depends},
+Depends: ${perl:Depends}, ${misc:Depends},
  dbconfig-common,
  ttf-dejavu | ttf-bitstream-vera,
  ttf-freefont,
@@ -19,12 +19,13 @@ Depends: ${perl:Depends},
  adduser,
  wavpack,
  musepack-tools,
- libanyevent-perl (>= 5.2),
- libaudio-scan-perl (>= 0.44),
+ libanyevent-perl (>= 5.202),
+ libaudio-scan-perl (>= 0.62),
  libcache-cache-perl (>= 1.04),
  libcgi-pm-perl (>= 3.40),
  libclass-data-inheritable-perl (>= 0.04),
  libclass-inspector-perl (>= 1.16),
+ libfile-copy-recursive-perl (>= 0.29),
  libdata-dump-perl,
  libdata-uriencode-perl (>= 0.11),
  libdbd-mysql-perl (>= 3.0002),
@@ -45,7 +46,6 @@ Depends: ${perl:Depends},
  libjson-xs-versiononeandtwo-perl (>= 0.31),
  liblog-log4perl-perl (>= 1.23),
  libmath-vecstat-perl (>= 0.08),
- libnet-ip-perl (>= 1.24),
  libpar-perl (>= 0.970),
  libpoe-perl (>= 0.35),
  libpath-class-perl (>= 0.16),

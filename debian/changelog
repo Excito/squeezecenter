@@ -1,3 +1,39 @@
+squeezecenter (7.5.0.dfsg1-5) estelle claire; urgency=low
+
+  * seems that 5.202 < 5.21 
+
+ -- Carl Fürstenberg <carl@excito.com>  Thu, 08 Apr 2010 12:32:38 +0200
+
+squeezecenter (7.5.0.dfsg1-4) estelle claire; urgency=low
+
+  * strict version on AnyEvent to 5.202 around
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 07 Apr 2010 17:17:19 +0200
+
+squeezecenter (7.5.0.dfsg1-3) estelle claire; urgency=low
+
+  * prevent folder migration 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 07 Apr 2010 16:55:03 +0200
+
+squeezecenter (7.5.0.dfsg1-2) estelle claire; urgency=low
+
+  * relocate scprefs in custom os detect 
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 07 Apr 2010 16:19:26 +0200
+
+squeezecenter (7.5.0.dfsg1-1) claire; urgency=low
+
+  * New upstream release
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 07 Apr 2010 12:56:31 +0200
+
+squeezecenter (7.4.2.dfsg1-1) claire; urgency=low
+
+  * New upstream release
+
+ -- Carl Fürstenberg <carl@excito.com>  Tue, 16 Mar 2010 17:31:18 +0100
+
 squeezecenter (7.4.1.dfsg1-6) claire; urgency=low
 
   * missing depends for Tie:IxHash, Exporter::Lite and Template

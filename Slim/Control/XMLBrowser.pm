@@ -30,15 +30,17 @@ use Slim::Formats::XML;
 use Slim::Utils::Cache;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
+use Slim::Utils::Prefs;
 #use Slim::Utils::Timers;
 
 use constant CACHE_TIME => 3600; # how long to cache browse sessions
 
 my $log = logger('formats.xml');
+my $prefs = preferences('server');
 
 sub cliQuery {
 	my ( $query, $feed, $request, $expires, $forceTitle ) = @_;
-	
+
 	main::INFOLOG && $log->info("cliQuery($query)");
 
 	# check this is the correct query.
@@ -95,6 +97,7 @@ sub cliQuery {
 	if ( ref $feed eq 'HASH' ) {
 		
 		main::DEBUGLOG && $log->debug("Feed is already XML data!");
+		
 		_cliQuery_done( $feed, {
 			'request'    => $request,
 			'client'     => $request->client,
@@ -119,6 +122,11 @@ sub cliQuery {
 		$feed =~ s/{QUERY}/$query/g;
 	}
 	
+	my $playlistControlCM = [];
+	if ( defined($request->getParam('xmlBrowseInterimCM')) ) {
+		$playlistControlCM = _playlistControlContextMenu({ request => $request, query => $query });
+	}
+
 	# Lookup this browse session in cache if user is browsing below top-level
 	# This avoids repated lookups to drill down the menu
 	if ( $itemId && $itemId =~ /^([a-f0-9]{8})/ ) {
@@ -133,11 +141,6 @@ sub cliQuery {
 			$request->addParam( item_id => "$itemId" ); # stringify for JSON
 		}
 		
-		if ( defined($request->getParam('xmlBrowseInterimCM')) ) {
-			_playlistControlContextMenu({ request => $request, query => $query });
-
-			return;
-		}
 
 		my $cache = Slim::Utils::Cache->new;
 		if ( my $cached = $cache->get("xmlbrowser_$sid") ) {
@@ -149,6 +152,7 @@ sub cliQuery {
 				'url'     => $feed,
 				'query'   => $query,
 				'expires' => $expires,
+				'playlistControlCM' => $playlistControlCM,
 				'timeout' => 35,
 			} );
 			return;
@@ -167,6 +171,7 @@ sub cliQuery {
 			'query'      => $query,
 			'expires'    => $expires,
 			'timeout'    => 35,
+			'playlistControlCM' => $playlistControlCM,
 #			'forceTitle' => $forceTitle,
 		}
 	);
@@ -182,6 +187,7 @@ sub _cliQuery_done {
 	my $query      = $params->{'query'};
 	my $expires    = $params->{'expires'};
 	my $timeout    = $params->{'timeout'};
+	my $playlistControlCM = $params->{'playlistControlCM'} || [];
 #	my $forceTitle = $params->{'forceTitle'};
 	my $window;
 	
@@ -197,8 +203,9 @@ sub _cliQuery_done {
 	}
 
 	# get our parameters
-	my $index      = $request->getParam('_index');
-	my $quantity   = $request->getParam('_quantity');
+	my $index      = $request->getParam('_index') || 0;
+	my $quantity   = $request->getParam('_quantity') || 0;
+
 
 	# Bug 14100: sending requests that involve newWindow param from SP side results in no
 	# _index _quantity args being sent, but XML Browser actually needs them, so they need to be hacked in
@@ -229,17 +236,19 @@ sub _cliQuery_done {
 	my @index = ();
 
 	if ( defined $item_id && length($item_id) ) {
+		main::DEBUGLOG && $log->is_debug && $log->debug("item_id: $item_id");
+		
 		@index = split /\./, $item_id;
 		
-		if ( length( $index[0] ) >= 8 ) {
+		if ( length( $index[0] ) >= 8 && $index[0] =~ /^[a-f0-9]{8}/ ) {
 			# Session ID is first element in index
 			$sid = shift @index;
 		}
 	}
 	else {
-		# Create a new session ID, unless the list has coderefs
 		my $refs = scalar grep { ref $_->{url} } @{ $feed->{items} };
 		
+		# Don't cache if list has coderefs
 		if ( !$refs ) {
 			$sid = Slim::Utils::Misc::createUUID();
 		}
@@ -247,9 +256,8 @@ sub _cliQuery_done {
 	
 	my $subFeed = $feed;
 	
-#	use Data::Dumper;
-#	print Data::Dumper::Dumper($subFeed);
-	
+#	warn Data::Dump::dump($feed) . "\n";
+
 	my @crumbIndex = $sid ? ( $sid ) : ();
 	
 	# Add top-level search to index
@@ -273,8 +281,8 @@ sub _cliQuery_done {
 		
 		eval { $cache->set( "xmlbrowser_$sid", $feed, $cachetime ) };
 
-		if ( $@ && $log->is_warn ) {
-			$log->warn("Session not cached: $@");
+		if ( $@ && $log->is_debug ) {
+			$log->debug("Session not cached: $@");
 		}
 	}
 	
@@ -319,6 +327,17 @@ sub _cliQuery_done {
 				$subFeed->{url}  = $subFeed->{playlist};
 			}
 			
+			# Bug 15343, if we are at the lowest menu level, and we have already
+			# fetched and cached this menu level, check if we should always
+			# re-fetch this menu. This is used to ensure things like the Pandora
+			# station list are always up to date. The reason we check depth==levels
+			# is so that when you are browsing at a lower level we don't allow
+			# the parent menu to be refreshed out from under the user
+			if ( $depth == $levels && $subFeed->{fetched} && $subFeed->{forceRefresh} && !$params->{fromSubFeed} ) {
+				main::DEBUGLOG && $log->is_debug && $log->debug("  Forcing refresh of menu");
+				delete $subFeed->{fetched};
+			}
+			
 			# If the feed is another URL, fetch it and insert it into the
 			# current cached feed
 			if ( (!$subFeed->{'type'} || ($subFeed->{'type'} ne 'audio')) && defined $subFeed->{'url'} && !$subFeed->{'fetched'} ) {
@@ -346,6 +365,7 @@ sub _cliQuery_done {
 					'query'        => $query,
 					'expires'      => $expires,
 					'timeout'      => $timeout,
+					'playlistControlCM' => $playlistControlCM,
 				};
 				
 				# Check for a cached version of this subfeed URL
@@ -450,10 +470,19 @@ sub _cliQuery_done {
 				$request->addResult('count', 1) if !$menuMode;
 				my ($valid, $start, $end) = $request->normalize(scalar($index), scalar($quantity), 1);
 				
+				my $cnt = 0;
+
+				if ($menuMode) {
+					for my $eachmenu (@$playlistControlCM) {
+						main::INFOLOG && $log->info("adding playlist Control CM item $cnt");
+						$request->setResultLoopHash('item_loop', $cnt, $eachmenu);
+						$cnt++;
+					}
+				}
+
 				if ($valid) {
 					
 					my $loopname = $menuMode ? 'item_loop' : 'loop_loop';
-					my $cnt = 0;
 					$request->addResult('offset', $start) if $menuMode;
 
 					# create an ordered hash to store this stuff...
@@ -504,6 +533,7 @@ sub _cliQuery_done {
 							},
 						);
 						
+					if (! defined($request->getParam('xmlBrowseInterimCM')) ) {
 						for my $mode ( 'play', 'add' ) {
 							my $actions = {
 								'do' => {
@@ -541,6 +571,7 @@ sub _cliQuery_done {
 							$request->addResultLoop($loopname, $cnt, 'style', $items{$mode}{'style'});
 							$cnt++;
 						}
+					}
 						
 						if ( my $title = $hash{name} ) {
 							my $text = $request->string('TITLE') . ": $title";
@@ -618,6 +649,7 @@ sub _cliQuery_done {
 							$request->addResultLoop($loopname, $cnt, 'action', 'none');
 							$cnt++;
 						}
+					if (! defined($request->getParam('xmlBrowseInterimCM')) ) {
 						if ( my ($url, $title) = ($hash{url}, $hash{name}) ) {
 							# first see if $url is already a favorite
 							my $action = 'add';
@@ -648,9 +680,9 @@ sub _cliQuery_done {
 							$request->addResultLoop($loopname, $cnt, 'text', $string);
 							$request->addResultLoop($loopname, $cnt, 'actions', $actions);
 							$request->addResultLoop($loopname, $cnt, 'style', 'item');
-							$request->addResultLoop($loopname, $cnt, 'window', { 'titleStyle' => 'favorites' });
 							$cnt++;
 						}
+					}
 
 						$request->addResult('count', $cnt);
 					}
@@ -708,7 +740,7 @@ sub _cliQuery_done {
 				}
 			}
 			
-			# play all streams of an item
+			# play all streams of an item (or one stream if pref is unset)
 			else {
 				my @urls;
 				for my $item ( @{ $subFeed->{'items'} } ) {
@@ -742,13 +774,11 @@ sub _cliQuery_done {
 				
 				if ( @urls ) {
 
-					if ( main::INFOLOG && $log->is_info ) {
-						$log->info(sprintf("Playing/adding all items:\n%s", join("\n", @urls)));
-					}
-					
 					if ( $method =~ /play|load/i ) {
 						$client->execute([ 'playlist', 'clear' ]);
 					}
+
+					my $play_index = $request->getParam('play_index') || 0;
 
 					my $cmd;
 					if ($method =~ /add/) {
@@ -757,9 +787,11 @@ sub _cliQuery_done {
 					else {
 						$cmd = 'inserttracks';
 					}
+		
+					if ( main::INFOLOG && $log->is_info ) {
+						$log->info(sprintf("Playing/adding all items:\n%s", join("\n", @urls)));
+					}
 	
-					my $play_index = $request->getParam('play_index') || 0;
-
 					$client->execute([ 'playlist', $cmd, 'listref', \@urls ]);
 
 					# if we're adding or inserting, show a showBriefly
@@ -807,6 +839,15 @@ sub _cliQuery_done {
 		
 			my $loopname = $menuMode ? 'item_loop' : 'loop_loop';
 			my $cnt = 0;
+
+			if ($menuMode) {
+				for my $eachmenu (@$playlistControlCM) {
+					$request->setResultLoopHash('item_loop', $cnt, $eachmenu);
+					$cnt++;
+					$count++;
+				}
+			}
+
 			$request->addResult('offset', $start) if $menuMode;
 
 			if ($valid) {
@@ -890,6 +931,11 @@ sub _cliQuery_done {
 				}
 
 				for my $item ( @{$subFeed->{'items'}}[$start..$end] ) {
+					
+					# Bug 15343, If we're adding items above in a context menu, we have to adjust our index values
+					if ( my $cmCount = scalar @{$playlistControlCM} ) {
+						$item->{_slim_id} = $start + $cnt - $cmCount;
+					}
 									
 					# create an ordered hash to store this stuff...
 					tie my %hash, "Tie::IxHash";
@@ -1023,13 +1069,11 @@ sub _cliQuery_done {
 
 						if ( $item->{image} ) {
 							$request->addResultLoop( $loopname, $cnt, 'icon', $item->{image} );
-							$request->addResultLoop($loopname, $cnt, 'window', { 'titleStyle' => 'album' });
 							$hasImage = 1;
 						}
 
 						if ( $item->{icon} ) {
 							$request->addResultLoop( $loopname, $cnt, 'icon' . ($item->{icon} =~ /^http:/ ? '' : '-id'), $item->{icon} );
-							$request->addResultLoop($loopname, $cnt, 'window', { 'titleStyle' => 'album' });
 							$hasImage = 1;
 						}
 
@@ -1071,6 +1115,9 @@ sub _cliQuery_done {
 							
 							my $input = {
 								len  => 1,
+								processingPopup => {
+									text => $request->string('SEARCHING'),
+								},
 								help => {
 									text => $request->string('JIVE_SEARCHFOR_HELP')
 								},
@@ -1081,6 +1128,9 @@ sub _cliQuery_done {
 							
 							$request->addResultLoop( $loopname, $cnt, 'actions', $actions );
 							$request->addResultLoop( $loopname, $cnt, 'input', $input );
+							if ($item->{nextWindow}) {
+								$request->addResultLoop( $loopname, $cnt, 'nextWindow', $item->{nextWindow} );
+							}
 						}
 						elsif ( !$isPlayable && !$touchToPlay ) {
 							my $actions = {
@@ -1096,12 +1146,28 @@ sub _cliQuery_done {
 							# Bug 13247, support nextWindow param
 							if ( $item->{nextWindow} ) {
 								$actions->{go}{nextWindow} = $item->{nextWindow};
+								# Bug 15690 - if nextWindow is 'nowPlaying', assume this should be styled as a touch-to-play
+								if ( $item->{nextWindow} eq 'nowPlaying' ) {
+									$request->addResultLoop( $loopname, $cnt, 'style', 'itemplay');
+								}
 							}
 							$request->addResultLoop( $loopname, $cnt, 'actions', $actions );
 							$request->addResultLoop( $loopname, $cnt, 'addAction', 'go');
 						}
 						elsif ( $touchToPlay ) {
-							my $all = $item->{playall} ? 'all' : '';
+
+							my $playalbum = undef;
+							if ( $request->client ) {
+								$playalbum = $prefs->client($request->client)->get('playtrackalbum');
+							}
+						
+							# if player pref for playtrack album is not set, get the old server pref.
+							if ( !defined $playalbum ) {
+								$playalbum = $prefs->get('playtrackalbum');
+							}
+
+							my $all = $playalbum && $item->{playall} ? 'all' : '';
+							
 							my $actions = {
 								more => {
 									cmd         => [ $query, 'items' ],
@@ -1129,7 +1195,7 @@ sub _cliQuery_done {
 								}
 							};
 							
-							if ( $item->{playall} ) {
+							if ( $playalbum && $item->{playall} ) {
 								# Clone params or we'll end up changing data for every action
 								my $cParams = Storable::dclone($itemParams);
 								
@@ -1235,6 +1301,14 @@ sub _cliQuerySubFeed_done {
 	}
 
 	$subFeed->{'fetched'} = 1;
+	
+	# Pass-through forceRefresh flag
+	if ( $feed->{forceRefresh} ) {
+		$subFeed->{forceRefresh} = 1;
+	}
+	
+	# Mark this as coming from subFeed, so that we know to ignore forceRefresh
+	$params->{fromSubFeed} = 1;
 
 	# cachetime will only be set by parsers which know their content is dynamic
 	if (defined $feed->{'cachetime'}) {
@@ -1423,6 +1497,7 @@ sub _playlistControlContextMenu {
 		},
 		{
 			text => $request->string('PLAY'),
+			style => 'itemplay',
 			actions => {
 				go => {
 					player => 0,
@@ -1472,12 +1547,8 @@ sub _playlistControlContextMenu {
 	$request->addResult('count', $numItems);
 	$request->addResult('offset', 0);
 	my $cnt = 0;
-	for my $eachmenu (@contextMenu) {
-		$request->setResultLoopHash('item_loop', $cnt, $eachmenu);
-		$cnt++;
-	}
+	return \@contextMenu;
 
-	$request->setStatusDone();
 }
 
 

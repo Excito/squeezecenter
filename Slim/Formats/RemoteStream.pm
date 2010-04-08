@@ -1,6 +1,6 @@
 package Slim::Formats::RemoteStream;
 		  
-# $Id: RemoteStream.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: RemoteStream.pm 30416 2010-03-25 13:51:32Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 #
@@ -12,8 +12,8 @@ package Slim::Formats::RemoteStream;
 use strict;
 use base qw(IO::Socket::INET);
 
-# Get Exporter's import method here so as to avoid inheriting one from IO::Socket::INET
-use Exporter qw(import);
+# Avoid IO::Socket's import method
+sub import {}
 
 use IO::Socket qw(
 	:crlf
@@ -102,7 +102,7 @@ sub open {
 
 		my $errnum = 0 + $!;
 
-		if ($errnum != EWOULDBLOCK && $errnum != EINPROGRESS) {
+		if ($errnum != EWOULDBLOCK && $errnum != EINPROGRESS && $errnum != EINTR) {
 
 			$log->error("Can't open socket to [$server:$port]: $errnum: $!");
 
@@ -118,16 +118,11 @@ sub open {
 			return undef;
 		};
 	};
+	
+	${*$sock}{'song'} = $args->{'song'};
 
-	# When reading metadata, the caller doesn't want to immediately request data.
-	if (!$args->{'readTags'}) {
+	return $sock->request($args);
 
-		return $sock->request($args);
-
-	} else {
-
-		return $sock;
-	}
 }
 
 sub request {
@@ -141,7 +136,6 @@ sub request {
 	my $request = $self->requestString($args->{'client'}, $url, $post, $args->{'song'} ? $args->{'song'}->seekdata() : undef);
 	
 	${*$self}{'client'}  = $args->{'client'};
-	${*$self}{'create'}  = $args->{'create'};
 	${*$self}{'bitrate'} = $args->{'bitrate'};
 	${*$self}{'infoUrl'} = $args->{'infoUrl'};
 	

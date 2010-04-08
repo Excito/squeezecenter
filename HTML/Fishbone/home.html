@@ -7,6 +7,7 @@
 			[%- IF additionalLinks.my_apps %]
 			<OPTION value="" label="">---[% "PLUGIN_MY_APPS_MODULE_NAME" | string  %]---</option>
 			[%- PROCESS addBrowseLinks links=additionalLinks.my_apps order=additionalLinkOrder.my_apps %]
+			[%- PROCESS addBrowseLinks links=additionalLinks.apps order=additionalLinkOrder.apps %]
 			[% END %]
 			<OPTION value="" label="">---[% "SEARCH" | string %]---</OPTION>
 			[%- PROCESS addBrowseLinks links=additionalLinks.search order={} %]
@@ -169,7 +170,7 @@
 					</span>
 		
 					<span id="libraryInfo" [% IF warn %]style="display:none"[% END %]>
-						<a href="http://www.slimdevices.com/" target="slimdevices"><img src="[% webroot %]html/images/slimdevices_logo.gif" alt="Slim Devices/Logitech" height="17" width="150"></a>
+						<a href="http://www.logitech.com/" target="slimdevices"><img src="[% webroot %]html/images/slimdevices_logo.gif" alt="Slim Devices/Logitech" height="17" width="150"></a>
 					</span>
 		
 			</span>

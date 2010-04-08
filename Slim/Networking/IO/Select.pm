@@ -1,6 +1,6 @@
 package Slim::Networking::IO::Select;
 
-# $Id: Select.pm 28759 2009-10-02 19:20:44Z andy $
+# $Id: Select.pm 28762 2009-10-03 02:21:16Z andy $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or

@@ -95,11 +95,12 @@ ELSE %]
 		FOREACH item = additionalLinkOrder.my_apps;
 			IF additionalLinks.my_apps.exists(item);
 				link.value = additionalLinks.my_apps.$item;
+				link.target = additionalLinks.my_apps.$item.match('^http:') ? "mysb" : "";
 				link.key = item;
 				PROCESS menuItem;
 			END;
 		END;
-		FOREACH link = additionalLinks.my_apps;
+		FOREACH link = additionalLinks.apps;
 			IF !additionalLinkOrder.my_apps.grep(link.key).size;
 				additionalLinks.icons.${link.key} = additionalLinks.icons.${link.key} || 'html/images/plugin.png';
 				PROCESS menuItem;
@@ -111,6 +112,7 @@ ELSE %]
 		FOREACH link = additionalLinks.plugins;
 			IF link.key == 'ALARM';
 				NEXT UNLESS player;
+				NEXT IF (nosetup || noserver);
 				link.value = webroot _ 'settings/index.html?activePage=ALARM&amp;';
 				link.target = 'sc_settings';
 			END;

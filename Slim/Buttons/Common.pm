@@ -1,6 +1,6 @@
 package Slim::Buttons::Common;
 
-# $Id: Common.pm 28759 2009-10-02 19:20:44Z andy $
+# $Id: Common.pm 29964 2010-02-01 12:51:25Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -42,6 +42,7 @@ use Scalar::Util qw(blessed);
 use Slim::Buttons::Alarm;
 use Slim::Buttons::SqueezeNetwork;
 use Slim::Buttons::Volume;
+use Slim::Buttons::GlobalSearch;
 use Slim::Buttons::XMLBrowser;
 use Slim::Player::Client;
 use Slim::Utils::DateTime;
@@ -50,6 +51,11 @@ use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Buttons::Block;
 use Slim::Utils::Prefs;
+
+if ( main::SLIM_SERVICE ) {
+	# needed for some SN-only modes
+	require SDI::Service::Buttons::SetupWizard;
+}
 
 # hash of references to functions to call when we leave a mode
 our %leaveMode = ();
@@ -125,12 +131,17 @@ sub init {
 	Slim::Buttons::XMLBrowser::init();
 	Slim::Buttons::Power::init();
 	Slim::Buttons::ScreenSaver::init();
+	Slim::Buttons::GlobalSearch::init();
 	Slim::Buttons::Search::init();
 	Slim::Buttons::SqueezeNetwork::init();
 	Slim::Buttons::Synchronize::init();
 	Slim::Buttons::TrackInfo::init();
 	Slim::Buttons::RemoteTrackInfo::init();
 	Slim::Buttons::Volume::init();
+	
+	if ( main::SLIM_SERVICE ) {
+		SDI::Service::Buttons::SetupWizard::init();
+	}
 
 	addSaver('playlist', undef, undef, undef, 'SCREENSAVER_JUMP_TO_NOW_PLAYING', 'PLAY');
 }
@@ -689,6 +700,18 @@ our %functions = (
 		}
 	},
 
+	'globalsearch' => sub  {
+		my $client = shift;
+
+		if ($client->modeParam('header') ne 'GLOBAL_SEARCH') {
+
+			setMode($client, 'home');
+			Slim::Buttons::Home::jump($client, 'globalsearch');
+			Slim::Buttons::Common::pushModeLeft($client, 'globalsearch');
+
+		}
+	},
+
 	'browse' => sub  {
 		my $client = shift;
 		my $button = shift;
@@ -885,6 +908,15 @@ our %functions = (
 
 				$client->execute(['playlist', 'play', $url]);
 			}
+			$client->showBriefly( 
+	                        {
+              				         'jive' =>
+	                                {
+              			                         'type'    => 'popupplay',
+                              			         'text'    => [ $client->string('PRESET', $digit), $title ],
+	                                },
+				}
+			);
 		}
 		else {
 			main::INFOLOG && $log->info("Can't play preset number $digit - not an audio entry");
@@ -908,23 +940,23 @@ our %functions = (
 			my $display = $client->curLines;
 
 			if ($client->linesPerScreen == 1) {
-				$display->{'line'}[1] = sprintf($client->string('PRESET'), $digit) ;
+				$display->{'line'}[1] = sprintf($client->string('PRESET'), $num);
 			} else {
-				$display->{'line'}[0] = sprintf($client->string('PRESET_HOLD_TO_SAVE'), $digit) ;
+				$display->{'line'}[0] = sprintf($client->string('PRESET_HOLD_TO_SAVE'), $num);
 			}
 			$display->{'jive'} = undef;
 
 			$client->showBriefly($display, { duration => 5, callback => sub {
 				if (Slim::Hardware::IR::holdTime($client) > 5 ) {
 					# do this on a timer so it happens after showBriefly ends and we can see any screen updates which result
-					Slim::Utils::Timers::setTimer($client, Time::HiRes::time(), \&Slim::Hardware::IR::executeButton, "favorites_add$digit", $client->lastirtime, undef, 1);
+					Slim::Utils::Timers::setTimer($client, Time::HiRes::time(), \&Slim::Hardware::IR::executeButton, "favorites_add$num", $client->lastirtime, undef, 1);
 				}
 			} });
 
 		} else {
 
 			if (Slim::Hardware::IR::holdTime($client) < 5 ) {
-				Slim::Hardware::IR::executeButton($client, "playPreset_$digit", $client->lastirtime, undef, 1);
+				Slim::Hardware::IR::executeButton($client, "playPreset_$num", $client->lastirtime, undef, 1);
 			}
 		}
 
@@ -1120,6 +1152,7 @@ our %functions = (
 		my $line = $sleepTime == 0 ? $client->string('CANCEL_SLEEP') : $client->prettySleepTime;
 
 		$client->showBriefly( {
+			jive => undef,
 			line => [ "", $line ],
 		},
 		{
@@ -1569,82 +1602,82 @@ sub scroll_dynamic {
 		
 	} else {
 	
-	if ($holdTime == 0) {
-		# define behavior for button press, before any acceleration
-		# kicks in.
-		
-		# if at the end of the list, and down is pushed, go to the beginning.
-		if ($currentPosition == $listlength-1  && $direction > 0) {
+		if ($holdTime == 0) {
+			# define behavior for button press, before any acceleration
+			# kicks in.
+			
 			# if at the end of the list, and down is pushed, go to the beginning.
-			$currentPosition = -1; # Will be added to later...
-			$scrollParams->{estimateStart} = 0;
-			$scrollParams->{estimateEnd}   = $listlength - 1;
-		} elsif ($currentPosition == 0 && $direction < 0) {
-			# if at the beginning of the list, and up is pushed, go to the end.
-			$currentPosition = $listlength;  # Will be subtracted from later.
-			$scrollParams->{estimateStart} = 0;
-			$scrollParams->{estimateEnd}   = $listlength - 1;
-		}
-		# Do the standard operation...
-		$scrollParams->{lastHoldTime} = 0;
-		$scrollParams->{V} = $scrollParams->{minimumVelocity} *
-			$direction;
-		$scrollParams->{A} = 0;
-		$result = $currentPosition + $direction;
-		if ($direction > 0) {
-			$scrollParams->{estimateStart} = $result;
-			if ($scrollParams->{estimateEnd} <
-				$scrollParams->{estimateStart}) {
-				$scrollParams->{estimateEnd} =
-					$scrollParams->{estimateStart} + 1; 
+			if ($currentPosition == $listlength-1  && $direction > 0) {
+				# if at the end of the list, and down is pushed, go to the beginning.
+				$currentPosition = -1; # Will be added to later...
+				$scrollParams->{estimateStart} = 0;
+				$scrollParams->{estimateEnd}   = $listlength - 1;
+			} elsif ($currentPosition == 0 && $direction < 0) {
+				# if at the beginning of the list, and up is pushed, go to the end.
+				$currentPosition = $listlength;  # Will be subtracted from later.
+				$scrollParams->{estimateStart} = 0;
+				$scrollParams->{estimateEnd}   = $listlength - 1;
 			}
+			# Do the standard operation...
+			$scrollParams->{lastHoldTime} = 0;
+			$scrollParams->{V} = $scrollParams->{minimumVelocity} *
+				$direction;
+			$scrollParams->{A} = 0;
+			$result = $currentPosition + $direction;
+			if ($direction > 0) {
+				$scrollParams->{estimateStart} = $result;
+				if ($scrollParams->{estimateEnd} <
+					$scrollParams->{estimateStart}) {
+					$scrollParams->{estimateEnd} =
+						$scrollParams->{estimateStart} + 1; 
+				}
+			} else {
+				$scrollParams->{estimateEnd} = $result;
+				if ($scrollParams->{estimateStart} >
+					$scrollParams->{estimateEnd}) {
+					$scrollParams->{estimateStart} =
+						$scrollParams->{estimateEnd} - 1;
+				}
+			}
+			scroll_resetScrollRange($result, $scrollParams, $listlength);
+			$scrollParams->{lastPosition} = $result;
+		} elsif ($holdTime < $holdTimeBeforeScroll) {
+			# Waiting until holdTimeBeforeScroll is exceeded
+			$result = $currentPosition;
 		} else {
-			$scrollParams->{estimateEnd} = $result;
-			if ($scrollParams->{estimateStart} >
-				$scrollParams->{estimateEnd}) {
-				$scrollParams->{estimateStart} =
-					$scrollParams->{estimateEnd} - 1;
-			}
+			# define behavior for scrolling, i.e. after the initial
+			# timeout.
+			$scrollParams->{A} = scroll_calculateAcceleration
+				(
+				 $direction, 
+				 $scrollParams->{estimateStart},
+				 $scrollParams->{estimateEnd},
+				 $scrollParams->{Tc}
+				 );
+			my $accel = $scrollParams->{A};
+			my $time = $holdTime - $scrollParams->{lastHoldTime};
+			my $velocity = $scrollParams->{A} * $time + $scrollParams->{V};
+			my $pos = ($scrollParams->{lastPositionReturned} == $currentPosition) ? 
+				$scrollParams->{lastPosition} : 
+				$currentPosition;
+			my $X = 
+				(0.5 * $scrollParams->{A} * $time * $time) +
+				($scrollParams->{V} * $time) + 
+				$pos;
+			$scrollParams->{lastPosition} = $X; # Retain the last floating
+			                                    # point value of $X
+			                                    # because it's needed to
+			                                    # maintain the proper
+			                                    # acceleration when
+			                                    # $minimumVelocity is
+			                                    # small and not much
+			                                    # motion happens between
+			                                    # successive calls.
+			$result = int(0.5 + $X);
+			scroll_resetScrollRange($result, $scrollParams, $listlength);
+			$scrollParams->{V} = $velocity;
+			$scrollParams->{lastHoldTime} = $holdTime;
 		}
-		scroll_resetScrollRange($result, $scrollParams, $listlength);
-		$scrollParams->{lastPosition} = $result;
-	} elsif ($holdTime < $holdTimeBeforeScroll) {
-		# Waiting until holdTimeBeforeScroll is exceeded
-		$result = $currentPosition;
-	} else {
-		# define behavior for scrolling, i.e. after the initial
-		# timeout.
-		$scrollParams->{A} = scroll_calculateAcceleration
-			(
-			 $direction, 
-			 $scrollParams->{estimateStart},
-			 $scrollParams->{estimateEnd},
-			 $scrollParams->{Tc}
-			 );
-		my $accel = $scrollParams->{A};
-		my $time = $holdTime - $scrollParams->{lastHoldTime};
-		my $velocity = $scrollParams->{A} * $time + $scrollParams->{V};
-		my $pos = ($scrollParams->{lastPositionReturned} == $currentPosition) ? 
-			$scrollParams->{lastPosition} : 
-			$currentPosition;
-		my $X = 
-			(0.5 * $scrollParams->{A} * $time * $time) +
-			($scrollParams->{V} * $time) + 
-			$pos;
-		$scrollParams->{lastPosition} = $X; # Retain the last floating
-		                                    # point value of $X
-		                                    # because it's needed to
-		                                    # maintain the proper
-		                                    # acceleration when
-		                                    # $minimumVelocity is
-		                                    # small and not much
-		                                    # motion happens between
-		                                    # successive calls.
-		$result = int(0.5 + $X);
-		scroll_resetScrollRange($result, $scrollParams, $listlength);
-		$scrollParams->{V} = $velocity;
-		$scrollParams->{lastHoldTime} = $holdTime;
-	}
 	}
 	if ($result >= $listlength) {
 		$result = $listlength - 1;

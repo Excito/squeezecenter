@@ -1,6 +1,6 @@
 package Slim::Plugin::Classical::Plugin;
 
-# $Id: Plugin.pm 28265 2009-08-25 19:58:11Z andy $
+# $Id: Plugin.pm 30040 2010-02-05 19:58:44Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -28,7 +28,7 @@ sub initPlugin {
 		is_app => 1,
 	);
 	
-	if ( !main::SLIM_SERVICE && !$::noweb ) {
+	if ( main::WEBUI ) {
 		# Add a function to view trackinfo in the web
 		Slim::Web::Pages->addPageFunction( 
 			'plugins/classical/trackinfo.html',
