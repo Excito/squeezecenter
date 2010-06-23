@@ -86,6 +86,10 @@ sub reconnect {
 			
 			$controller->playerActive($client);
 			
+			# Bug 16046, statHandler will ignore all packets without a $client->streamStartTimestamp()
+			# The value doesn't matter so we'll just set it to 1 here
+			$client->streamStartTimestamp(1);
+			
 			# SqueezeNetworkClient handles the following in it's reconnect():
 			# Restoring the playlist
 			# Calling reinit in protocol handler if necessary
@@ -645,6 +649,7 @@ sub stream_s {
 		if ( $track ) {
 			$pcmsamplesize = $client->pcm_sample_sizes($track);
 			$pcmsamplerate = $client->pcm_sample_rates($track);
+			$pcmendian     = $track->endian() == 1 ? 0 : 1;
 			$pcmchannels   = $track->channels() || '2';
 		 }
 
@@ -730,7 +735,7 @@ sub stream_s {
 		$pcmchannels     = '?';
 		$outputThreshold = 0;
 
-	} elsif ($format eq 'spdr') {
+	} elsif ( $handler->isa('Slim::Player::Protocols::SqueezePlayDirect') ) {
 
 		# Format handled by squeezeplay to allow custom squeezeplay protocol handlers
 		$formatbyte      = 's';
@@ -769,7 +774,7 @@ sub stream_s {
 	# doesn't get an outdated fullness result
 	Slim::Networking::Slimproto::fullness( $client, 0 );
 	
-	if ($format eq 'spdr') {
+	if ( $handler->isa('Slim::Player::Protocols::SqueezePlayDirect') ) {
 
 		main::INFOLOG && logger('player.streaming.direct')->info("SqueezePlay direct stream: $url");
 

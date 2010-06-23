@@ -1,6 +1,6 @@
 package Slim::Web::HTTP;
 
-# $Id: HTTP.pm 30047 2010-02-05 21:59:31Z andy $
+# $Id: HTTP.pm 30695 2010-04-26 18:06:05Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -1153,7 +1153,7 @@ sub generateHTTPResponse {
 
 			return 0;
 
-		} elsif ($path =~ /music\/(\w+)\/(cover|thumb)/ || 
+		} elsif ($path =~ m{music/([^/]+)/(cover|thumb)} || 
 			$path =~ m{^plugins/cache/icons} || 
 			$path =~ /\/\w+_(X|\d+)x(X|\d+)
 	                        (?:_([sSfFpc]))?        # resizeMode, given by a single character

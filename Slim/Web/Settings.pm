@@ -1,6 +1,6 @@
 package Slim::Web::Settings;
 
-# $Id: Settings.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Settings.pm 30485 2010-04-07 07:31:22Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -231,6 +231,7 @@ sub handler {
 			}
 		}
 
+		$paramRef->{'playerid'}    = $client->id;
 		$paramRef->{'playersetup'} = \%playerSetupLinks;
 		$paramRef->{'playername'}  = $client->name();
 		$paramRef->{'needsClient'} = $class->needsClient();

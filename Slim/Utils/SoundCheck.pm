@@ -1,6 +1,6 @@
 package Slim::Utils::SoundCheck;
 
-# $Id: SoundCheck.pm 29627 2009-12-16 16:22:06Z andy $
+# $Id: SoundCheck.pm 30595 2010-04-14 18:38:17Z agrundman $
 # 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -40,9 +40,9 @@ sub commentTagTodB {
 
 		my $comment = $tags->{'COMMENT'}->[$i];
 
-		if ($comment && ref $comment eq 'ARRAY' && $comment->[2] eq 'iTunNORM') {
+		if ($comment && ref $comment eq 'ARRAY' && $comment->[1] eq 'iTunNORM') {
 			
-			if ( my $gain = normStringTodB($comment->[3]) ) {
+			if ( my $gain = normStringTodB($comment->[2]) ) {
 				# Bug 3207, if we already have a known gain value,
 				# combine it with the iTunNORM value
 				$tags->{'REPLAYGAIN_TRACK_GAIN'} ||= 0;

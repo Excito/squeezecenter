@@ -14,9 +14,9 @@ rm -rf */CPAN;
 rm -rf */Bin;
 rm -rf */Firmware/*.bin;
 rm -f */HTML/EN/html/ext/resources/images/default/grid/Thumbs.db;
-find * -regex '.*\.\(png\|gif\)$$' -exec chmod a-x '{}' ';';
-tar -zcf squeezeboxserver-$version.dfsg1.tar.gz *;
+find * -regex '.*\.\(png\|gif\|html\)$$' -exec chmod -x '{}' ';';
+tar --create --lzma --file squeezeboxserver-$version.dfsg1.tar.lzma *;
 )
-mv $tmpdir/squeezeboxserver-$version.dfsg1.tar.gz .;
+mv $tmpdir/squeezeboxserver-$version.dfsg1.tar.lzma .;
 rm -rf $tmpdir;
 

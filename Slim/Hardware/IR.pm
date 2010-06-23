@@ -1,6 +1,6 @@
 package Slim::Hardware::IR;
 
-# $Id: IR.pm 29670 2009-12-22 15:25:20Z adrian $
+# $Id: IR.pm 30810 2010-05-21 17:13:30Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -659,6 +659,9 @@ sub processIR {
 	if ( main::SLIM_SERVICE ) {
 		if ( $code eq 'add' ) {
 			return if $client->blocksAddButton;
+		}
+		elsif ( $code eq 'search' || $code eq 'search_2' ) {
+			return if $client->blocksSearchButton;
 		}
 	}
 

@@ -1,10 +1,49 @@
-<h2><a name="v7.5.0" id="v7.5.0"></a>Version 7.5.0</h2>
+<h2><a name="v7.5.1" id="v7.5.1"></a>Version 7.5.1</h2>
+<ul>
+	
+	<li>New Features:</li>
+	<ul>
+		<li>Seeking within MPEG-4 files (AAC/ALAC) is now supported for players with native playback (Radio, Touch).</li>
+		<li>Switched to optimized build of faad for AAC/ALAC decoding on ReadyNAS Sparc.</li>
+	</ul>
+	<br />
+
+	<li>Bug Fixes:</li>
+	<ul>
+		<li>ALAC playback was broken on PowerPC Macs.</li>
+		<li>Fixed corrupted Rhapsody icon.</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=12173">#12173</a> - Player selected in Settings becomes target in browse window</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=15662">#15662</a> - Alarm-Volume-Level with synchronised Booms</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=15847">#15847</a> - Add tag mapping for WM/AlbumSortOrder => ALBUMSORT</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=15910">#15910</a> - Alarm screensaver setting does not work</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=15914">#15914</a> - Add tag mapping for WM/Conductor => CONDUCTOR</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=15968">#15968</a> - SbS give up too quickly with a couple of bad tracks in playlist</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=15992">#15992</a> - APE tags are not read if a Lyrics tag is also present</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=15995">#15995</a> - Default skin's panel width resets after 7 days</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16006">#16006</a> - Ogg & some MMS streams metadata not updated on SqueezePlay UIs</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16021">#16021</a> - Improve track info menu for RadioTime streams</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16025">#16025</a> - Apple Lossless tracks could cause a crash in faad</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16039">#16039</a> - My Apps shows all apps in web UI</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16052">#16052</a> - Some stations fail to play in 7.5, but play fine in 7.4 (bad stream headers)</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16056">#16056</a> - APE files with invalid tags can cause scanner to crash</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16074">#16074</a> - Virtual tracks within a cue sheet don't inherit parent content-type</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16096">#16096</a> - Alarm fade-in does not work in 7.5</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16140">#16140</a> - Library stats reporting fails for album within Genre > Various Artists</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16186">#16186</a> - ALAC transcoding support broken for ReadyNAS Sparc</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16238">#16238</a> - iTunes plugin incorrectly scans ALAC files as "Quicktime Movie" files</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16243">#16243</a> - AIFC (AIFF little-endian) files no longer play correctly</li>
+	</ul>
+	<br />
+</ul>
+
+<h2><a name="v7.5.0" id="v7.5.0"></a>Version 7.5.0 - 2010-04-06</h2>
 <ul>
 	<li>New Features:</li>
 	<ul>
 		<li>RadioTime: Use RadioTime's own track info menu which allows you to report stream problems, see related streams, etc.</li>
 		<li>Added a View Tags menu to Track Info -> More Info that displays a raw listing of all tags found in the file.</li>
 		<li>Added support for reading embedded cover art from APEv2 tags.</li>
+		<li>Added support for Ogg Vorbis METADATA_BLOCK_PICTURE artwork tag.</li>
 		<li>Added "global" search: enter search term once, easily search in local music, on online services, internet radio stations etc.</li>
 		<li>Added "On mysqueezebox.com" sub folder to favorites list, to easily access favorites managed on mysqueezebox.com</li>
 		<li>(Receiver) Added CLI for tricolor LED.</li>

@@ -1,6 +1,6 @@
 package Slim::Menu::TrackInfo;
 
-# $Id: TrackInfo.pm 30365 2010-03-11 16:53:24Z bklaas $
+# $Id: TrackInfo.pm 30634 2010-04-15 20:13:06Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -1136,10 +1136,12 @@ sub infoBitrate {
 				&& ($streambitrate = $song->streambitrate())
 				&& $sourcebitrate != $streambitrate)
 			{
-					$convert = sprintf( ' (%s %s%s ABR)', 
+					$convert = sprintf( ' (%s %s%s %s)', 
 						cstring($client, 'CONVERTED_TO'), 
-						$streambitrate / 1000,
-						cstring($client, 'KBPS')); 
+						sprintf( "%d", $streambitrate / 1000 ),
+						cstring($client, 'KBPS'),
+						cstring($client, $song->streamformat())
+					); 
 			}
 			
 			$item = {
@@ -1467,10 +1469,6 @@ sub cliQuery {
 		my $handler = Slim::Player::ProtocolHandlers->handlerForURL( $url );
 		if ( $handler && $handler->can('trackInfoURL') ) {
 			$feed = $handler->trackInfoURL( $client, $url );
-		}
-		elsif ( $url =~ m{^http://opml\.radiotime\.com} ) {
-			# Special case for RadioTime's trackinfo menu
-			$feed = Slim::Plugin::RadioTime::Plugin->trackInfoURL( $client, $url );
 		}
 	}
 	

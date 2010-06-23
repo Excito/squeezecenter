@@ -1,33 +1,30 @@
 #! /bin/sh
 ### BEGIN INIT INFO
-# Provides:          squeezecenter
-# Required-Start:    $local_fs $remote_fs $network mysql
-# Required-Stop:     $local_fs $remote_fs
+# Provides:          skeleton
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: Squeezeboxserver 
+# Short-Description: Example initscript
+# Description:       This file should be used to construct scripts to be
+#                    placed in /etc/init.d.
 ### END INIT INFO
+
+# Author: Foo Bar <foobar@baz.org>
 #
-# Author: Carl Fürstenberg <carl@excito.com>
-# Original Author: Mattias Holmlund
-# Updated By: Dan Sully
+# Please remove the "Author" lines above and replace them
+# with your own name if you copy and modify this script.
 
 # Do NOT "set -e"
 
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DESC="SqueezeCenter Audio Server"
-NAME=squeezecenter
-DAEMON=/usr/sbin/$NAME-server
-DAEMON_SAFE=/usr/sbin/${NAME}_safe
+# PATH should only include /usr/* if it runs after the mountnfs.sh script
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+DESC="Description of the service"
+NAME=daemonexecutablename
+DAEMON=/usr/sbin/$NAME
+DAEMON_ARGS="--options args"
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
-SLIMUSER=$NAME
-PREFSDIR=/var/lib/$NAME/prefs
-LOGDIR=/var/log/$NAME/
-CACHEDIR=/var/lib/$NAME/cache
-SLIMOPTIONS=
-RUN=no
-
 
 # Exit if the package is not installed
 [ -x "$DAEMON" ] || exit 0
@@ -36,14 +33,11 @@ RUN=no
 [ -r /etc/default/$NAME ] && . /etc/default/$NAME
 
 # Load the VERBOSE setting and other rcS variables
-[ -f /etc/default/rcS ] && . /etc/default/rcS
-
-
-DAEMON_ARGS="--prefsdir $PREFSDIR --logdir $LOGDIR --cachedir $CACHEDIR $SLIMOPTIONS"
-
+. /lib/init/vars.sh
 
 # Define LSB log_* functions.
-# Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
+# Depend on lsb-base (>= 3.2-14) to ensure that this file is present
+# and status_of_proc is working.
 . /lib/lsb/init-functions
 
 #
@@ -55,18 +49,9 @@ do_start()
 	#   0 if daemon has been started
 	#   1 if daemon was already running
 	#   2 if daemon could not be started
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON_SAFE --test > /dev/null \
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON --test > /dev/null \
 		|| return 1
-	start-stop-daemon \
-		--start \
-		--quiet \
-		--chuid $SLIMUSER \
-		--pidfile $PIDFILE \
-		--make-pidfile \
-		--background \
-		--exec $DAEMON_SAFE \
-		-- \
-		$DAEMON \
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- \
 		$DAEMON_ARGS \
 		|| return 2
 	# Add code here, if necessary, that waits for the process to be ready
@@ -84,7 +69,7 @@ do_stop()
 	#   1 if daemon was already stopped
 	#   2 if daemon could not be stopped
 	#   other if a failure occurred
-	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --pidfile $PIDFILE --name squeezecenter_s
+	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --pidfile $PIDFILE --name $NAME
 	RETVAL="$?"
 	[ "$RETVAL" = 2 ] && return 2
 	# Wait for children to finish too if this is a daemon that forks
@@ -132,7 +117,7 @@ case "$1" in
 	;;
   status)
        status_of_proc "$DAEMON" "$NAME" && exit 0 || exit $?
-       ;;	
+       ;;
   #reload|force-reload)
 	#
 	# If do_reload() is not implemented then leave this commented out

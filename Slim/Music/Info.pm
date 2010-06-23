@@ -1,6 +1,6 @@
 package Slim::Music::Info;
 
-# $Id: Info.pm 29870 2010-01-21 19:17:22Z andy $
+# $Id: Info.pm 30737 2010-05-12 18:00:12Z adrian $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -395,8 +395,6 @@ sub setRemoteMetadata {
 	
 	if ( $meta->{title} ) {
 		$attr->{TITLE} = $meta->{title};
-		
-		setCurrentTitle( $url, $meta->{title} );
 	}
 	
 	if ( my $type = $meta->{ct} ) {
@@ -459,6 +457,11 @@ sub setRemoteMetadata {
 		commit     => 1,
 	} );
 	
+	if ( $meta->{title} ) {
+		# set current title, after setting track->title so that calls to displayText do not cache empty title
+		setCurrentTitle( $url, $meta->{title} );
+	}
+
 	if ( $meta->{bitrate} ) {
 		# Cache the bitrate string so it will appear in TrackInfo
 		$currentBitrates{$url} = $track->prettyBitRate;
@@ -487,10 +490,9 @@ sub clearCurrentTitleChangeCallback {
 }
 
 sub setCurrentTitle {
-	my $url = shift;
-	my $title = shift;
+	my ($url, $title, $client) = @_;
 
-	if (($currentTitles{$url} || '') ne ($title || '')) {
+	if (getCurrentTitle($client, $url) ne ($title || '')) {
 		no strict 'refs';
 		
 		for my $changeCallback (values %currentTitleCallbacks) {
@@ -499,6 +501,19 @@ sub setCurrentTitle {
 				&$changeCallback($url, $title);
 			}
 		}
+		
+		if ($client) {
+			$client->metaTitle( $title );
+			
+			for my $everybuddy ( $client->syncGroupActiveMembers()) {
+				$everybuddy->update();
+			}
+	
+			# For some purposes, a change of title is a newsong...
+			Slim::Control::Request::notifyFromArray( $client, [ 'playlist', 'newsong', $title ] );
+		}
+
+		main::INFOLOG && $log->info("Setting title for $url to $title");	
 	}
 
 	$currentTitles{$url} = $title;
@@ -590,20 +605,7 @@ sub setDelayedTitle {
 			sub {
 				my $client = shift || return;
 				
-				my $currentTitle = getCurrentTitle( $client, $url ) || '';
-				
-				return if $newTitle eq $currentTitle;
-
-				setCurrentTitle( $url, $newTitle );
-
-				for my $everybuddy ( $client->syncGroupActiveMembers()) {
-					$everybuddy->update();
-				}
-
-				# For some purposes, a change of title is a newsong...
-				Slim::Control::Request::notifyFromArray( $client, [ 'playlist', 'newsong', $newTitle ] );
-
-				main::INFOLOG && $log->info("Setting title for $url to $newTitle");
+				setCurrentTitle( $url, $newTitle, $client );
 			},
 		);
 	}

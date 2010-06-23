@@ -1,6 +1,6 @@
 package Slim::Plugin::Favorites::Plugin;
 
-# $Id: Plugin.pm 30040 2010-02-05 19:58:44Z andy $
+# $Id: Plugin.pm 30718 2010-04-29 19:29:26Z agrundman $
 
 # A Favorites implementation which stores favorites as opml files and allows
 # the favorites list to be edited from the web interface
@@ -797,6 +797,11 @@ sub cliAdd {
 					],
 				},
 			} );
+			
+			# XXX temporary logging of favorites adds on SN for debugging
+			SDI::Service::EventLog->log(
+				$client, 'favorites_add', { url => $url, title => $title },
+			);
 
 			$request->setStatusDone();
 		}

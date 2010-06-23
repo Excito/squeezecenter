@@ -1,6 +1,6 @@
 package Slim::Player::StreamingController;
 
-# $Id: StreamingController.pm 30393 2010-03-19 13:30:04Z ayoung $
+# $Id: StreamingController.pm 30734 2010-05-12 05:50:14Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -809,7 +809,7 @@ sub nextsong {
 	my $repeat = Slim::Player::Playlist::repeat($client);
 	
 	if ($self->{'consecutiveErrors'} >= 2) {
-		if (scalar @{$self->songqueue()} == 1) {
+		if ($playlistCount == 1) {
 			$log->warn("Giving up because of too many consecutive errors: " . $self->{'consecutiveErrors'});
 			return undef;
 		} elsif ($repeat == 1) {
@@ -821,7 +821,8 @@ sub nextsong {
 		return $currsong;
 	}
 
-	if ($self->{'consecutiveErrors'} >= $playlistCount) {
+	# Allow one full cycle of the playlist + 1 track
+	if ($self->{'consecutiveErrors'} > $playlistCount) {
 		$log->warn("Giving up because of too many consecutive errors: " . $self->{'consecutiveErrors'});
 		return undef;
 	}
@@ -1962,7 +1963,7 @@ sub stop       {$log->info($_[0]->{'masterId'}); _eventAction($_[0], 'Stop');}
 sub play       {
 	main::INFOLOG && $log->info($_[0]->{'masterId'});
 	$_[0]->{'consecutiveErrors'} = 0;
-	$_[0]->{'fadeIn'} = $_[3] if ($_[3] && $_[3] > 0);
+	$_[0]->{'fadeIn'} = $_[4] if ($_[4] && $_[4] > 0);
 	_eventAction($_[0], 'Play', {index => $_[1], seekdata => $_[2]});
 }
 

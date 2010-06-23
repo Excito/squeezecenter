@@ -1,7 +1,9 @@
 #!/usr/bin/make -f
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
 
 %:
-	dh --with quilt $@
+	dh  $@
 
 override_dh_install:
 	install -m0755 slimserver.pl debian/squeezecenter/usr/sbin/squeezecenter-server
@@ -19,7 +21,12 @@ override_dh_install:
 	# Remove errmsg.sys files from the MySQL dir, since they may not match
 	# up with the installed version's
 	rm -f debian/squeezecenter/usr/share/squeezecenter/MySQL/errmsg.*
+	# Fix some executable flags which shouldn't be there
+	find debian/squeezecenter/ -regex '.*\.\(png\|gif\|html\)' | xargs chmod -x
+	# remove loose license files
+	rm -f debian/squeezecenter/usr/share/squeezecenter/HTML/EN/html/ext/license.txt
+	rm -f debian/squeezecenter/usr/share/squeezecenter/HTML/EN/html/ext/resources/license.txt
+	rm -f debian/squeezecenter/usr/share/squeezecenter/MySQL/COPYING
 
 override_dh_installinit:
 	dh_installinit --noscripts
-

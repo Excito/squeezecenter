@@ -2,14 +2,14 @@ Source: squeezecenter
 Section: sound
 Priority: optional
 Maintainer: Carl Fürstenberg <carl@excito.com>
-Build-Depends: debhelper (>= 7.2), html2text, quilt (>= 0.40)
-Standards-Version: 3.8.3
+Build-Depends: debhelper (>= 7.2), html2text
+Standards-Version: 3.8.4
 
 Package: squeezecenter
 Architecture: all
 Conflicts: slimp3, slimserver, squeezecenter-softsqueeze, squeezecenter-skins
 Replaces: slimp3, slimserver, squeezecenter-softsqueeze, squeezecenter-skins
-Depends: ${perl:Depends}, ${misc:Depends},
+Depends: ${perl:Depends}, ${misc:Depends}, lsb-base (>= 3.2-14),
  dbconfig-common,
  ttf-dejavu | ttf-bitstream-vera,
  ttf-freefont,
@@ -20,7 +20,7 @@ Depends: ${perl:Depends}, ${misc:Depends},
  wavpack,
  musepack-tools,
  libanyevent-perl (>= 5.202),
- libaudio-scan-perl (>= 0.62),
+ libaudio-scan-perl (>= 0.82),
  libcache-cache-perl (>= 1.04),
  libcgi-pm-perl (>= 3.40),
  libclass-data-inheritable-perl (>= 0.04),
@@ -37,7 +37,6 @@ Depends: ${perl:Depends}, ${misc:Depends},
  libfile-next-perl (>= 1.02),
  libfile-readbackwards-perl (>= 1.02),
  libfile-slurp-perl,
- libfile-temp-perl (>= 0.17),
  libfile-which-perl (>= 0.05),
  libgd-gd2-perl (>= 1:2.41),
  libhtml-parser-perl (>= 3.60),
@@ -71,7 +70,8 @@ Depends: ${perl:Depends}, ${misc:Depends},
  libtie-ixhash-perl,
  libexporter-lite-perl,
  libtemplate-perl,
- libtemplate-plugin-class-perl
+ libtemplate-plugin-class-perl,
+ libnet-dns-perl
 Description: Streaming Audio Server
  SlimServer is a cross-platform streaming server that supports a wide range
  of formats, including AAC, AIFF, FLAC, Ogg Vorbis, MP3, WAV, and

@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::File;
 
-# $Id: File.pm 28949 2009-10-20 14:47:37Z andy $
+# $Id: File.pm 30616 2010-04-15 13:18:51Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -166,6 +166,11 @@ sub open {
 				${*$sock}{'initialAudioBlockRemaining'} = $length;
 				${*$sock}{'initialAudioBlockRef'} = \($song->initialAudioBlock());
 			}
+			
+			# For MP4 files, we can't cache the audio block because it's different each time
+			if ($streamClass eq 'Slim::Formats::Movie') {
+				$song->initialAudioBlock(undef);
+			}
 		}
 	}
 	
@@ -281,6 +286,11 @@ sub _timeToOffset {
 	my $streamClass = _streamClassForFormat($format);
 
 	if ($streamClass && $streamClass->can('findFrameBoundaries')) {
+		# Bug 16068, adjust time if this is a virtual track in a cue sheet
+		if ( $song->currentTrack()->url =~ /#([^-]+)-([^-]+)$/ ) {
+			$time += $1;
+		}
+		
 		main::INFOLOG && $log->is_info && $log->info("seeking using $streamClass findFrameBoundaries(" . ($seekoffset + $offset) . ", $time)");
 		$seekoffset  = $streamClass->findFrameBoundaries($sock, $seekoffset + $offset, $time);
 	} else {
