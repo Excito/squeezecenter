@@ -1,6 +1,6 @@
 package Slim::Plugin::LastFM::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 30103 2010-02-09 14:46:53Z ayoung $
+# $Id: ProtocolHandler.pm 31100 2010-07-23 08:25:38Z mherger $
 
 # Handler for lastfm:// URLs
 
@@ -251,10 +251,6 @@ sub canDoAction {
 			block  => 1,
 		} );
 				
-		return 0;
-	}
-	elsif ( $action eq 'pause' ) {
-		# Pausing not allowed, stop instead
 		return 0;
 	}
 	

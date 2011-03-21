@@ -1,6 +1,6 @@
 package Slim::Plugin::Classical::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 28991 2009-10-23 14:46:48Z ayoung $
+# $Id: ProtocolHandler.pm 31439 2010-10-15 13:49:40Z agrundman $
 
 # Handler for classical:// URLs
 
@@ -343,6 +343,8 @@ sub _gotBulkMetadata {
 	
 	# Update the playlist time so the web will refresh, etc
 	$client->currentPlaylistUpdateTime( Time::HiRes::time() );
+	
+	Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
 }
 
 sub _gotBulkMetadataError {

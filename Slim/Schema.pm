@@ -1,6 +1,6 @@
 package Slim::Schema;
 
-# $Id: Schema.pm 30292 2010-03-02 10:59:00Z ayoung $
+# $Id: Schema.pm 31756 2011-01-14 22:04:14Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -2078,6 +2078,7 @@ sub _preCheckAttributes {
 		    
 			$attributes->{$shortTag} = delete $attributes->{$gainTag};
 			$attributes->{$shortTag} =~ s/\s*dB//gi;
+			$attributes->{$shortTag} =~ s/\s//g;  # bug 15965
 			$attributes->{$shortTag} =~ s/,/\./g; # bug 6900, change comma to period
 			
 			# Bug 15483, remove non-numeric gain tags
@@ -2648,6 +2649,7 @@ sub _postCheckAttributes {
 			if ($attributes->{$gainTag}) {
 
 				$attributes->{$gainTag} =~ s/\s*dB//gi;
+				$attributes->{$gainTag} =~ s/\s//g;  # bug 15965
 				$attributes->{$gainTag} =~ s/,/\./g; # bug 6900, change comma to period
 
 				$set{$shortTag} = $attributes->{$gainTag};

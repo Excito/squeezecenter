@@ -1,6 +1,6 @@
 package Slim::Utils::Timers;
 
-# $Id: Timers.pm 30418 2010-03-25 15:18:06Z agrundman $
+# $Id: Timers.pm 31048 2010-07-13 14:18:16Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -92,9 +92,7 @@ An array of any other arguments to be passed to $coderef.
 
 =cut
 
-sub setTimer {
-	return _makeTimer(@_);
-}
+*setTimer = \&_makeTimer;
 
 =head2 killTimers ( $obj, $coderef )
 

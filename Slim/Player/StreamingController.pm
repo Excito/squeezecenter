@@ -1,6 +1,6 @@
 package Slim::Player::StreamingController;
 
-# $Id: StreamingController.pm 30734 2010-05-12 05:50:14Z ayoung $
+# $Id: StreamingController.pm 31466 2010-10-25 17:49:57Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -768,6 +768,14 @@ sub _playersMessage {
 	$duration = 10 unless defined $duration;
 
 	my $master = $self->master();
+	
+	# Check with the protocol handler to see if it wants to suppress certain messages
+	if ( my $song = $self->streamingSong() || $self->playingSong() ) {
+		my $handler = $song->currentTrackHandler();
+		if ( $handler->can('suppressPlayersMessage') ) {
+			return if $handler->suppressPlayersMessage($master, $song, $message);
+		}
+	}	
 
 	my $line1 = (uc($message) eq $message) ? $master->string($message) : $message;
 	
@@ -1759,10 +1767,14 @@ sub sync {
 		_newMaster($self);
 	}
 	
-	# TODO - reevaluate master
+	# TODO - reevaluate master in general
 
 	if ($player->power && $player->connected) {
 		push @{$self->{'players'}}, $player;
+		
+		if (!$self->master->power()) {
+			_newMaster($self);
+		}
 		
 		if (isPaused($self)) {
 			_pauseStreaming($self, playingSong($self));

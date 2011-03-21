@@ -5,7 +5,7 @@ package Slim::Display::Boom;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Boom.pm 26931 2009-06-07 03:53:36Z michael $
+# $Id: Boom.pm 31659 2010-12-20 20:13:36Z agrundman $
 
 =head1 NAME
 
@@ -120,8 +120,6 @@ our $defaultPrefs = {
 	'powerOffBrightness'   => 6,
 	'scrollPause'          => 1.5,
 	'scrollPauseDouble'    => 1.5,
-	'scrollRate'           => 0.1,
-	'scrollRateDouble'     => 0.1,
 	'alwaysShowCount'      => 0,
 };
 
