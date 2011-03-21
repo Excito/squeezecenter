@@ -3,7 +3,7 @@ Section: sound
 Priority: optional
 Maintainer: Carl Fürstenberg <carl@excito.com>
 Build-Depends: debhelper (>= 7.2), html2text
-Standards-Version: 3.8.4
+Standards-Version: 3.9.1
 
 Package: squeezecenter
 Architecture: all
