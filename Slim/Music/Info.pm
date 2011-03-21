@@ -1,6 +1,6 @@
 package Slim::Music::Info;
 
-# $Id: Info.pm 28851 2009-10-14 17:21:50Z michael $
+# $Id: Info.pm 29870 2010-01-21 19:17:22Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -320,38 +320,59 @@ sub getBitrate {
 }
 
 sub setBitrate {
-	my $url     = shift;
-	my $bitrate = shift;
-	my $vbr     = shift || undef;
+	my $urlOrTrack = shift;
+	my $bitrate    = shift;
+	my $vbr        = shift || undef;
+	
+	my $track;
 
-	my $track   = Slim::Schema->updateOrCreate({
-		'url'        => $url,
-		'readTags'   => 1,
-		'commit'     => 1,
-		'attributes' => { 
-			'BITRATE'   => $bitrate,
-			'VBR_SCALE' => $vbr,
-		},
-	});
+	if ( blessed($urlOrTrack) ) {
+		$track = $urlOrTrack;
+		$track->bitrate($bitrate);
+		$track->vbr_scale($vbr);
+		$track->update;
+	}
+	else {
+		$track = Slim::Schema->updateOrCreate({
+			'url'        => $urlOrTrack,
+			'readTags'   => 1,
+			'commit'     => 1,
+			'attributes' => { 
+				'BITRATE'   => $bitrate,
+				'VBR_SCALE' => $vbr,
+			},
+		});
+	}
 	
 	# Cache the bitrate string so it will appear in TrackInfo
-	$currentBitrates{$url} = $track->prettyBitRate;
+	$currentBitrates{ $track->url } = $track->prettyBitRate;
 
 	return $track;
 }
 
 sub setDuration {
-	my $url      = shift;
-	my $duration = shift;
+	my $urlOrTrack = shift;
+	my $duration   = shift;
 
-	Slim::Schema->updateOrCreate({
-		'url'        => $url,
-		'readTags'   => 1,
-		'commit'     => 1,
-		'attributes' => { 
-			'SECS' => $duration,
-		},
-	});
+	my $track;
+	
+	if ( blessed($urlOrTrack) ) {
+		$track = $urlOrTrack;
+		$track->secs($duration);
+		$track->update;
+	}
+	else {
+		$track = Slim::Schema->updateOrCreate({
+			'url'        => $urlOrTrack,
+			'readTags'   => 1,
+			'commit'     => 1,
+			'attributes' => { 
+				'SECS' => $duration,
+			},
+		});
+	}
+	
+	return $track;
 }
 
 sub getDuration {
@@ -893,11 +914,9 @@ sub sortFilename {
 	# really, we shouldn't be doing any of this, but we'll ignore
 	# punctuation, and fold the case. DON'T strip articles.
 	my @nocase = map {
-		Slim::Utils::Text::ignorePunct(
-			uc(
-				Slim::Utils::Unicode::utf8encode_locale( 
-					fileName($_)
-				)
+		lc(
+			Slim::Utils::Unicode::utf8encode_locale( 
+				fileName($_)
 			)
 		)
 	} @_;

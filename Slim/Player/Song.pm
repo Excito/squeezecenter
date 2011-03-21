@@ -1,6 +1,6 @@
 package Slim::Player::Song;
 
-# $Id: Song.pm 28729 2009-10-01 21:46:19Z andy $
+# $Id: Song.pm 30114 2010-02-09 22:29:57Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -69,7 +69,7 @@ my @_playlistCloneAttributes = qw(
 			_duration _bitrate _streambitrate _streamFormat
 			_transcoded directstream
 			
-			samplerate samplesize channels totalbytes offset blockalign
+			samplerate samplesize channels totalbytes offset blockalign isLive
 		),
 	);
 }
@@ -208,7 +208,7 @@ sub _getNextPlaylistTrack {
 	
 	# Get the next good audio track
 	my $playlist = Slim::Schema->objectForUrl( {url => $self->_track()->url, playlist => 1} );
-	main::DEBUGLOG && $log->debug( "Getting next audio URL from playlist" );	
+	main::DEBUGLOG && $log->is_debug && $log->debug( "Getting next audio URL from playlist (after " . ($self->_currentTrack() ? $self->_currentTrack()->url : '') . ")" );	
 	my $track = $playlist->getNextEntry($self->_currentTrack() ? {after => $self->_currentTrack()} : undef);
 	if ($track) {
 		$self->_currentTrack($track);
@@ -364,6 +364,10 @@ sub open {
 	$self->seekdata($seekdata) if $seekdata;
 	my $sock;
 	my $format = Slim::Music::Info::contentType($track);
+
+	if ($handler->can('formatOverride')) {
+		$format = $handler->formatOverride;
+	}
 	
 	# get transcoding command & stream-mode
 	# IF command == '-' AND canDirectStream THEN
@@ -558,12 +562,21 @@ sub open {
 					# On windows ensure a child window is not opened if $command includes transcode processes
 					if (main::ISWINDOWS) {
 						Win32::SetChildShowWindow(0);
-						$pipeline =  new FileHandle $command;
+						$pipeline = FileHandle->new;
+						my $pid = $pipeline->open($command);
+						
+						# XXX Bug 15650, this sets the priority of the cmd.exe process but not the actual
+						# transcoder process(es).
+						my $handle;
+						if ( Win32::Process::Open( $handle, $pid, 0 ) ) {
+							$handle->SetPriorityClass( Slim::Utils::OS::Win32::getPriorityClass() || Win32::Process::NORMAL_PRIORITY_CLASS() );
+						}
+						
 						Win32::SetChildShowWindow();
 					} else {
 						$pipeline =  new FileHandle $command;
 					}
-	
+					
 					if ($pipeline && $pipeline->opened() && !defined(Slim::Utils::Network::blocking($pipeline, 0))) {
 						logError("Can't set nonblocking for url: [$url]");
 						return (undef, 'PROBLEM_OPENING', $url);

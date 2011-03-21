@@ -441,9 +441,6 @@ sub albumsQuery {
 					'itemsParams' => 'params',
 				}		
 			},
-			'window' => {
-				'titleStyle' => "album",
-			}
 		};
 		
 		$base->{'actions'}{'play-hold'} = _mixerBase();
@@ -845,7 +842,6 @@ sub artistsQuery {
 			# style correctly the window that opens for the action element
 			'window' => {
 				'menuStyle'  => 'album',
-				'titleStyle' => 'artists',
 			},
 		};
 		$base->{'actions'}{'play-hold'} = _mixerBase();
@@ -890,7 +886,17 @@ sub artistsQuery {
 		# Various artist handling. Don't do if pref is off, or if we're
 		# searching, or if we have a track
 		if ($count_va) {
-			unshift @data, Slim::Schema->variousArtistsObject;
+			my $vaObj = Slim::Schema->variousArtistsObject;
+			
+			# bug 15328 - get the VA name in the language requested by the client
+			#             but only do so if the user isn't using a custom name
+			if ( $vaObj->name eq Slim::Utils::Strings::string('VARIOUSARTISTS') ) {
+				
+				# we can change the name as it will be updated anyway next them the VA object is requested
+				$vaObj->name( $request->string('VARIOUSARTISTS') );
+			}
+			
+			unshift @data, $vaObj;
 		}
 
 		# first PLAY ALL item
@@ -1172,7 +1178,7 @@ sub displaystatusQuery_filter {
 sub displaystatusQuery {
 	my $request = shift;
 	
-	main::INFOLOG && $log->info("displaystatusQuery()");
+	main::DEBUGLOG && $log->debug("displaystatusQuery()");
 
 	# check this is the correct query
 	if ($request->isNotQuery([['displaystatus']])) {
@@ -1240,7 +1246,7 @@ sub displaystatusQuery {
 
 		my $client = $request->client;
 
-		main::INFOLOG && $log->info("adding displaystatus subscription $subs");
+		main::DEBUGLOG && $log->debug("adding displaystatus subscription $subs");
 
 		if ($subs eq 'bits') {
 
@@ -1468,7 +1474,6 @@ sub genresQuery {
 					'itemsParams' => 'params',
 				},
 			},
-			window => { titleStyle => 'genres', },
 		};
 		$base->{'actions'}{'play-hold'} = _mixerBase();
 		$base->{'actions'} = _jivePresetBase($base->{'actions'});
@@ -1761,7 +1766,6 @@ sub musicfolderQuery {
 	# create filtered data
 	
 	my $topPath = $topLevelObj->path;
-	my $osName  = Slim::Utils::OSDetect::OS();
 
 	# now build the result
 
@@ -1818,15 +1822,17 @@ sub musicfolderQuery {
 					'itemsParams' => 'params',
 				},
 			},
-			window => {
-				titleStyle => 'musicfolder',
-			},
 		};
+
 		if ($party || $partyMode) {
 			$base->{'actions'}->{'play'} = $base->{'actions'}->{'go'};
 		}
-		# FIXME: working on BMF CM issue here
-		# $base->{'actions'}{'more'} = _contextMenuBase('folder');
+
+		if ($useContextMenu) {
+			# + is more
+			$base->{'actions'}{'more'} = _contextMenuBase('folder');
+		}
+		
 		$request->addResult('base', $base);
 
 		$request->addResult('window', { text => $topLevelObj->title } ) if $topLevelObj->title;
@@ -1881,7 +1887,7 @@ sub musicfolderQuery {
 			
 			$filename = $realName || Slim::Music::Info::fileName($url);
 
-			my $textKey = uc(substr(Slim::Utils::Text::ignorePunct($filename), 0, 1));
+			my $textKey = uc(substr($filename, 0, 1));
 			
 			if ($menuMode) {
 				$request->addResultLoop($loopname, $chunkCount, 'text', $filename);
@@ -2336,16 +2342,19 @@ sub playlistXQuery {
 			$request->addResult("_$entity", Slim::Music::Info::isRemoteURL($url));
 		}
 		
-	} elsif ($entity =~ /(duration|artist|album|title|genre)/) {
+	} elsif ($entity =~ /(duration|artist|album|title|genre|name)/) {
 
 		my $songData = _songData(
 			$request,
 			Slim::Player::Playlist::song($client, $index),
-			'dalg',			# tags needed for our entities
+			'dalgN',			# tags needed for our entities
 		);
 		
 		if (defined $songData->{$entity}) {
 			$request->addResult("_$entity", $songData->{$entity});
+		}
+		elsif ($entity eq 'name' && defined $songData->{remote_title}) {
+			$request->addResult("_$entity", $songData->{remote_title});
 		}
 	}
 	
@@ -2517,10 +2526,12 @@ sub playlistsTracksQuery {
 			$favorites{'title'} = $playlistObj->name;
 			$favorites{'url'} = $playlistObj->url;
 
-			($chunkCount, $totalCount) = _jiveDeletePlaylist(start => $start, end => $end, lastChunk => $lastChunk, listCount => $totalCount, chunkCount => $chunkCount, request => $request, loopname => $loopname, playlistURL => $playlistObj->url, playlistID => $playlistID, playlistTitle => $playlistObj->name );
-			
-			if ($valid) {
-				($chunkCount, $totalCount) = _jiveAddToFavorites(lastChunk => $lastChunk, start => $start, chunkCount => $chunkCount, listCount => $totalCount, request => $request, loopname => $loopname, favorites => \%favorites);
+			if ($menuMode) {
+				($chunkCount, $totalCount) = _jiveDeletePlaylist(start => $start, end => $end, lastChunk => $lastChunk, listCount => $totalCount, chunkCount => $chunkCount, request => $request, loopname => $loopname, playlistURL => $playlistObj->url, playlistID => $playlistID, playlistTitle => $playlistObj->name );
+				
+				if ($valid) {
+					($chunkCount, $totalCount) = _jiveAddToFavorites(lastChunk => $lastChunk, start => $start, chunkCount => $chunkCount, listCount => $totalCount, request => $request, loopname => $loopname, favorites => \%favorites);
+				}
 			}
 			
 		}
@@ -2610,9 +2621,6 @@ sub playlistsQuery {
 					'itemsParams' => 'params',
 				},
 			},
-			window => {
-				titleStyle => 'playlist',
-			},
 		};
 		$base->{'actions'}{'play-hold'} = _mixerBase();
 		$base->{'actions'} = _jivePresetBase($base->{'actions'});
@@ -2658,10 +2666,11 @@ sub playlistsQuery {
 
 				if ($menuMode) {
 					$request->addResultLoop($loopname, $chunkCount, 'text', $eachitem->title);
-
 					my $params = {
 						'playlist_id' =>  $id, 
 						'textkey' => $textKey,
+						'favorites_url'   => $eachitem->url,
+						'favorites_title' => $eachitem->name,
 					};
 
 					_mixerItemParams(request => $request, obj => $eachitem, loopname => $loopname, chunkCount => $chunkCount, params => $params);
@@ -3098,6 +3107,11 @@ sub serverstatusQuery_filter {
 	my $self = shift;
 	my $request = shift;
 	
+	# we want to know about clients going away as soon as possible
+	if ($request->isCommand([['client'], ['forget']]) || $request->isCommand([['connect']])) {
+		return 1;
+	}
+	
 	# we want to know about rescan and all client notifs, as well as power on/off
 	# FIXME: wipecache and rescan are synonyms...
 	if ($request->isCommand([['wipecache', 'rescan', 'client', 'power']])) {
@@ -3405,12 +3419,29 @@ sub statusQuery_filter {
 	
 	# retrieve the clientid, abort if not about us
 	my $clientid = $request->clientid();
-	return 0 if !defined $clientid || !defined $self->clientid();
-	return 0 if $clientid ne $self->clientid();
+	my $myclientid = $self->clientid();
+	return 0 if !defined $clientid || !defined $myclientid;
 	
+	# Bug 10064: playlist notifications get sent to everyone in the sync-group
+	if ($request->isCommand([['playlist', 'newmetadata']]) && (my $client = $request->client)) {
+		return 0 if !grep($_->id eq $myclientid, $client->syncGroupActiveMembers());
+	} else {
+		return 0 if $clientid ne $myclientid;
+	}
+	
+	# ignore most prefset commands, but e.g. alarmSnoozeSeconds needs to generate a playerstatus update
+	if ( $request->isCommand( [ ['prefset'] ] ) ) {
+		my $prefname = $request->getParam('_prefname');
+		if ( defined($prefname) && $prefname eq 'alarmSnoozeSeconds' ) {
+			# this needs to pass through the filter
+		}
+		else {
+			return 0;
+		}
+	}
+
 	# commands we ignore
-	return 0 if $request->isCommand([['ir', 'button', 'debug', 'pref', 'display', 'prefset', 'playerpref']]);
-	return 0 if $request->isCommand([['playlist'], ['open', 'jump']]);
+	return 0 if $request->isCommand([['ir', 'button', 'debug', 'pref', 'display', 'playerpref']]);
 
 	# special case: the client is gone!
 	if ($request->isCommand([['client'], ['forget']])) {
@@ -3436,7 +3467,22 @@ sub statusQuery_filter {
 		return 1.4;
 	}
 
-	# send everyother notif with a small delay to accomodate
+	# give it more time for stop as this is often followed by a new play
+	# command (for example, with track skip), and the new status may be delayed
+	if ($request->isCommand([['playlist'],['stop']])) {
+		return 2.0;
+	}
+
+	# This is quite likely about to be followed by a 'playlist newsong' so
+	# we only want to generate this if the newsong is delayed, as can be
+	# the case with remote tracks.
+	# Note that the 1.5s here and the 1s from 'playlist stop' above could
+	# accumulate in the worst case.
+	if ($request->isCommand([['playlist'], ['open', 'jump']])) {
+		return 2.5;
+	}
+
+	# send every other notif with a small delay to accomodate
 	# bursts of commands
 	return 1.3;
 }
@@ -3445,7 +3491,7 @@ sub statusQuery_filter {
 sub statusQuery {
 	my $request = shift;
 	
-	main::INFOLOG && $log->info("statusQuery()");
+	main::DEBUGLOG && $log->debug("statusQuery()");
 
 	# check this is the correct query
 	if ($request->isNotQuery([['status']])) {
@@ -3518,6 +3564,9 @@ sub statusQuery {
 	my $playlist_cur_index;
 	
 	$request->addResult('mode', Slim::Player::Source::playmode($client));
+	if ($client->isPlaying() && !$client->isPlaying('really')) {
+		$request->addResult('waitingToPlay', 1);	
+	}
 
 	if (my $song = $client->playingSong()) {
 
@@ -3632,6 +3681,10 @@ sub statusQuery {
 			$request->addResult('alarm_next', defined $alarmNext ? $alarmNext + 0 : 0);
 		}
 
+		# send client pref for alarm snooze
+		my $alarm_snooze_seconds = $prefs->client($client)->get('alarmSnoozeSeconds');
+		$request->addResult('alarm_snooze_seconds', defined $alarm_snooze_seconds ? $alarm_snooze_seconds + 0 : 540);
+
 		# send which presets are defined
 		my $presets = $prefs->client($client)->get('presets');
 		my $presetLoop;
@@ -3675,9 +3728,6 @@ sub statusQuery {
 						itemsParams => 'params',
 					},
 				},
-				window => {
-					titleStyle => 'album',
-				}
 			};
 		}
 		$request->addResult('base', $base);
@@ -4150,9 +4200,6 @@ sub titlesQuery {
 					itemsParams => 'params',
 				},
 			},
-			window => {
-				titleStyle => 'album',
-			}
 		};
 		$base->{'actions'}{'play-hold'} = _mixerBase();
 		$base->{'actions'} = _jivePresetBase($base->{'actions'});
@@ -4189,6 +4236,10 @@ sub titlesQuery {
 
 	$count += 0;
 
+	# we only change the count if we're going to insert the play all item
+	my $addPlayAllItem = $search && $insertAll;
+
+	my $totalCount = _fixCount($addPlayAllItem, \$index, \$quantity, $count);
 	my ($valid, $start, $end) = $request->normalize(scalar($index), scalar($quantity), $count);
 
 	my $loopname = $menuMode?'item_loop':'titles_loop';
@@ -4202,7 +4253,7 @@ sub titlesQuery {
 		my $format = $prefs->get('titleFormat')->[ $prefs->get('titleFormatWeb') ];
 
 		# PLAY ALL item for search results
-		if ( $search && $insertAll ) {
+		if ( $addPlayAllItem ) {
 			$chunkCount = _playAll(start => $start, end => $end, chunkCount => $chunkCount, request => $request, loopname => $loopname, includeArt => ( $menuStyle eq 'album' ) );
 		}
 
@@ -4222,6 +4273,9 @@ sub titlesQuery {
 				if ( $playalbum && $albumID ) {
 					$params->{'album_id'}   = $albumID;
 					$params->{'list_index'} = $listIndex;
+					if ($contributorID) {
+						$params->{'artist_id'}   = $contributorID;
+					}
 				}
 				$request->addResultLoop($loopname, $chunkCount, 'params', $params);
 			
@@ -4273,7 +4327,6 @@ sub titlesQuery {
 				}
 			
 				if (defined($iconId)) {
-					$iconId += 0;
 					$window->{'icon-id'} = $iconId;
 					# show icon if we're doing press-to-play behavior
 					if ($menuStyle eq 'album' && $useContextMenu) {
@@ -4300,11 +4353,11 @@ sub titlesQuery {
 
 	}
 
-	if ($count == 0 && $menuMode) {
+	if ($totalCount == 0 && $menuMode) {
 		# this is an empty resultset
 		_jiveNoResults($request);
 	} else {
-		$request->addResult('count', $count);
+		$request->addResult('count', $totalCount);
 	}
 
 	if ( $menuMode && $search && $count > 0 && $start == 0 && !$request->getParam('cached_search') ) {
@@ -4436,7 +4489,6 @@ sub yearsQuery {
 			},
 			'window' => {
 				menuStyle   => 'album',
-				titleStyle  => 'years',
 			}
 		};
 		# sort by artist, year, album when sending the albums query
@@ -4704,7 +4756,6 @@ sub _addJivePlaylistControls {
 	$request->addResultLoop($loop, $count, 'offset', 0);
 	$request->addResultLoop($loop, $count, 'count', 2);
 	$request->addResultLoop($loop, $count, 'item_loop', \@clear_playlist);
-	$request->addResultLoop($loop, $count, 'window', { titleStyle => 'playlist' } );
 	
 	if ( main::SLIM_SERVICE ) {
 		# Bug 7110, move images
@@ -4739,7 +4790,6 @@ sub _addJivePlaylistControls {
 		$request->addResultLoop($loop, $count, 'icon-id', '/html/images/playlistsave.png');
 		$request->addResultLoop($loop, $count, 'input', $input);
 		$request->addResultLoop($loop, $count, 'actions', $actions);
-		$request->addResultLoop($loop, $count, 'window', { titleStyle => 'playlist' } );
 	}
 	
 	# Bug 7110, move images
@@ -4748,6 +4798,10 @@ sub _addJivePlaylistControls {
 		$request->addResultLoop( $loop, $count, 'icon', Slim::Networking::SqueezeNetwork->url('/static/jive/images/blank.png', 1) );
 	}
 }
+
+# **********************************************************************
+# *** This is performance-critical method ***
+# Take cake to understand the performance implications of any changes.
 
 sub _addJiveSong {
 	my $request   = shift; # request
@@ -4759,7 +4813,7 @@ sub _addJiveSong {
 	my $songData  = _songData(
 		$request,
 		$track,
-		'alKNJ',			# tags needed for our entities
+		$current ?'AalKNJ' : 'alKNJ',			# tags needed for our entities
 	);
 	
 	$request->addResultLoop($loop, $count, 'trackType', $track->remote ? 'radio' : 'local');
@@ -4768,6 +4822,22 @@ sub _addJiveSong {
 	my $title  = $text;
 	my $album  = $songData->{album};
 	my $artist = $songData->{artist};
+	
+	# Bug 15779: we cannot afford to get multiple contributor roles for each track
+	# in the playlist so restrict this information to just for the current track.
+	# (even getting it just for the current track is pretty expensive)
+	if ($current) {
+		my (%artists, @artists);
+		foreach ('albumartist', 'trackartist', 'artist') {
+			foreach my $a ( $songData->{"arrayRef_$_"} ? @{$songData->{"arrayRef_$_"}} : $songData->{$_} ) {
+				if ( $a && !$artists{$a} ) {
+					push @artists, $a;
+					$artists{$a} = 1;
+				}
+			}
+		}
+		$artist = join(', ', @artists);
+	}
 	
 	if ( $track->remote && $text && $album && $artist ) {
 		$request->addResult('current_title');
@@ -4783,7 +4853,7 @@ sub _addJiveSong {
 
 	# Special case for Internet Radio streams, if the track is remote, has no duration,
 	# has title metadata, and has no album metadata, display the station title as line 1 of the text
-	if ( $songData->{remote_title} && !$album && $track->remote && !$track->secs ) {
+	if ( $songData->{remote_title} && $songData->{remote_title} ne $title && !$album && $track->remote && !$track->secs ) {
 		push @secondLine, $songData->{remote_title};
 		$album = $songData->{remote_title};
 		$request->addResult('current_title');
@@ -4941,7 +5011,6 @@ sub _jiveAddToFavorites {
 		$actions->{'go'}{'params'}{'item_id'} = $favIndex if defined($favIndex);
 
 		$request->addResultLoop($loopname, $chunkCount, 'actions', $actions);
-		$request->addResultLoop($loopname, $chunkCount, 'window', { 'titleStyle' => 'favorites' });
 
 		if ($includeArt) {
 			my $favicon = main::SLIM_SERVICE
@@ -5007,7 +5076,6 @@ sub _jiveDeletePlaylist {
 		};
 
 		$request->addResultLoop($loopname, $chunkCount, 'actions', $actions);
-		$request->addResultLoop($loopname, $chunkCount, 'window', { 'titleStyle' => 'playlist' });
 		$request->addResultLoop($loopname, $chunkCount, 'style', 'item');
 		$chunkCount++;
 	}
@@ -5052,7 +5120,7 @@ sub _jiveGenreAllAlbums {
 		};
 
 		$request->addResultLoop($loopname, $chunkCount, 'actions', $actions);
-		$request->addResultLoop($loopname, $chunkCount, 'window', { 'titleStyle' => 'genres', text => "$genreString" });
+		$request->addResultLoop($loopname, $chunkCount, 'window', { text => "$genreString" });
 
 		if ($includeArt) {
 			my $playallicon = main::SLIM_SERVICE
@@ -5238,12 +5306,14 @@ sub _songData {
 						
 					my $key = lc($type) . $postfix;
 					my $contributors = $track->contributorsOfType($type) or next;
-					my $value = join(', ', map { $_ = $_->$submethod() } $contributors->all);
+					my @values = map { $_ = $_->$submethod() } $contributors->all;
+					my $value = join(', ', @values);
 			
 					if (defined $value && $value ne '') {
 
 						# add the tag to the result
 						$returnHash{$key} = $value;
+						$returnHash{"arrayRef_$key"} = \@values;
 					}
 				}
 			}
@@ -5522,19 +5592,17 @@ sub _mixerItemParams {
 	if ( scalar(@$mixers) == 1 ) {
 		my $mixer = $mixers->[0];
 		if ($mixer->mixable($obj)) {
-			$request->addResultLoop($loopname, $chunkCount, 'playHoldAction', 'go');
+
 		} else {
-			my $playHoldAction = {
+			my $unmixable = {
 				player => 0,
 				cmd    => ['jiveunmixable'],
 				params => {
 					contextToken => $Imports->{$mixer}->{contextToken},
 				},
 			};
-			$request->addResultLoop($loopname, $chunkCount, 'actions', { 'play-hold' => $playHoldAction } );
+			$request->addResultLoop($loopname, $chunkCount, 'actions', { 'play-hold' => $unmixable } );
 		}
-	} elsif ( scalar(@$mixers) ) {
-		$request->addResultLoop($loopname, $chunkCount, 'playHoldAction', 'go');
 	} else {
 		return;
 	}
@@ -5741,7 +5809,6 @@ sub _mixerItemHandler {
 	if (scalar(@$mixers) == 1 && blessed($obj)) {
 		my $mixer = $mixers->[0];
 		if ($mixer->can('mixable') && $mixer->mixable($obj)) {
-			$request->addResultLoop($loopname, $chunkCount, 'playHoldAction', 'go');
 			# pull in cliBase with Storable::dclone so we can manipulate without affecting the object itself
 			my $command = Storable::dclone( $Imports->{$mixer}->{cliBase} );
 			$command->{'params'}{'menu'} = 1;
@@ -5760,7 +5827,6 @@ sub _mixerItemHandler {
 			
 		}
 	} elsif ( scalar(@$mixers) && blessed($obj) ) {
-		$request->addResultLoop($loopname, $chunkCount, 'playHoldAction', 'go');
 		return {
 			player => 0,
 			cmd    => ['mixermenu'],

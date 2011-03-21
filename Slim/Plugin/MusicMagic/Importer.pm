@@ -121,7 +121,7 @@ sub initPlugin {
 	if (main::ISWINDOWS) {
 		@supportedFormats = ('alc', 'm4a', 'mp3', 'wma', 'ogg', 'flc', 'wav');
 	}
-	elsif (Slim::Utils::OSDetect::OS() eq 'mac') {
+	elsif (main::ISMAC) {
 		@supportedFormats = ('alc', 'm4a', 'mp3', 'ogg', 'flc', 'wav');		
 	}
 	else {
@@ -412,7 +412,7 @@ sub processSong {
 	# This breaks Linux however, so only do it on Windows & OS X
 	my @keys  = qw(album artist genre name);
 
-	if (main::ISWINDOWS) {
+	if (main::ISWINDOWS || main::ISMAC) {
 
 		push @keys, 'file';
 	}

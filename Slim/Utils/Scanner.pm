@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner;
 
-# $Id: Scanner.pm 28829 2009-10-13 11:37:58Z michael $
+# $Id: Scanner.pm 29880 2010-01-22 02:28:18Z andy $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

@@ -44,6 +44,10 @@ sub model {
 	return 'receiver';
 }
 
+sub modelName {
+	return 'Squeezebox Receiver';
+}
+
 sub hasIR() { return 0; }
 
 sub reconnect {
@@ -111,6 +115,10 @@ sub powerTurnOffLED {
 
 	Slim::Utils::Timers::killTimers( $client, \&powerTurnOffLED);
 	Slim::Hardware::TriLED::setTriLED( $client, $OFF_COLOR, 1);
+}
+
+sub hasPreAmp {
+	return 0;
 }
 
 1;

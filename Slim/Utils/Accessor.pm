@@ -1,6 +1,6 @@
 package Slim::Utils::Accessor;
 
-# $Id: Accessor.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Accessor.pm 29642 2009-12-17 12:51:19Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -98,9 +98,7 @@ sub mk_accessor {
 		if ($type eq 'rw') {
 			
 			if ( hasXS() ) {
-				Class::XSAccessor::Array::_generate_method(
-					$class,	$field,	$n, 0, 0, 'accessor',
-				);
+				Class::XSAccessor::Array::newxs_accessor("${class}::${field}", $n, 0);
 			}
 			else {
 				$accessor = sub {
@@ -112,9 +110,7 @@ sub mk_accessor {
 		} elsif ($type eq 'ro') {
 			
 			if ( hasXS() ) {
-				Class::XSAccessor::Array::_generate_method(
-					$class,	$field,	$n, 0, 0, 'getter',
-				);
+				Class::XSAccessor::Array::newxs_getter("${class}::${field}", $n);
 			}
 			else {
 				$accessor = sub {

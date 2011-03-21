@@ -1,6 +1,6 @@
 package Slim::Utils::SoundCheck;
 
-# $Id: SoundCheck.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: SoundCheck.pm 29627 2009-12-16 16:22:06Z andy $
 # 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -22,10 +22,16 @@ sub commentTagTodB {
 		return;
 	}
 
+	# If comment is not an array it didn't come from ID3, this can happen if a 
+	# FLAC file has both ID3 and Vorbis tags for example.  We can ignore it here
+	# in this case.
+	if ( !ref $tags->{COMMENT} ) {
+		return;
+	}
+	
 	# Normalize all comments to array refs
-	if (!ref($tags->{'COMMENT'})) {
-
-		$tags->{'COMMENT'} = [ $tags->{'COMMENT'} ];
+	if ( !ref $tags->{COMMENT}->[0] ) {
+		$tags->{COMMENT} = [ $tags->{COMMENT} ];
 	}
 
 	# Look for the iTunNORM tag. If this is the only comment we

@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::MMS;
 
-# $Id: MMS.pm 28583 2009-09-21 18:39:43Z ayoung $
+# $Id: MMS.pm 29380 2009-11-20 17:03:00Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -51,7 +51,6 @@ sub new {
 	my $self = $class->open($args);
 
 	if (defined($self)) {
-		${*$self}{'song'}    = $args->{'song'};
 		${*$self}{'client'}  = $args->{'client'};
 		${*$self}{'url'}     = $args->{'url'};
 	}
@@ -217,11 +216,13 @@ sub parseHeaders {
 	my $self    = shift;
 	
 	my ($title, $bitrate, $metaint, $redir, $contentType, $length, $body) = $self->parseDirectHeaders($self->client, $self->url, @_);
-	my @headers = @_;
 
 	${*$self}{'contentType'} = $contentType if $contentType;
 	${*$self}{'redirect'} = $redir;
+
 	${*$self}{'contentLength'} = $length if $length;
+	${*$self}{'song'}->isLive($length ? 0 : 1) if !$redir;
+	# XXX maybe should (also) check $song->scanData()->{$url}->{metadata}->{info}->{broadcast} here.
 
 	return;
 }
@@ -401,10 +402,17 @@ sub parseMetadata {
 			
 				main::DEBUGLOG && $log->is_debug && $log->debug('Parsed WMA metadata from CAPTION string');
 			}
-			elsif ( $metadata =~ /(artist=[^\0]+)/ ) {
+			elsif ( $metadata =~ /(artist=[^\0]+)/i ) {
 				require URI::QueryParam;
 				my $uri  = URI->new( '?' . $1 );
 				my $meta = $uri->query_form_hash;
+				
+				# Make sure query params are lowercase
+				for my $k ( keys %{$meta} ) {
+					if ( $k ne lc($k) ) {
+						$meta->{ lc($k) } = delete $meta->{$k};
+					}
+				}				
 				
 				main::DEBUGLOG && $log->is_debug && $log->debug('Parsed WMA metadata from artist-style query string');
 			

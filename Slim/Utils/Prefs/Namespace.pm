@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Namespace;
 
-# $Id: Namespace.pm 28824 2009-10-12 20:44:57Z michael $
+# $Id: Namespace.pm 28933 2009-10-19 18:23:09Z andy $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -297,6 +297,8 @@ sub save {
 	}
 
 	return if ($class->{'writepending'});
+	
+	return if $class->{readonly};
 
 	Slim::Utils::Timers::setTimer($class, time() + 10, \&savenow);
 

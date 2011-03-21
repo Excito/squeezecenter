@@ -1,6 +1,6 @@
 package Slim::Networking::Async::Socket::UDP;
 
-# $Id: UDP.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: UDP.pm 30416 2010-03-25 13:51:32Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -14,8 +14,8 @@ use warnings;
 
 use base qw(IO::Socket::INET Slim::Networking::Async::Socket);
 
-# Get Exporter's import method here so as to avoid inheriting one from IO::Socket::INET
-use Exporter qw(import);
+# Avoid IO::Socket's import method
+sub import {}
 
 use Socket;
 use Slim::Utils::Log;

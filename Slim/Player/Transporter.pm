@@ -52,6 +52,7 @@ our $defaultPrefs = {
 		PLUGIN_MY_APPS_MODULE_NAME
 		PLUGIN_APP_GALLERY_MODULE_NAME
 		FAVORITES
+		GLOBAL_SEARCH
 		PLUGIN_DIGITAL_INPUT
 		PLUGINS
 		SETTINGS
@@ -76,19 +77,9 @@ sub reconnect {
 	$client->getPlayerSetting('digitalOutputEncoding');
 	$client->getPlayerSetting('wordClockOutput');
 	$client->getPlayerSetting('powerOffDac');
-	$client->getPlayerSetting('fxloopSource');
-	$client->getPlayerSetting('fxloopClock');
 
-	# We need to wait for the fxloop settings
-	# to come back from the player before using them
-	Slim::Utils::Timers::setTimer(
-		undef,
-		Time::HiRes::time() + 1,
-		sub {
-			$client->updateClockSource();
-			$client->updateEffectsLoop();
-		},
-	);
+	$client->updateClockSource();
+	$client->updateEffectsLoop();
 
 	# Update the knob in reconnect - as that's the last function that is
 	# called when a new or pre-existing client connects to the server.
@@ -117,7 +108,7 @@ sub play {
 
 		}
 		else {
-			main::INFOLOG && logger('player.source')->info("Setting DigitalInput to 0 for [$url]");
+			main::DEBUGLOG && logger('player.source')->debug("Setting DigitalInput to 0 for [$url]");
 
 			$client->setDigitalInput(0);
 		}

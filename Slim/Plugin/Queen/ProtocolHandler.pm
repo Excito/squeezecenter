@@ -1,6 +1,6 @@
 package Slim::Plugin::Queen::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 28682 2009-09-29 17:52:02Z andy $
+# $Id: ProtocolHandler.pm 29582 2009-12-10 17:32:46Z michael $
 
 # Handler for queen:// URLs
 
@@ -243,8 +243,6 @@ sub getMetadataFor {
 	
 	return {} unless $url;
 	
-	my $meta;
-
 	my $cache = Slim::Utils::Cache->new;
 	
 	# If metadata is not here, fetch it so the next poll will include the data

@@ -1,6 +1,6 @@
 package Slim::Buttons::ScreenSaver;
 
-# $Id: ScreenSaver.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: ScreenSaver.pm 29717 2010-01-04 11:46:25Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -70,6 +70,9 @@ sub getFunctions {
 
 sub screenSaver {
 	my $client = shift;
+
+	return if $client->display->isa('Slim::Display::NoDisplay');
+
 	my $display = $client->display;
 
 	my $now  = Time::HiRes::time();
@@ -233,6 +236,8 @@ sub wakeup {
 	
 	Slim::Hardware::IR::setLastIRTime($client, Time::HiRes::time());
 
+	return if !defined $display->maxBrightness();
+	
 	my $curBrightnessPref;
 	
 	my $cprefs = $prefs->client($client);

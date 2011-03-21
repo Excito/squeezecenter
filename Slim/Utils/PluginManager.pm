@@ -5,7 +5,7 @@ package Slim::Utils::PluginManager;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 #
-# $Id: PluginManager.pm 28393 2009-08-31 19:42:29Z andy $
+# $Id: PluginManager.pm 30008 2010-02-04 14:20:18Z michael $
 
 use strict;
 
@@ -38,7 +38,7 @@ my $cacheInfo = {};
 my $message;
 my $downloader;
 
-use constant CACHE_VERSION => 3;
+use constant CACHE_VERSION => 4;
 
 # Skip unwanted plugins
 my %SKIP = ();
@@ -143,6 +143,10 @@ sub init {
 
 			$cacheInvalid = 'server version changed';
 
+		} elsif ($cacheInfo->{'revision'} ne $::REVISION) {
+
+			$cacheInvalid = 'server revision changed';
+
 		} elsif ($cacheInfo->{'osType'} ne $osDetails->{'os'} || $cacheInfo->{'osArch'} ne $osDetails->{'osArch'}) {
 
 			$cacheInvalid = 'os or os architecture changed';
@@ -165,6 +169,7 @@ sub init {
 			'count'   => scalar @{$manifestFiles},
 			'mtimesum'=> $sum,
 			'server'  => $::VERSION,
+			'revision'=> $::REVISION,
 			'osType'  => $osDetails->{'os'},
 			'osArch'  => $osDetails->{'osArch'},
 		};

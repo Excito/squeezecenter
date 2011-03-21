@@ -1,6 +1,6 @@
 package Slim::Plugin::Base;
 
-# $Id: Base.pm 28265 2009-08-25 19:58:11Z andy $
+# $Id: Base.pm 30277 2010-02-26 20:33:38Z agrundman $
 
 # Base class for plugins. Implement some basics.
 
@@ -31,7 +31,7 @@ sub initPlugin {
 	# disaster, and has no concept of OO, we need to wrap 'setMode' (an
 	# ambiguous function name if there ever was) in a closure so that it
 	# can be called as class method.
-	if ( !main::SCANNER && $class->can('setMode') && $class->modeName ) {
+	if ( !main::SCANNER && $class->can('setMode') && $mode ) {
 
 		my $exitMode = $class->can('exitMode') ? sub { $class->exitMode(@_) } : undef;
 
@@ -64,12 +64,13 @@ sub initPlugin {
 		}
 	}
 
-	if ( !main::SLIM_SERVICE  && !main::SCANNER ) {
-		if ($class->can('webPages') && !$::noweb) {
-
+	if ( main::WEBUI ) {
+		if ( $class->can('webPages') ) {
 			$class->webPages;
 		}
-		
+	}
+
+	if ( !main::SLIM_SERVICE ) {
 		if ($class->_pluginDataFor('icon')) {
 			Slim::Web::Pages->addPageLinks("icons", { $name => $class->_pluginDataFor('icon') });
 		}

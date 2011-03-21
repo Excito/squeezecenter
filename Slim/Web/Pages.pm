@@ -1,6 +1,6 @@
 package Slim::Web::Pages;
 
-# $Id: Pages.pm 28445 2009-09-05 02:25:36Z andy $
+# $Id: Pages.pm 30040 2010-02-05 19:58:44Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -30,11 +30,8 @@ our %additionalLinks = ();
 our %pageConditions = ();
 
 sub init {
-	
-	# don't initialize pages when called from scanner or 
-	# SC is run with the --noweb parameter
-	return if $::noweb;
-	
+	# Note: init() is not run with --noweb param
+		
 	require Slim::Web::Pages::Common;
 	require Slim::Web::Pages::Home;
 	require Slim::Web::Pages::BrowseDB;
@@ -125,6 +122,10 @@ sub addPageCondition {
 
 sub addPageFunction {
 	my ( $class, $regexp, $func ) = @_;
+	
+	if ( !ref $regexp ) {
+		$regexp = qr/$regexp/;
+	}
 
 	main::INFOLOG && $log->is_info && $log->info("Adding handler for regular expression /$regexp/");
 

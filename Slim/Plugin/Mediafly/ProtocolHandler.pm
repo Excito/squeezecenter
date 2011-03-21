@@ -1,6 +1,6 @@
 package Slim::Plugin::Mediafly::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: ProtocolHandler.pm 29990 2010-02-03 14:09:52Z michael $
 
 # Handler for mediafly:// URLs
 
@@ -88,18 +88,16 @@ sub getNextTrack {
 	my ($first) = $url =~ m{\?first=(.+)};
 	
 	# If we were playing previously, pass the previous slug
-	my $firstslug;
-	my $prevslug;
+	my $firstslug = '';
+	my $prevslug = '';
 	
 	my $playedFirst = $client->master->pluginData('playedFirst') || '';
 	
 	if ( $first && $playedFirst ne $first ) {
 		$firstslug = $first;
-		
-		$client->master->pluginData( playedFirst => $first );
 	}
 	elsif ( my $track = $song->pluginData() ) {
-		$prevslug = $track->{slug};
+		$prevslug = $track->{slug} || $client->master->pluginData('previousSlug');
 	}
 	
 	# Talk to SN and get the next track to play
@@ -113,6 +111,7 @@ sub getNextTrack {
 		{
 			client        => $client,
 			song          => $song,
+			playedFirst   => $first,
 			callback      => $successCb,
 			errorCallback => $errorCb,
 			timeout       => 35,
@@ -163,6 +162,8 @@ sub gotNextTrack {
 	
 	# Save metadata for this track
 	$song->pluginData( $track );
+	$client->master->pluginData( playedFirst => $http->params->{playedFirst} );
+	$client->master->pluginData( previousSlug => $track->{slug} );
 	$song->streamUrl($track->{url});
 
 	$http->params->{callback}->();
@@ -301,15 +302,27 @@ sub getMetadataFor {
 	my $icon = $class->getIcon();
 	
 	if ( my $track = $song->pluginData() ) {
+		
+		my $date = '';
+		($date) = $track->{published} =~ m/^(\d{4}-\d{2}-\d{2})/ if $track->{published};
+		
+		# bug 15499 - wipe track object's title, it's initially set by Slim::Control::Queries::_songData only
+		$song->track->title('') if $song->track->title();
+
 		return {
-			artist      => $track->{show}->[0]->{title},
+			artist      => $track->{show}->[0]->{title} || $track->{showTitle},
 			title       => $track->{title},
+			album       => $date,
 			cover       => $track->{imageUrl},
 			icon        => $icon,
 			duration    => $track->{secs},
 			bitrate     => ( $track->{bitrate} ) ? $track->{bitrate} . 'k' : undef,
 			type        => 'Mediafly',
 			info_link   => 'plugins/mediafly/trackinfo.html',
+			buttons       => {
+				fwd => 1,
+				rew => 1,
+			},
 		};
 	}
 	else {

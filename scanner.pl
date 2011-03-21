@@ -26,6 +26,7 @@ use constant PERFMON      => 0;
 use constant DEBUGLOG     => ( grep { /--nodebuglog/ } @ARGV ) ? 0 : 1;
 use constant INFOLOG      => ( grep { /--noinfolog/ } @ARGV ) ? 0 : 1;
 use constant SB1SLIMP3SYNC=> 0;
+use constant WEBUI        => 0;
 use constant ISWINDOWS    => ( $^O =~ /^m?s?win/i ) ? 1 : 0;
 use constant ISMAC        => ( $^O =~ /darwin/i ) ? 1 : 0;
 
@@ -50,10 +51,8 @@ BEGIN {
 	require File::Basename;
 	require File::Copy;
 	require File::Slurp;
-	require HTTP::Request;
-	require JSON::XS::VersionOneAndTwo;
-	require LWP::UserAgent;
 	
+	require JSON::XS::VersionOneAndTwo;
 	import JSON::XS::VersionOneAndTwo;
 };
 
@@ -76,8 +75,6 @@ if (!$@) {
 use Getopt::Long;
 use File::Path;
 use File::Spec::Functions qw(:ALL);
-use EV;
-use AnyEvent;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -98,7 +95,7 @@ if ( INFOLOG || DEBUGLOG ) {
 	require Slim::Utils::PerlRunTime;
 }
 
-our $VERSION     = '7.4.1';
+our $VERSION     = '7.5.0';
 our $REVISION    = undef;
 our $BUILDDATE   = undef;
 
@@ -118,7 +115,6 @@ sub main {
 	our ($quiet, $json, $logfile, $logdir, $logconf, $debug, $help);
 
 	our $LogTimestamp = 1;
-	our $noweb = 1;
 
 	$prefs = preferences('server');
 	my $musicmagic;
@@ -199,6 +195,21 @@ sub main {
 		msg("Import: If this is not the case, run with --force\n");
 		msg("Exiting!\n");
 		exit;
+	}
+	
+	# pull in the memory usage module if requested.
+	if (main::INFOLOG && logger('server.memory')->is_info) {
+		
+		Slim::bootstrap::tryModuleLoad('Slim::Utils::MemoryUsage');
+
+		if ($@) {
+
+			logError("Couldn't load Slim::Utils::MemoryUsage: [$@]");
+
+		} else {
+
+			Slim::Utils::MemoryUsage->init();
+		}
 	}
 
 	if ($playlists) {
@@ -323,6 +334,10 @@ sub main {
 
 	# Wipe templates if they exist.
 	rmtree( catdir($prefs->get('cachedir'), 'templates') );
+	
+	# To debug scanner memory usage, uncomment this line and kill -USR2 the scanner process
+	# after it's finished scanning.
+	# while (1) { sleep 1 }
 }
 
 sub initializeFrameworks {

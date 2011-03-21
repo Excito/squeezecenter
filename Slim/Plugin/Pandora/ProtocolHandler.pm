@@ -58,7 +58,17 @@ sub getFormatForURL () { 'mp3' }
 # Don't allow looping if the tracks are short
 sub shouldLoop () { 0 }
 
-sub canSeek { 0 }
+sub canSeek {
+	my ( $class, $client, $song ) = @_;
+	
+	if ( my $track = $song->pluginData() ) {
+		if ( delete $track->{_allowSeek} ) {
+			return 1;
+		}
+	}
+	
+	return 0;
+}
 
 sub canSeekError { return ( 'SEEK_ERROR_TYPE_NOT_SUPPORTED', 'Pandora' ); }
 
@@ -192,6 +202,7 @@ sub gotNextTrack {
 	}
 	
 	# Save metadata for this track
+	$song->duration( $track->{secs} );
 	$song->pluginData( $track );
 	$song->streamUrl($track->{'audioUrl'});
 	$client->master->pluginData('trackToken' => $track->{'trackToken'});
@@ -247,15 +258,24 @@ sub parseDirectHeaders {
 	
 	# Grab content-length for progress bar
 	my $length;
+	my $rangelength;
+	
 	foreach my $header (@headers) {
 		if ( $header =~ /^Content-Length:\s*(.*)/i ) {
 			$length = $1;
+		}
+		elsif ( $header =~ m{^Content-Range: .+/(.*)}i ) {
+			$rangelength = $1;
 			last;
 		}
 	}
 	
+	if ( $rangelength ) {
+		$length = $rangelength;
+	}
+	
 	$client->streamingSong->bitrate($bitrate);
-	$client->streamingSong->duration($length * 8 / $bitrate); 
+	$client->streamingSong->duration( $client->streamingSong->pluginData()->{secs} );
 	
 	# title, bitrate, metaint, redir, type, length, body
 	return (undef, $bitrate, 0, undef, $contentType, $length, undef);
@@ -313,6 +333,17 @@ sub canDoAction {
 	
 	# Bug 10488
 	if ( $action eq 'rew' ) {
+		# Bug 15763, if this is a special seek request due to startOffset, allow it
+		if ( my $track = $client->playingSong->pluginData() ) {
+			if ( $track->{startOffset} ) {
+				# Set a temporary variable so canSeek can return 1, this is needed
+				# to prevent general seeking in tracks with startOffset
+				$track->{_allowSeek} = 1;
+				
+				return 1;
+			}
+		}
+		
 		return 0;
 	}
 	
@@ -420,7 +451,21 @@ sub getMetadataFor {
 	
 	my $icon = $class->getIcon();
 	
-	if ( my $track = $song->pluginData() ) {
+	# Could be somewhere else in the playlist
+	if ($song->track->url ne $url) {
+		$log->error("$url: ");
+		return {
+			icon    => $icon,
+			cover   => $icon,
+			bitrate => '128k CBR',
+			type    => 'MP3 (Pandora)',
+			title   => 'Pandora',
+			album   => Slim::Music::Info::standardTitle( $client, $url, undef ),
+		};
+	}
+	
+	my $track = $song->pluginData();
+	if ( $track && %$track ) {
 		return {
 			artist      => $track->{artistName},
 			album       => $track->{albumName},
@@ -440,17 +485,17 @@ sub getMetadataFor {
 				# replace repeat with Thumbs Up
 				repeat  => {
 					icon    => main::SLIM_SERVICE ? 'static/images/playerControl/thumbs_up_button.png' : 'html/images/btn_thumbs_up.gif',
-					jiveStyle => 'thumbsUp',
+					jiveStyle => $track->{allowFeedback} ? 'thumbsUp' : 'thumbsUpDisabled',
 					tooltip => $client->string('PLUGIN_PANDORA_I_LIKE'),
-					command => [ 'pandora', 'rate', 1 ],
+					command => $track->{allowFeedback} ? [ 'pandora', 'rate', 1 ] : [ 'jivedummycommand' ],
 				},
 
 				# replace shuffle with Thumbs Down
 				shuffle => {
 					icon    => main::SLIM_SERVICE ? 'static/images/playerControl/thumbs_down_button.png' : 'html/images/btn_thumbs_down.gif',
-					jiveStyle => 'thumbsDown',
+					jiveStyle => $track->{allowFeedback} ? 'thumbsDown' : 'thumbsDownDisabled',
 					tooltip => $client->string('PLUGIN_PANDORA_I_DONT_LIKE'),
-					command => [ 'pandora', 'rate', 0 ],
+					command => $track->{allowFeedback} ? [ 'pandora', 'rate', 0 ] : [ 'jivedummycommand' ],
 				},
 			}
 		};
@@ -461,6 +506,7 @@ sub getMetadataFor {
 			cover   => $icon,
 			bitrate => '128k CBR',
 			type    => 'MP3 (Pandora)',
+			title   => $song->track()->title(),
 		};
 	}
 }

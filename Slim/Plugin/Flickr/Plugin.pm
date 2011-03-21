@@ -1,6 +1,6 @@
 package Slim::Plugin::Flickr::Plugin;
 
-# $Id: Plugin.pm 28550 2009-09-17 15:42:43Z andy $
+# $Id: Plugin.pm 29744 2010-01-08 16:29:15Z michael $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -15,6 +15,7 @@ use Slim::Networking::SqueezeNetwork;
 my @savers = qw(
 	mine
 	contacts
+	favorites
 	interesting
 	recent
 );

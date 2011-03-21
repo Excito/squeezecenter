@@ -1,6 +1,6 @@
 package Slim::Formats::Wav;
 
-# $Id: Wav.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Wav.pm 29014 2009-10-26 20:19:20Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -39,7 +39,7 @@ sub getTag {
 	
 	# Add file info
 	$tags->{OFFSET}     = $info->{audio_offset};
-	$tags->{SIZE}       = $info->{file_size};
+	$tags->{SIZE}       = $info->{audio_size};
 	$tags->{SECS}       = $info->{song_length_ms} / 1000;
 	$tags->{RATE}       = $info->{samplerate};
 	$tags->{BITRATE}    = $info->{bitrate};

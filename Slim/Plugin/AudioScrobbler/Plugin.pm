@@ -1,6 +1,6 @@
 package Slim::Plugin::AudioScrobbler::Plugin;
 
-# $Id: Plugin.pm 28299 2009-08-26 22:45:29Z bklaas $
+# $Id: Plugin.pm 30149 2010-02-12 19:33:09Z bklaas $
 
 # This plugin handles submission of tracks to Last.fm's
 # Audioscrobbler service.
@@ -31,7 +31,7 @@ use base qw(Slim::Plugin::Base);
 use Slim::Player::ProtocolHandlers;
 use Slim::Player::Source;
 
-if ( !main::SLIM_SERVICE && !$::noweb ) {
+if ( main::WEBUI ) {
 	require Slim::Plugin::AudioScrobbler::Settings;
 	require Slim::Plugin::AudioScrobbler::PlayerSettings;
 }
@@ -67,10 +67,16 @@ sub initPlugin {
 
 	$class->SUPER::initPlugin();
 
-	if ( !main::SLIM_SERVICE && !$::noweb ) {
+	if ( main::WEBUI ) {
 		Slim::Plugin::AudioScrobbler::Settings->new;
 		Slim::Plugin::AudioScrobbler::PlayerSettings->new;
 	}
+	
+	# init scrobbling prefs
+	$prefs->init({
+		enable_scrobbling => 1,
+		include_radio     => 0,
+	});
 	
 	# Subscribe to new song events
 	Slim::Control::Request::subscribe(
@@ -1343,26 +1349,26 @@ sub jiveSettingsMenu {
 	my @menu     = ();
 
 	for my $account (@$accounts) {
-                my $item = {
+		my $item = {
 			text    => $account->{username},
-			radio   => ($selected == $account->{username} && $enabled) + 0,
-                        actions => {
-                                do => {
-                                        player => 0,
-                                        cmd    => [ 'audioscrobbler' , 'account' ],
+			radio   => ($selected eq $account->{username} && $enabled) + 0,
+			actions => {
+				do => {
+					player => 0,
+					cmd    => [ 'audioscrobbler' , 'account' ],
 					params => {
 						user => $account->{username},
 					},
-                                },
-                        },
-                };
+				},
+			},
+		};
 		push @menu, $item;
 	}
 
 	# disable for this player
 	my $disableItem = {
 		text    => $client->string('PLUGIN_AUDIOSCROBBLER_SCROBBLING_DISABLED'),
-		radio   => !$enabled + 0,
+		radio   => ($selected eq '0') + 0,
 		actions => {
 			do => {
 				player => 0,

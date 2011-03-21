@@ -1,6 +1,6 @@
 package Slim::Player::Client;
 
-# $Id: Client.pm 28561 2009-09-18 08:02:45Z ayoung $
+# $Id: Client.pm 30383 2010-03-17 12:21:17Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -54,6 +54,15 @@ our $defaultPrefs = {
 	'playlistmode'         => 'disabled',
 	'presets'              => [],
 };
+
+$prefs->setValidate({
+	validator => sub {
+		my ($pref, $new, $params, $old, $client) = @_;
+		
+		return $new <= $client->mixerConstant($pref, 'max') 
+		    && $new >= $client->mixerConstant($pref, 'min');
+	} 
+}, qw(bass treble));
 
 $prefs->setChange( sub {
 	my $value  = $_[1];
@@ -161,8 +170,8 @@ sub new {
 
 	assert(!defined(getClient($id)));
 
-	# Ignore UUID if all zeros (bug 6899)
-	if ( defined $uuid && $uuid eq '0' x 32 ) {
+	# Ignore UUID if all zeros or many zeroes (bug 6899)
+	if ( defined $uuid && $uuid =~ /0000000000/ ) {
 		$uuid = undef;
 	}
 	
@@ -483,7 +492,7 @@ sub _makeDefaultName {
 	my %existingName;
 
 	foreach my $clientPref ( $prefs->allClients ) {
-		$existingName{ $clientPref->get('playername') } = 1;
+		$existingName{ $clientPref->get('playername') || 'Squeezebox' } = 1;
 	}
 	
 	my $maxIndex = 0;
@@ -566,6 +575,9 @@ sub forgetClient {
 		
 		# stop watching this player
 		delete $Slim::Networking::Slimproto::heartbeat{ $client->id };
+		
+		# Bug 15860: Force the connection shut if it is not already
+		Slim::Networking::Slimproto::slimproto_close($client->tcpsock()) if defined $client->tcpsock();
 	}
 }
 
@@ -690,8 +702,6 @@ sub canLoop { return 0; }
 sub canDoReplayGain { return 0; }
 
 sub canPowerOff { return 1; }
-
-sub maxTransitionInterval { 0 };
 
 =head2 mixerConstant( $client, $feature, $aspect )
 
@@ -1451,5 +1461,7 @@ sub isAppEnabled {
 	
 	return;
 }
+
+sub revisionNumber { $_[0]->revision }
 
 1;

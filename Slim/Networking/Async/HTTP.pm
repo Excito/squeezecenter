@@ -1,6 +1,6 @@
 package Slim::Networking::Async::HTTP;
 
-# $Id: HTTP.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: HTTP.pm 30050 2010-02-06 01:52:45Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -329,7 +329,7 @@ sub _http_read {
 		}
 		
 		# Handle redirects
-		if ( $code =~ /^30[123]$/ ) {
+		if ( $code =~ /^30[1237]$/ ) {
 
 			my $location = $self->response->header('Location');
 			

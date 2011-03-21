@@ -51,6 +51,7 @@ our $defaultPrefs = {
 		PLUGIN_MY_APPS_MODULE_NAME
 		PLUGIN_APP_GALLERY_MODULE_NAME
 		FAVORITES
+		GLOBAL_SEARCH
 		PLUGIN_LINE_IN
 		PLUGINS
 		ALARM
@@ -208,6 +209,10 @@ sub initPrefs {
 
 sub model {
 	return 'boom';
+}
+
+sub modelName {
+	return 'Squeezebox Boom';
 }
 
 sub hasFrontPanel {

@@ -1,6 +1,6 @@
 package Slim::Utils::Strings;
 
-# $Id: Strings.pm 28802 2009-10-09 09:49:26Z michael $
+# $Id: Strings.pm 30010 2010-02-04 14:23:34Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -41,6 +41,7 @@ use Exporter::Lite;
 our @EXPORT_OK = qw(string cstring clientString);
 
 use Config;
+use Data::URIEncode qw(complex_to_query);
 use Digest::SHA1 qw(sha1_hex);
 use POSIX qw(setlocale LC_TIME);
 use File::Slurp qw(read_file write_file);
@@ -62,6 +63,10 @@ my $failsafeLang  = 'EN';
 my $log = logger('server');
 
 my $prefs = preferences('server');
+
+use constant CACHE_VERSION => 3;
+# version 2 - include the sum of string file mtimes as an additional validation check
+# version 3 - include the server revision
 
 =head1 METHODS
 
@@ -110,9 +115,6 @@ sub loadStrings {
 	# between 32-bit and 64-bit perl for example
 	$stringCache .= '.' . Slim::Utils::OSDetect::details()->{osArch} . '.bin';
 
-	my $stringCacheVersion = 2; # Version number for cache file
-	# version 2 - include the sum of string file mtimes as an additional validation check
-
 	# use stored stringCache if newer than all string files and correct version
 	if (!$args->{'ignoreCache'} && -r $stringCache && ($newest < (stat($stringCache))[9])) {
 
@@ -129,7 +131,7 @@ sub loadStrings {
 		}
 
 		if (!$@ && defined $strings &&
-			defined $strings->{'version'} && $strings->{'version'} == $stringCacheVersion &&
+			defined $strings->{'version'} && $strings->{'version'} == CACHE_VERSION &&
 			defined $strings->{'lang'} && $strings->{'lang'} eq $currentLang ) {
 
 			$defaultStrings = $strings->{$currentLang};
@@ -140,6 +142,11 @@ sub loadStrings {
 
 		# check sum of mtimes matches that stored in stringcache
 		if ($cacheOK && $strings->{'mtimesum'} && $strings->{'mtimesum'} != $sum) {
+			$cacheOK = 0;
+		}
+		
+		# force cache renewal on server updates
+		if ($cacheOK && ( !$strings->{'serverRevision'} || $strings->{'serverRevision'} !~ /^$::REVISION$/ )) {
 			$cacheOK = 0;
 		}
 
@@ -162,10 +169,11 @@ sub loadStrings {
 	# otherwise reparse all string files
 	unless ($args->{'dontClear'}) {
 		$strings = {
-			'version' => $stringCacheVersion,
-			'mtimesum'=> $sum,
-			'lang'    => $currentLang,
-			'files'   => $files,
+			'version'        => CACHE_VERSION,
+			'mtimesum'       => $sum,
+			'lang'           => $currentLang,
+			'files'          => $files,
+			'serverRevision' => $::REVISION,
 		};
 	}
 
@@ -389,29 +397,41 @@ strings for apps.
 
 =cut
 
+# Cache extra strings to avoid reading from disk
+my $extraStringsCache = {};
+
 sub storeExtraStrings {
 	my $extra = shift;
 	
 	# Cache strings to disk so they work on restart
 	my $extraCache = catdir( $prefs->get('cachedir'), 'extrastrings.json' );
 	
-	my $cache = {};
-	if ( -e $extraCache ) {
-		$cache = eval { from_json( read_file($extraCache) ) };
+	if ( !scalar( keys %{$extraStringsCache} ) && -e $extraCache ) {
+		main::DEBUGLOG && $log->is_debug && $log->debug('Reading extrastrings.json file');
+		
+		$extraStringsCache = eval { from_json( read_file($extraCache) ) };
 		if ( $@ ) {
-			$cache = {};
+			$extraStringsCache = {};
 		}
 	}
+	
+	my $in = complex_to_query($extraStringsCache);
 	
 	# Turn into a hash
 	$extra = { map { $_->{token} => $_->{strings} } @{$extra} };
 
 	for my $string ( keys %{$extra} ) {
 		storeString( $string, $extra->{$string} );
-		$cache->{$string} = $extra->{$string};
+		$extraStringsCache->{$string} = $extra->{$string};
 	}
 	
-	eval { write_file( $extraCache, to_json($cache) ) };
+	# Only update the file on disk if the data has changed
+	my $out = complex_to_query($extraStringsCache);
+	
+	if ( $out ne $in ) {
+		main::DEBUGLOG && $log->is_debug && $log->debug('Writing updated extrastrings.json file');
+		eval { write_file( $extraCache, to_json($extraStringsCache) ) };
+	}
 }
 
 =head2 loadExtraStrings
@@ -484,6 +504,9 @@ Return localised string for token $token, or token itself.
 sub getString {
 	my $token = shift;
 
+	# we don't have lowercase tokens
+	return $token if $token =~ /(?:[a-z]|\s)/;
+
 	my $string = $defaultStrings->{uc($token)};
 	$string = $token if ($token && !defined $string);
 
@@ -549,6 +572,7 @@ sub setLanguage {
 		$currentLang = $lang;
 
 		loadStrings({'ignoreCache' => 1});
+		loadExtraStrings();
 		setLocale();
 
 		for my $client ( Slim::Player::Client::clients() ) {

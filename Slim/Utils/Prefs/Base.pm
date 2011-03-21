@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Base;
 
-# $Id: Base.pm 28819 2009-10-12 17:27:13Z michael $
+# $Id: Base.pm 29804 2010-01-14 14:46:05Z andy $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -360,15 +360,23 @@ sub bulkSet { if ( main::SLIM_SERVICE ) { # optimize out for SC
 			
 			if ( ref $new eq 'ARRAY' ) {
 				for ( @{$new} ) {
-					if ( s/^json:// ) {
+					if ( $_ && s/^json:// ) {
+						utf8::encode($_);
 						$_ = eval { from_json($_) };
-						$_ = '' if $@;
+						if ( $@ ) {
+							$log->error( "Bad JSON pref $pref: $@" );
+							$_ = '';
+						}
 					}
 				}
 			}
 			elsif ( $new =~ s/^json:// ) {
+				utf8::encode($new);
 				$new = eval { from_json($new) };
-				$new = '' if $@;
+				if ( $@ ) {
+					$log->error( "Bad JSON pref $pref: $@" );
+					$new = '';
+				}
 			}
 			
 			# If old pref was an array but new is not, force it to stay an array

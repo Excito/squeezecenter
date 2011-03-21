@@ -52,7 +52,6 @@ use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Utils::OSDetect;
 use Slim::Utils::Prefs;
-use Slim::Player::Client;
 
 {
 	if (main::ISWINDOWS) {
@@ -158,7 +157,7 @@ sub launchScan {
 	my $scannerLogOptions = Slim::Utils::Log->getScannerLogOptions();
 	 
 	foreach (keys %$scannerLogOptions) {
-		$debugArgs .= $_ . '=' . $scannerLogOptions->{$_} . ',';
+		$debugArgs .= $_ . '=' . $scannerLogOptions->{$_} . ',' if defined $scannerLogOptions->{$_};
 	}
 	
 	if ( $main::debug ) {

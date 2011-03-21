@@ -1,6 +1,6 @@
 package Slim::Menu::TrackInfo;
 
-# $Id: TrackInfo.pm 28376 2009-08-31 07:15:54Z michael $
+# $Id: TrackInfo.pm 30365 2010-03-11 16:53:24Z bklaas $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -43,7 +43,7 @@ sub init {
 	
 	Slim::Control::Request::addDispatch(
 		[ 'trackinfo', 'playlist', '_method' ],
-		[ 1, 1, 1, \&cliQuery ]
+		[ 1, 1, 1, \&cliPlaylistCmd ]
 	);
 }
 
@@ -206,6 +206,11 @@ sub registerDefaultInfoProviders {
 		func   => \&infoTagVersion,
 	) );
 	
+	$class->registerInfoProvider( tagdump => (
+		parent => 'moreinfo',
+		after  => 'tagversion',
+		func   => \&infoTagDump,
+	) );	
 }
 
 sub menu {
@@ -409,8 +414,7 @@ sub infoContributors {
 						},
 					},
 				};
-				( $item->{'jive'}{'actions'}{'play-hold'}, $item->{'jive'}{'playHoldAction'} ) = 
-					_mixerItemHandler(obj => $contributor, 'obj_param' => 'artist_id' );
+				$item->{'jive'}{'actions'}{'play-hold'} = _mixerItemHandler(obj => $contributor, 'obj_param' => 'artist_id' );
 				push @{$items}, $item;
 			}
 		}
@@ -448,6 +452,7 @@ sub playTrack {
 	my $play_string = cstring($client, 'PLAY');
 
 	my $actions;
+
 	# "Play Song" in current playlist context is 'jump'
 	if ( $tags->{menuContext} eq 'playlist' ) {
 		$actions = {
@@ -499,6 +504,7 @@ sub playTrack {
 	}
 
 	$jive->{actions} = $actions;
+	$jive->{style} = 'itemplay';
 
 	push @{$items}, {
 		type => 'text',
@@ -516,7 +522,8 @@ sub addTrackNext {
 	if ( $tags->{menuContext} eq 'playlist' ) {
 		$cmd = 'playlistnext';
 	}
-	addTrack( $client, $url, $track, $remoteMeta, $tags, $string, $cmd );
+	
+	return addTrack( $client, $url, $track, $remoteMeta, $tags, $string, $cmd );
 }
 
 sub addTrackEnd {
@@ -530,7 +537,8 @@ sub addTrackEnd {
 		$string = cstring($client, 'REMOVE_FROM_PLAYLIST');
 		$cmd = 'delete';
 	}
-	addTrack( $client, $url, $track, $remoteMeta, $tags, $string, $cmd );
+	
+	return addTrack( $client, $url, $track, $remoteMeta, $tags, $string, $cmd );
 }
 
 sub addTrack {
@@ -699,8 +707,7 @@ sub infoAlbum {
 			},
 		};
 
-		( $item->{'jive'}{'actions'}{'play-hold'}, $item->{'jive'}{'playHoldAction'} ) = 
-			_mixerItemHandler(obj => $album, 'obj_param' => 'album_id' );
+		$item->{'jive'}{'actions'}{'play-hold'} = _mixerItemHandler(obj => $album, 'obj_param' => 'album_id' );
 
 	}
 	
@@ -778,8 +785,7 @@ sub infoGenres {
 				}, 
 			},
 		};
-		( $item->{'jive'}{'actions'}{'play-hold'}, $item->{'jive'}{'playHoldAction'} ) = 
-			_mixerItemHandler(obj => $genre, 'obj_param' => 'genre_id' );
+		$item->{'jive'}{'actions'}{'play-hold'} = _mixerItemHandler(obj => $genre, 'obj_param' => 'genre_id' );
 		push @{$items}, $item;
 	}
 	
@@ -1008,6 +1014,16 @@ sub infoContentType {
 			}
 		}
 		
+		if ($ct eq 'unk' && $track->remote) {
+			my $handler = Slim::Player::ProtocolHandlers->handlerForURL( $url );
+			if ( $handler && $handler->can('getMetadataFor') ) {
+				my $meta = $handler->getMetadataFor( $client, $url );
+				if ($meta && $meta->{type}) {
+					$ct = $meta->{type};
+				}
+			}
+		}
+
 		$item = {
 			type => 'text',
 			name => cstring($client, 'TYPE') . cstring($client, 'COLON') . ' ' . cstring($client,  uc($ct) ),
@@ -1257,6 +1273,95 @@ sub infoTagVersion {
 	return $item;
 }
 
+sub infoTagDump {
+	my ( $client, $url, $track ) = @_;
+	
+	my $item;
+	
+	if ( $track->audio ) {
+		$item = {
+			name        => cstring($client, 'VIEW_TAGS'),
+			url         => \&tagDump,
+			passthrough => [ $track->path ],
+		};
+	}
+	
+	return $item;
+}
+
+sub tagDump {
+	my ( $client, $callback, $path ) = @_;
+	
+	my $menu = [];
+	
+	require Audio::Scan;
+	my $s = eval { Audio::Scan->scan_tags($path) };
+	
+	if ( $@ ) {
+		$menu = {
+			type => 'text',
+			name => $@,
+		};
+	}
+	else {	
+		my $tags = $s->{tags};
+		
+		# Recursive handler for array-based tags
+		my $array_tag;
+		$array_tag = sub {
+			my $tag = shift;
+			
+			my @array;
+			
+			for my $x ( @{$tag} ) {
+				if ( ref $x eq 'ARRAY' ) {
+					my $a = $array_tag->($x);
+					$x = '[ ' . join( ', ', @{$a} ) . ' ]';
+				}
+				
+				if ( length($x) > 256 ) {
+					$x = '(' . length($x) . ' ' . cstring($client, 'BYTES') . ')';
+				}
+				
+				push @array, $x;
+			}
+			
+			return \@array;
+		};
+	
+		for my $k ( sort keys %{$tags} ) {
+			my $v = $tags->{$k};
+		
+			if ( ref $v eq 'ARRAY' ) {
+				my $a = $array_tag->($v);
+							
+				push @{$menu}, {
+					type => 'text',
+					name => $k . ': [ ' . join( ', ', @{$a} ) . ' ]',
+				};
+			}
+			else {
+				if ( length($v) > 256 ) {
+					$v = '(' . length($v) . ' ' . cstring($client, 'BYTES') . ')';
+				}
+			
+				push @{$menu}, {
+					type => 'text',
+					name => $k . ': ' . $v,
+				};
+			}
+		}
+	
+		if ( !scalar @{$menu} ) {
+			$menu = {
+				type => 'text',
+				name => cstring($client, 'NO_TAGS_FOUND'),
+			};
+		}
+	}
+	
+	$callback->( $menu );
+}
 
 sub _findDBCriteria {
 	my $db = shift;
@@ -1287,18 +1392,16 @@ sub _mixerItemHandler {
 	my $obj        = $args{'obj'};
 	my $obj_param  = $args{'obj_param'};
 
-	my $playHoldAction = undef;
 	my ($Imports, $mixers) = _mixers();
 	
 	if (scalar(@$mixers) == 1 && blessed($obj)) {
 		my $mixer = $mixers->[0];
 		if ($mixer->can('mixable') && $mixer->mixable($obj)) {
-			$playHoldAction = 'go';
 			# pull in cliBase with Storable::dclone so we can manipulate without affecting the object itself
 			my $command = Storable::dclone( $Imports->{$mixer}->{cliBase} );
 			$command->{'params'}{'menu'} = 1;
 			$command->{'params'}{$obj_param} = $obj->id;
-			return $command, $playHoldAction;
+			return $command;
 		} else {
 			return (
 				{
@@ -1307,8 +1410,7 @@ sub _mixerItemHandler {
 					params => {
 						contextToken => $Imports->{$mixer}->{contextToken},
 					},
-				},
-				$playHoldAction,
+				}
 			);
 			
 		}
@@ -1317,15 +1419,16 @@ sub _mixerItemHandler {
 			player => 0,
 			cmd    => ['contextmenu'],
 			params => {
-				menu => '1',
+				menu => 'track',
 				$obj_param => $obj->id,
 			},
-			$playHoldAction,
 		};
 	} else {
-		return undef, undef;
+		return undef;
 	}
 }
+
+my $cachedFeed;
 
 sub cliQuery {
 	my $request = shift;
@@ -1365,6 +1468,10 @@ sub cliQuery {
 		if ( $handler && $handler->can('trackInfoURL') ) {
 			$feed = $handler->trackInfoURL( $client, $url );
 		}
+		elsif ( $url =~ m{^http://opml\.radiotime\.com} ) {
+			# Special case for RadioTime's trackinfo menu
+			$feed = Slim::Plugin::RadioTime::Plugin->trackInfoURL( $client, $url );
+		}
 	}
 	
 	if ( !$feed ) {
@@ -1374,11 +1481,27 @@ sub cliQuery {
 		}
 		else {
 			my $track = Slim::Schema->find( Track => $trackId );
-			$feed     = Slim::Menu::TrackInfo->menu( $client, $track->url, $track, $tags );
+			$feed     = Slim::Menu::TrackInfo->menu( $client, $track->url, $track, $tags ) if $track;
 		}
 	}
 	
+	$cachedFeed = $feed if $feed;
+	
 	Slim::Control::XMLBrowser::cliQuery( 'trackinfo', $feed, $request );
+}
+
+sub cliPlaylistCmd {
+	my $request = shift;
+	
+	my $client  = $request->client;
+	my $method  = $request->getParam('_method');
+
+	unless ($client && $method && $cachedFeed) {
+		$request->setStatusBadParams();
+		return;
+	}
+	
+	return 	Slim::Control::XMLBrowser::cliQuery( 'trackinfo', $cachedFeed, $request );
 }
 
 1;

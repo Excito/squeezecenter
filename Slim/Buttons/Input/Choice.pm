@@ -1,6 +1,6 @@
 package Slim::Buttons::Input::Choice;
 
-# $Id: Choice.pm 28759 2009-10-02 19:20:44Z andy $
+# $Id: Choice.pm 28762 2009-10-03 02:21:16Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

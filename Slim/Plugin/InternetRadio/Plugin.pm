@@ -1,15 +1,17 @@
 package Slim::Plugin::InternetRadio::Plugin;
 
-# $Id: Plugin.pm 28803 2009-10-09 09:59:38Z michael $
+# $Id: Plugin.pm 30026 2010-02-05 03:34:35Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
 
+use Digest::MD5 ();
 use File::Basename qw(basename);
 use File::Path qw(mkpath);
 use File::Spec::Functions qw(catdir catfile);
 use HTTP::Date;
 use JSON::XS::VersionOneAndTwo;
+use Tie::IxHash;
 use URI::Escape qw(uri_escape_utf8);
 
 use Slim::Networking::SimpleAsyncHTTP;
@@ -337,15 +339,48 @@ sub cacheIconError {
 sub radiotimeFeed {
 	my ( $class, $feed, $client ) = @_;
 
+	# In order of preference
+	tie my %rtFormats, 'Tie::IxHash', (
+		aac     => 'aac',
+		ogg     => 'ogg',
+		mp3     => 'mp3',
+		wmpro   => 'wmap',
+		wma     => 'wma',
+		wmvoice => 'wma',
+		# Real Player is supported through the AlienBBC plugin
+		real    => 'rtsp',
+	);
+	
+	my %playerFormats = map { $_ => 1 } $client->formats;
+
 	# RadioTime's listing defaults to giving us mp3 and wma streams only,
 	# but we support a few more
-	$feed .= ( $feed =~ /\?/ ) ? '&' : '?';
-	$feed .= 'formats=aac,mp3,wma,wmpro,wmvoice,wmvideo,ogg';
+	my @formats = grep {
 	
-	# If AlienBBC is installed we can ask for Real streams too.
-	if ( exists $INC{'Plugins/Alien/Plugin.pm'} ) {
-		$feed .= ',real';
-	}
+		# format played natively on player?
+		my $canPlay = $playerFormats{$rtFormats{$_}};
+			
+		if ( !$canPlay && main::TRANSCODING ) {
+
+			foreach my $supported (keys %playerFormats) {
+				
+				if ( Slim::Player::TranscodingHelper::checkBin(sprintf('%s-%s-*-*', $rtFormats{$_}, $supported)) ) {
+					$canPlay = 1;
+					last;
+				}
+
+			}
+		}
+
+		$canPlay;
+
+	} keys %rtFormats;
+
+	$feed .= ( $feed =~ /\?/ ) ? '&' : '?';
+	$feed .= 'formats=' . join(',', @formats);
+	
+	# Bug 15568, pass obfuscated serial to RadioTime
+	$feed .= '&serial=' . Digest::MD5::md5_hex( $client->uuid || $client->id );
 	
 	return $feed;
 }

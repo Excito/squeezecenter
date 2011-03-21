@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Security;
 
-# $Id: Security.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Security.pm 29495 2009-11-27 10:21:34Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -31,7 +31,12 @@ sub handler {
 	my ($class, $client, $paramRef, $pageSetup) = @_;
 
 	# disable authorization if no username is set
-	$paramRef->{'authorize'} = 0 unless $paramRef->{'username'};
+	if ($paramRef->{'saveSettings'} && $paramRef->{'pref_authorize'} && !$paramRef->{'pref_username'}) {
+		
+		$paramRef->{'warning'} .= Slim::Utils::Strings::string('SETUP_MISSING_USERNAME') . ' ';
+		$paramRef->{'pref_authorize'} = 0;
+		
+	}
 
 	# pre-process password to avoid saving clear text
 	if ($paramRef->{'saveSettings'} && $paramRef->{'pref_password'}) {
@@ -40,7 +45,7 @@ sub handler {
 
 		if ($val ne $paramRef->{'pref_password_repeat'}) {
 
-			$paramRef->{'warning'} .= Slim::Utils::Strings::string('SETUP_PASSWORD_MISMATCH');
+			$paramRef->{'warning'} .= Slim::Utils::Strings::string('SETUP_PASSWORD_MISMATCH') . ' ';
 			$paramRef->{'pref_authorize'} = 0;
 
 		}

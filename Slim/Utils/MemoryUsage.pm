@@ -1,6 +1,6 @@
 package Slim::Utils::MemoryUsage;
 
-# $Id: MemoryUsage.pm 27975 2009-08-01 03:28:30Z andy $ 
+# $Id: MemoryUsage.pm 28920 2009-10-19 15:33:57Z andy $ 
 #
 # This module is a merging of B::TerseSize and Apache::Status 
 # put together to work with Squeezebox Server by Dan Sully
@@ -59,23 +59,34 @@ my %b_terse_exp = ('slow' => 'syntax', 'exec' => 'execution');
 my ($out, $err, $oldout, $olderr);
 
 sub init {
-	Slim::Web::Pages->addPageFunction(qr/^memoryusage\.html.*/, sub {
-		my ($client, $params) = @_;
+	if ( main::SCANNER ) {
+		$SIG{USR2} = sub {
+			my $htmlref = Slim::Utils::MemoryUsage->status_memory_usage();
+			open my $fh, '>', 'scanner-memory.html';
+			print $fh $$htmlref;
+			close $fh;
+			system("open scanner-memory.html") if main::ISMAC;
+		};
+	}
+	else {			
+		Slim::Web::Pages->addPageFunction(qr/^memoryusage\.html.*/, sub {
+			my ($client, $params) = @_;
 	
-		my $item    = $params->{'item'};
-		my $type    = $params->{'type'};
-		my $command = $params->{'command'};
+			my $item    = $params->{'item'};
+			my $type    = $params->{'type'};
+			my $command = $params->{'command'};
 	
-		unless ($item && $command) {
+			unless ($item && $command) {
 	
-			return Slim::Utils::MemoryUsage->status_memory_usage();
-		}
+				return Slim::Utils::MemoryUsage->status_memory_usage();
+			}
 	
-		if (defined $item && defined $command && Slim::Utils::MemoryUsage->can($command)) {
+			if (defined $item && defined $command && Slim::Utils::MemoryUsage->can($command)) {
 	
-			return Slim::Utils::MemoryUsage->$command($item, $type);
-		}
-	});
+				return Slim::Utils::MemoryUsage->$command($item, $type);
+			}
+		});
+	}
 }
 		
 

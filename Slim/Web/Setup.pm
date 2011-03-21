@@ -1,6 +1,6 @@
 package Slim::Web::Setup;
 
-# $Id: Setup.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Setup.pm 30040 2010-02-05 19:58:44Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -11,9 +11,6 @@ use strict;
 use Slim::Utils::Log;
 
 sub initSetup {
-
-	return if $::noweb;
-
 	my @classes = ('Slim::Web::Settings');
 	
 	push @classes, map { 

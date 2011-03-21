@@ -151,7 +151,7 @@ sub _addInfo {
 	my $plugins = Slim::Utils::PluginManager->allPlugins;
 	my $states  = preferences('plugin.state');
 
-	my $seen = {};
+	my $hide = {};
 	my $current = {};
 
 	# create entries for built in plugins and those already installed
@@ -171,6 +171,7 @@ sub _addInfo {
 			error   => Slim::Utils::PluginManager->getErrorString($plugin),
 			creator => $entry->{'creator'},
 			email   => $entry->{'email'},
+			homepage=> $entry->{'homepageURL'},
 			version => $entry->{'version'},
 			settings=> Slim::Utils::PluginManager->isEnabled($entry->{'module'}) ? $entry->{'optionsURL'} : undef,
 			manual  => $entry->{'basedir'} !~ /InstalledPlugins/ ? 1 : 0,
@@ -190,7 +191,7 @@ sub _addInfo {
 			push @inactive, $entry;
 		}
 
-		$seen->{$plugin} = 1;
+		$hide->{$plugin} = 1;
 	}
 
 	my @results = sort { $a->{'weight'} !=  $b->{'weight'} ?
@@ -213,9 +214,10 @@ sub _addInfo {
 
 		if ($entry->{'action'} eq 'install' && $entry->{'url'} && $entry->{'sha'}) {
 
-			if (!defined $current->{$plugin} || $prefs->get('auto') || ($params->{'saveSettings'} && $params->{"update:$plugin"}) ) {
+			if ($prefs->get('auto') ||
+				($params->{'saveSettings'} && (exists $params->{"update:$plugin"} || exists $params->{"install:$plugin"})) ) {
 
-				# install now if not installed, in auto mode or update has been explicitly selected
+				# install now if in auto mode or install or update has been explicitly selected
 				main::INFOLOG && $log->info("installing $plugin from $entry->{url}");
 
 				Slim::Utils::PluginDownloader->install({ name => $plugin, url => $entry->{'url'}, sha => $entry->{'sha'} });
@@ -225,6 +227,8 @@ sub _addInfo {
 				# add to update list
 				push @updates, $entry->{'info'};
 			}
+
+			$hide->{$plugin} = 1;
 							 
 		} elsif ($entry->{'action'} eq 'uninstall') {
 
@@ -234,18 +238,28 @@ sub _addInfo {
 		}
 	}
 
-	Slim::Utils::PluginManager->message(undef);
+	# prune out duplicate entries, favour favour higher version numbers
+	
+	# pass 1 - find the higher version numbers
+	my $max = {};
 
-	# prune out duplicate entries, favour repos later in the list so that entries get pruned from the 3rd party and other repos
+	for my $repo (@results) {
+		for my $entry (@{$repo->{'entries'}}) {
+			my $name = $entry->{'name'};
+			if (!defined $max->{$name} || Slim::Utils::Versions->compareVersions($entry->{'version'}, $max->{$name}) > 0) {
+				$max->{$name} = $entry->{'version'};
+			}
+		}
+	}
 
-	for my $repo (reverse @results) {
+	# pass 2 - prune out lower versions or entries which are hidden as they are shown in enabled plugins
+	for my $repo (@results) {
 		my $i = 0;
 		while (my $entry = $repo->{'entries'}->[$i]) {
-			if ($seen->{$entry->{'name'}}) {
+			if ($hide->{$entry->{'name'}} || $max->{$entry->{'name'}} ne $entry->{'version'}) {
 				splice @{$repo->{'entries'}}, $i, 1;
 				next;
 			}
-			$seen->{$entry->{'name'}} = 1;
 			$i++;
 		}
 	}
@@ -264,6 +278,8 @@ sub _addInfo {
 	my $needsRestart = Slim::Utils::PluginManager->needsRestart || Slim::Utils::PluginDownloader->downloading;
 
 	$params->{'warning'} = $needsRestart ? Slim::Utils::Strings::string("PLUGIN_EXTENSIONS_RESTART_MSG") : '';
+
+	Slim::Utils::PluginManager->message($needsRestart);
 
 	# show a link/button to restart SC if this is supported by this platform
 	if ($needsRestart) {

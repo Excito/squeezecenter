@@ -55,7 +55,7 @@ sub init {
 		sub {
 			Slim::Utils::Timers::setTimer(
 				undef,
-				time() + 5,
+				time() + 2,
 				\&Slim::Networking::Discovery::Server::fetch_servers,
 			);			
 		},
@@ -140,7 +140,11 @@ sub _players_error {
 		return;
 	}
 
-	$log->error( "Unable to get players: $error" );
+	my $proxy = Slim::Utils::Prefs::preferences('server')->get('webproxy'); 
+
+	$log->error( "Unable to get players: $error" 
+		. ($proxy ? sprintf(" - please check your proxy configuration (%s)", $proxy) : '')
+	); 
 }
 
 

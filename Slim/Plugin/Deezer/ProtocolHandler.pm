@@ -1,6 +1,6 @@
 package Slim::Plugin::Deezer::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: ProtocolHandler.pm 28991 2009-10-23 14:46:48Z ayoung $
 
 use strict;
 use base qw(Slim::Player::Protocols::HTTP);
@@ -536,7 +536,7 @@ sub getMetadataFor {
 		# Go fetch metadata for all tracks on the playlist without metadata
 		my @need;
 		
-		for my $track ( @{ $client->playlist } ) {
+		for my $track ( @{ Slim::Player::Playlist::playList($client) } ) {
 			my $trackURL = blessed($track) ? $track->url : $track;
 			if ( $trackURL =~ m{deezer://(.+)\.mp3} ) {
 				my $id = $1;

@@ -14,8 +14,7 @@ sub initDetails {
 	$class->{osDetails} = $class->SUPER::initDetails();
 
 	# package specific addition to @INC to cater for plugin locations
-	$class->{osDetails}->{isSqueezeOS} = 1 ;
-	$::noweb = 1;
+	$class->{osDetails}->{isSqueezeOS} = 1;
 
 	return $class->{osDetails};
 }
@@ -26,7 +25,8 @@ sub initPrefs {
 	
 	require Slim::Utils::Prefs;
 	
-	$prefs->{checkVersion} = 0;
+	$prefs->{checkVersion}      = 0;
+	$prefs->{maxPlaylistLength} = 100;
 	
 	_checkMediaAtStartup();
 	Slim::Utils::Prefs::preferences('server')->setChange(\&_onAudiodirChange, 'audiodir');

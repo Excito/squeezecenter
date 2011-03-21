@@ -1,6 +1,6 @@
 package Slim::Formats;
 
-# $Id: Formats.pm 28878 2009-10-15 22:10:25Z andy $
+# $Id: Formats.pm 29372 2009-11-20 15:01:28Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -59,6 +59,7 @@ sub init {
 		'alc' => 'Slim::Formats::Movie',
 		'aac' => 'Slim::Formats::Movie',
 		'mp4' => 'Slim::Formats::Movie',
+		'sls' => 'Slim::Formats::Movie',
 		'shn' => 'Slim::Formats::Shorten',
 		'mpc' => 'Slim::Formats::Musepack',
 		'ape' => 'Slim::Formats::APE',
@@ -74,9 +75,6 @@ sub init {
 		'wpl' => 'Slim::Formats::Playlists::WPL',
 		'xml' => 'Slim::Formats::Playlists::XML',
 		'xpf' => 'Slim::Formats::Playlists::XSPF',
-
-		# Remote types
-		'http' => 'Slim::Formats::HTTP',
 	);
 
 	$init = 1;
@@ -271,11 +269,18 @@ sub readTags {
 			
 			# Bug 14587, sanity check all MusicBrainz ID tags to ensure it is a UUID and nothing more
 			if ( $tag =~ /^MUSICBRAINZ.*ID$/ ) {
-				if ( $tags->{$tag} =~ /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i ) {
+
+				# DiscID has a different format:
+				# http://wiki.musicbrainz.org/Disc_ID_Calculation
+				if ( $tag eq 'MUSICBRAINZ_DISCID' && $tags->{$tag} =~ /^[0-9a-z_\.-]{28}$/i ) {
+					$tags->{$tag} = lc($1);
+				} elsif ( $tags->{$tag} =~ /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i ) {
 					$tags->{$tag} = lc($1);
 				}
 				else {
-					$log->error("Invalid MusicBrainz tag found in $file: $tag -> $value");
+					if ( main::DEBUGLOG && $log->is_debug ) {
+						$log->debug("Invalid MusicBrainz tag found in $file: $tag -> $value");
+					}
 					delete $tags->{$tag};
 					next;
 				}

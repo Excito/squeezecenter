@@ -19,7 +19,7 @@ use Slim::Utils::OSDetect;
 use Slim::Utils::Strings qw(cstring);
 use Slim::Utils::Prefs;
 
-if (!$::noweb) {
+if ( main::WEBUI ) {
 	require Slim::Plugin::MusicMagic::Settings;
 	require Slim::Plugin::MusicMagic::ClientSettings;
 }
@@ -165,7 +165,7 @@ our %validMixTypes = (
 	'album'    => 'album',
 	'age'      => 'album',
 	'artist'   => 'artist',
-	'genre'    => 'filter',
+	'genre'    => 'genre',
 	'mood'     => 'mood',
 	'playlist' => 'playlist',
 	'year'     => 'filter=?year',
@@ -244,7 +244,7 @@ sub initPlugin {
 	
 	Slim::Plugin::MusicMagic::Common::checkDefaults();
 
-	if (!$::noweb) {	
+	if ( main::WEBUI ) {	
 		Slim::Plugin::MusicMagic::Settings->new;
 	}
 
@@ -315,7 +315,7 @@ sub initPlugin {
 		# initialize the filter list
 		Slim::Plugin::MusicMagic::Common->grabFilters();
 		
-		if (!$::noweb) {	
+		if ( main::WEBUI ) {	
 			Slim::Plugin::MusicMagic::ClientSettings->new;
 		}
 
@@ -357,6 +357,12 @@ sub initPlugin {
 			func     => \&artistInfoHandler,
 		) );
 
+		# Genre Info handler
+		Slim::Menu::GenreInfo->registerInfoProvider( musicmagic => (
+			below    => 'addgenre',
+			func     => \&genreInfoHandler,
+		) );
+
 
 		if (scalar @{grabMoods()}) {
 
@@ -369,7 +375,7 @@ sub initPlugin {
 			Slim::Buttons::Home::addMenuOption('MUSICMAGIC_MOODS', $params);
 			Slim::Buttons::Home::addSubMenu('BROWSE_MUSIC', 'MUSICMAGIC_MOODS', $params);
 
-			if (!$::noweb) {
+			if ( main::WEBUI ) {
 				Slim::Web::Pages->addPageLinks("browse", {
 					'MUSICMAGIC_MOODS' => "plugins/MusicMagic/musicmagic_moods.html"
 				});
@@ -393,7 +399,10 @@ sub initPlugin {
 						},
 					},
 				},
-				window         => { titleStyle => 'moods' },
+				window         => {
+					'icon-id'  => 'plugins/MusicMagic/html/images/icon.png',
+					titleStyle => 'moods'
+				},
 			}]);
 		}
 	}
@@ -403,7 +412,7 @@ sub initPlugin {
 	Slim::Buttons::Common::addMode('musicmagic_mix', \%mixFunctions, \&setMixMode);
 	Slim::Hardware::IR::addModeDefaultMapping('musicmagic_mix',\%mixMap);
 
-	if (!$::noweb) {
+	if ( main::WEBUI ) {
 		Slim::Web::Pages->addPageFunction("musicmagic_mix.html" => \&musicmagic_mix);
 		Slim::Web::Pages->addPageFunction("musicmagic_moods.html" => \&musicmagic_moods);
 	}
@@ -804,7 +813,10 @@ sub mixerlink {
 		$form->{'mmmixable_not_descend'} = 1;
 	}
 
-	Slim::Web::HTTP::CSRF->protectURI('plugins/MusicMagic/.*\.html');
+	if ( main::WEBUI ) {
+		Slim::Web::HTTP::CSRF->protectURI('plugins/MusicMagic/.*\.html');
+	}
+	
 	# only add link if enabled and usable
 	if (canUseMusicMagic() && $prefs->get('musicip')) {
 
@@ -933,10 +945,8 @@ sub getMix {
 		$id = Slim::Utils::Unicode::utf8decode_locale($id);
 	}
 
-	my $mixArgs = "$validMixTypes{$for}=$id";
-
 	# url encode the request, but not the argstring
-	$mixArgs = Slim::Plugin::MusicMagic::Common::escape($mixArgs);
+	my $mixArgs = $validMixTypes{$for} . '=' . Slim::Plugin::MusicMagic::Common::escape($id);
 	
 	main::DEBUGLOG && $log->debug("Request http://localhost:$MMSport/api/mix?$mixArgs\&$argString");
 
@@ -1403,12 +1413,19 @@ sub artistInfoHandler {
 	return $return;
 }
 
+sub genreInfoHandler {
+	my $return = _objectInfoHandler( @_, 'genre' );
+	return $return;
+}
+
 sub _objectInfoHandler {
 	
 	my ( $client, $url, $obj, $remoteMeta, $tags, $objectType ) = @_;
 	$tags ||= {};
 
 	my $mixable = $obj->musicmagic_mixable;
+
+	my $playerMenu = {};
 
 	my $special;
 	if ($objectType eq 'album') {
@@ -1421,11 +1438,21 @@ sub _objectInfoHandler {
 		$special->{'modeParam'}   = 'artist';
 		$special->{'urlKey'}      = 'artist';
 
+	} elsif ($objectType eq 'genre') {
+		$special->{'actionParam'} = 'genre_id';
+		$special->{'modeParam'}   = 'genre';
+		$special->{'urlKey'}      = 'genre';
+
 	} else {
 		$special->{'actionParam'} = 'track_id';
 		$special->{'modeParam'}   = 'track';
 		$special->{'urlKey'}      = 'song';
-
+		$playerMenu = {
+			mode => 'musicmagic_mix',
+			modeParams => {
+				'track' => $obj,
+			},
+		};
 	}
 
 	my $jive = {};
@@ -1466,12 +1493,7 @@ sub _objectInfoHandler {
 			name      => cstring($client, 'MUSICIP_CREATEMIX'),
 			favorites => 0,
 
-			player => {
-				mode => 'musicmagic_mix',
-				modeParams => {
-					$special->{modeParam} => $obj,
-				},
-			},
+			player => $playerMenu,
 
 			web  => {
 				group => 'mixers',

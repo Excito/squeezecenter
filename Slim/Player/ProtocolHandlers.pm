@@ -1,6 +1,6 @@
 package Slim::Player::ProtocolHandlers;
 
-# $Id: ProtocolHandlers.pm 28761 2009-10-03 02:09:14Z andy $
+# $Id: ProtocolHandlers.pm 30006 2010-02-04 13:38:29Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -23,6 +23,7 @@ my %protocolHandlers = (
 	http     => qw(Slim::Player::Protocols::HTTP),
 	icy      => qw(Slim::Player::Protocols::HTTP),
 	mms      => qw(Slim::Player::Protocols::MMS),
+	spdr     => qw(Slim::Player::Protocols::SqueezePlayDirect),
 	rtsp     => 1,
 	playlist => 0,
 	db       => 1,
@@ -73,6 +74,13 @@ sub registerIconHandler {
         my ($class, $regex, $ref) = @_;
 
         $iconHandlers{$regex} = $ref;
+}
+
+
+sub handlerForProtocol {
+	my ($class, $protocol) = @_;
+	
+	return $protocolHandlers{$protocol};
 }
 
 sub handlerForURL {

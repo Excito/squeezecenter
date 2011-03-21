@@ -1,6 +1,6 @@
 package Slim::Web::Pages::Home;
 
-# $Id: Home.pm 28615 2009-09-23 15:15:03Z andy $
+# $Id: Home.pm 29765 2010-01-11 12:45:57Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -33,7 +33,7 @@ sub init {
 
 	$class->addPageLinks("help", { 'HELP_REMOTE' => "html/docs/remote.html"});
 	$class->addPageLinks("help", { 'REMOTE_STREAMING' => "html/docs/remotestreaming.html"});
-	$class->addPageLinks("help", { 'FAQ' => "http://mysqueezebox.com/support"},1);
+#	$class->addPageLinks("help", { 'FAQ' => "http://mysqueezebox.com/support"},1);
 	$class->addPageLinks("help", { 'TECHNICAL_INFORMATION' => "html/docs/index.html"});
 	$class->addPageLinks("help", { 'COMMUNITY_FORUM' =>	"http://forums.slimdevices.com"});
 
@@ -77,7 +77,7 @@ sub home {
 	$params->{'nosetup'}  = 1 if $::nosetup;
 	$params->{'noserver'} = 1 if $::noserver;
 	$params->{'newVersion'} = $::newVersion if $::newVersion;
-	$params->{'newVersion'} ||= Slim::Utils::PluginManager->message;
+	$params->{'newPlugins'} = Slim::Utils::PluginManager->message;
 
 	if (Slim::Schema::hasLibrary()) {
 		if (!exists $Slim::Web::Pages::additionalLinks{"browse"}) {
@@ -105,6 +105,8 @@ sub home {
 		$class->addPageLinks("help", {'SOFTSQUEEZE' => "html/softsqueeze/index.html"});
 		$class->addPageLinks("help", {'TECHNICAL_INFORMATION' => "html/docs/index.html"});
 	}
+	
+	$class->addPageLinks( 'my_apps', {'PLUGIN_APP_GALLERY_MODULE_NAME' => Slim::Networking::SqueezeNetwork->url( '/appgallery' )} );
 
 	if ($prefs->get('audiodir')) {
 
@@ -170,13 +172,23 @@ sub home {
 	for my $menu ( keys %Slim::Web::Pages::additionalLinks ) {
 		my @sorted = sort {
 			(
+				$menu !~ /(?:my_apps)/ &&
 				( $pluginWeights->{$a} || 0 ) <=>
 				( $pluginWeights->{$b} || 0 )
 			)
 			||
 			( 
+				$menu !~ /(?:my_apps)/ &&
 				( $prefs->get("rank-$b") || 0 ) <=> 
 				( $prefs->get("rank-$a") || 0 )
+			)
+			|| 
+			(
+				$menu =~ /(?:my_apps)/ && $a eq 'PLUGIN_APP_GALLERY_MODULE_NAME' && -1
+			)
+			|| 
+			(
+				$menu =~ /(?:my_apps)/ && $b eq 'PLUGIN_APP_GALLERY_MODULE_NAME'
 			)
 			|| 
 			(

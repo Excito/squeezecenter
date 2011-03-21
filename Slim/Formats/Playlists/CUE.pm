@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists::CUE;
 
-# $Id: CUE.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: CUE.pm 29503 2009-11-29 02:11:19Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 #
@@ -68,8 +68,8 @@ sub parse {
 		} elsif ($line =~ /^PERFORMER\s+\"(.*)\"/i) {
 
 			$cuesheet->{'ARTIST'} = $1;
-
-		} elsif ($line =~ /^(?:REM\s+)?(YEAR|GENRE|DISC|DISCC|COMMENT)\s+\"(.*)\"/i) {
+			
+		} elsif ($line =~ /^(?:REM\s+)?(YEAR|GENRE|DISC|DISCC|COMMENT|ARTISTSORT|ALBUMSORT|COMPILATION)\s+\"(.*)\"/i) {
 
 			$cuesheet->{uc($1)} = $2;
 
@@ -93,7 +93,7 @@ sub parse {
 
 		} elsif ($line =~ /^FILE\s+\"(.*)\"/i) {
 
-			$filename = $1;
+			$filename = $embedded || $1;
 			$filename = Slim::Utils::Misc::fixPath($filename, $baseDir);
 			
 			# Watch out for cue sheets with multiple FILE entries
@@ -103,7 +103,7 @@ sub parse {
 
 			# Some cue sheets may not have quotes. Allow that, but
 			# the filenames can't have any spaces in them.
-			$filename = $1;
+			$filename = $embedded || $1;
 			$filename = Slim::Utils::Misc::fixPath($filename, $baseDir);
 			
 			$filesSeen++;
@@ -201,7 +201,7 @@ sub parse {
 
 		# Also - check the original file for any information that may
 		# not be in the cue sheet. Bug 2668
-		for my $attribute (qw(ARTIST ALBUM YEAR GENRE REPLAYGAIN_ALBUM_GAIN REPLAYGAIN_ALBUM_PEAK)) {
+		for my $attribute (qw(ARTIST ALBUM YEAR GENRE REPLAYGAIN_ALBUM_GAIN REPLAYGAIN_ALBUM_PEAK ARTISTSORT ALBUMSORT COMPILATION)) {
 
 			if (!$cuesheet->{$attribute}) {
 
@@ -273,7 +273,7 @@ sub parse {
 		}
 
 		# Merge in file level attributes
-		for my $attribute (qw(ARTIST ALBUM YEAR GENRE COMMENT REPLAYGAIN_ALBUM_GAIN REPLAYGAIN_ALBUM_PEAK)) {
+		for my $attribute (qw(ARTIST ALBUM YEAR GENRE COMMENT REPLAYGAIN_ALBUM_GAIN REPLAYGAIN_ALBUM_PEAK ARTISTSORT ALBUMSORT COMPILATION)) {
 
 			if (!exists $track->{$attribute} && defined $cuesheet->{$attribute}) {
 
@@ -442,6 +442,7 @@ sub processAnchor {
 			
 			# We need to skip past the LAME header so the first chunk
 			# doesn't get truncated by the firmware thinking it needs to remove encoder padding
+			seek $fh, 0, 0;
 			my $s = Audio::Scan->scan_fh( mp3 => $fh, 0x01 );
 			if ( $s->{info}->{lame_encoder_version} ) {
 				my $next = Slim::Formats::MP3->findFrameBoundaries( $fh, $header + 1 );
@@ -464,6 +465,9 @@ sub processAnchor {
 	}
 	
 	$attributesHash->{'SECS'} = $duration;
+	
+	# Remove existing TITLESORT value as it won't match the title for the cue entry
+	delete $attributesHash->{TITLESORT};
 
 	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug( sprintf(

@@ -1,6 +1,6 @@
 package Slim::Formats::XML;
 
-# $Id: XML.pm 28690 2009-09-29 23:31:07Z andy $
+# $Id: XML.pm 30273 2010-02-26 19:17:14Z agrundman $
 
 # Copyright 2006-2009 Logitech
 
@@ -215,9 +215,19 @@ sub gotViaHTTP {
 
 		eval "use $parser";
 
-		$log->error("$@") if $@;
+		if ($@) {
 
-		$feed = eval { $parser->parse($http, $parserParams) };
+			$log->error("$@");
+
+		} else {
+
+			$feed = eval { $parser->parse($http, $parserParams) };
+
+			if ($@) {
+
+				$log->error("$@");
+			}
+		}
 
 		if ($feed->{'type'} && $feed->{'type'} eq 'redirect') {
 
@@ -272,7 +282,7 @@ sub gotViaHTTP {
 			$expires = $XML_CACHE_TIME;
 		}
 		
-		# Bug 14409, don't cache the RadioTime local menU on SN
+		# Bug 14409, don't cache the RadioTime local menu on SN
 		if ( main::SLIM_SERVICE ) {
 			if ( $http->url =~ /radiotime.*local/ ) {
 				$feed->{nocache} = 1;
@@ -530,10 +540,12 @@ sub parseAtom {
 # represent OPML in a simple data structure compatable with INPUT.Choice mode.
 sub parseOPML {
 	my $xml = shift;
+	
+	my $head = $xml->{head};
 
 	my $opml = {
 		'type'  => 'opml',
-		'title' => unescapeAndTrim($xml->{'head'}->{'title'}),
+		'title' => unescapeAndTrim($head->{'title'}),
 		'items' => _parseOPMLOutline($xml->{'body'}->{'outline'}),
 	};
 	
@@ -551,10 +563,16 @@ sub parseOPML {
 	}
 	
 	# Optional windowId to support nextWindow
-	if ( $xml->{head}->{windowId} ) {
-		$opml->{windowId} = $xml->{head}->{windowId};
+	if ( $head->{windowId} ) {
+		$opml->{windowId} = $head->{windowId};
 	}
-
+	
+	# Bug 15343, a menu may define forceRefresh in the head to always
+	# be refreshed when accessing this menu item
+	if ( $head->{forceRefresh} ) {
+		$opml->{forceRefresh} = 1;
+	}
+	
 	$xml = undef;
 
 	# Don't leak

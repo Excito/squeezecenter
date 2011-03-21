@@ -1,6 +1,6 @@
 package Slim::Plugin::Favorites::Plugin;
 
-# $Id: Plugin.pm 28492 2009-09-11 08:50:22Z michael $
+# $Id: Plugin.pm 30040 2010-02-05 19:58:44Z andy $
 
 # A Favorites implementation which stores favorites as opml files and allows
 # the favorites list to be edited from the web interface
@@ -31,7 +31,7 @@ use Slim::Utils::Prefs;
 use Slim::Plugin::Favorites::Opml;
 use Slim::Plugin::Favorites::OpmlFavorites;
 
-if ( !main::SLIM_SERVICE && !$::noweb ) {
+if ( main::WEBUI ) {
  	require Slim::Plugin::Favorites::Settings;
 	require Slim::Web::XMLBrowser;
 }
@@ -57,7 +57,7 @@ sub initPlugin {
 		Slim::Utils::Favorites::registerFavoritesClassName('Slim::Plugin::Favorites::SqueezeNetwork');
 	}
 	else {
-		if ( !$::noweb ) {
+		if ( main::WEBUI ) {
 			Slim::Plugin::Favorites::Settings->new;
 		}
 		

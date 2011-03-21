@@ -1,6 +1,6 @@
 package Slim::Plugin::LastFM::Plugin;
 
-# $Id: Plugin.pm 28550 2009-09-17 15:42:43Z andy $
+# $Id: Plugin.pm 30040 2010-02-05 19:58:44Z andy $
 
 # Play Last.fm Radio via mysqueezebox.com
 
@@ -68,7 +68,7 @@ sub initPlugin {
 		);
 	}
 	
-	if ( !$::noweb && !main::SLIM_SERVICE ) {
+	if ( main::WEBUI ) {
 		# Add a function to view trackinfo in the web
 		Slim::Web::Pages->addPageFunction( 
 			'plugins/lastfm/trackinfo.html',

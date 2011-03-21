@@ -1,6 +1,6 @@
 package Slim::Music::TitleFormatter;
 
-# $Id: TitleFormatter.pm 28177 2009-08-13 09:46:35Z michael $
+# $Id: TitleFormatter.pm 29740 2010-01-08 13:18:26Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -188,11 +188,14 @@ sub init {
 			}
 
 			my $output = '';
-			my ($item) = $_[0]->$attr();
-
-			if ($item) {
-				$output = $item->name();
-			}
+			
+			eval {
+				my ($item) = $_[0]->$attr();
+	
+				if ($item) {
+					$output = $item->name();
+				}
+			};
 
 			return (defined $output ? $output : '');
 		};
@@ -218,12 +221,13 @@ sub init {
 
 	# add comment and duration
 	for my $attr (qw(comment duration)) {
-		
-		if ( ref $_[0] eq 'HASH' ) {
-			return $_[0]->{$attr} || '';
-		}
 
 		$parsedFormats{uc($attr)} = sub {
+		
+			if ( ref $_[0] eq 'HASH' ) {
+				return $_[0]->{$attr} || '';
+			}
+
 			my $output = $_[0]->$attr();
 			return (defined $output ? $output : '');
 		};
@@ -619,6 +623,8 @@ sub infoFormat {
 
 		$output = $format->($track) if ref($format) eq 'CODE';
 	}
+	
+	$output = '' if !defined $output;
 
 	if ($output eq "" && defined($safestr)) {
 

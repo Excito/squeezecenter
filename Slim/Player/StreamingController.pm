@@ -1,6 +1,6 @@
 package Slim::Player::StreamingController;
 
-# $Id: StreamingController.pm 28696 2009-09-30 13:11:32Z ayoung $
+# $Id: StreamingController.pm 30393 2010-03-19 13:30:04Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -127,7 +127,7 @@ ContinuePlay =>
 [	[	\&_Stop,		\&_BadState,	\&_BadState,	\&_StopGetNext],	# STOPPED	
 	[	\&_BadState,	\&_StopGetNext,	\&_StopGetNext,	\&_BadState],		# BUFFERING
 	[	\&_BadState,	\&_StopGetNext,	\&_StopGetNext,	\&_BadState],		# WAITING_TO_SYNC
-	[	\&_Continue,	\&_Continue,	\&_Continue,	\&_Continue],		# PLAYING
+	[	\&_Continue,	\&_Continue,	\&_Continue,	\&_PlayIfReady],	# PLAYING
 	[	\&_Stop,		\&_Stop,		\&_Stop,		\&_Stop],			# PAUSED
 ],
 Pause =>
@@ -220,7 +220,7 @@ ReadyToStream =>
 [	[	\&_Invalid,		\&_BadState,	\&_BadState,	\&_Invalid],		# STOPPED	
 	[	\&_BadState,	\&_NoOp,		\&_Invalid,		\&_BadState],		# BUFFERING
 	[	\&_BadState,	\&_Invalid,		\&_Invalid,		\&_BadState],		# WAITING_TO_SYNC
-	[	\&_NoOp,		\&_NextIfMore,	\&_NextIfMore,	\&_StreamIfReady],	# PLAYING # _RetryOrNext (when playing) reverted until algoritm made safer
+	[	\&_NoOp,		\&_NextIfMore,	\&_RetryOrNext,	\&_StreamIfReady],	# PLAYING
 	[	\&_NoOp,		\&_NextIfMore,	\&_NextIfMore,	\&_StreamIfReady],	# PAUSED
 ],
 Stopped =>
@@ -372,19 +372,17 @@ sub _Playing {
 	Slim::Player::Playlist::refreshPlaylist($self->master());
 	
 	if ( $last_song ) {
-		foreach my $player (@{$self->{'players'}})	{
-			Slim::Control::Request::notifyFromArray($player,
-				[
-					'playlist', 
-					'newsong', 
-					Slim::Music::Info::standardTitle(
-						$self->master(), 
-						$last_song->currentTrack()
-					),
-					$last_song->index()
-				]
-			);
-		}
+		Slim::Control::Request::notifyFromArray($self->master(),
+			[
+				'playlist', 
+				'newsong', 
+				Slim::Music::Info::standardTitle(
+					$self->master(), 
+					$last_song->currentTrack()
+				),
+				$last_song->index()
+			]
+		);
 	}
 	
 	if ( main::INFOLOG && $log->is_info ) {
@@ -400,15 +398,14 @@ sub _Stopped {
 
 sub _notifyStopped {
 	my ($self, $suppressNotifications) = @_;
-	my $master = master($self);
+
+	# This was previously commented out, for bug 7781, 
+	# because some plugins (Alarm) don't like extra stop events.
+	# This broke important notifications for Jive.
+	# Other changes mean that that this can be reinstated.
+	Slim::Control::Request::notifyFromArray( $self->master(), ['playlist', 'stop'] ) unless $suppressNotifications;
 
 	foreach my $player ( @{ $self->{'players'} } ) {
-		# This was previously commented out, for bug 7781, 
-		# because some plugins (Alarm) don't like extra stop events.
-		# This broke important notifications for Jive.
-		# Other changes mean that that this can be reinstated.
-		Slim::Control::Request::notifyFromArray( $player, ['playlist', 'stop'] ) unless $suppressNotifications;
-		
 		if ($player->can('onStop')) {
 			$player->onStop();
 		}
@@ -761,11 +758,11 @@ sub _errorOpening {
 	$error ||= 'PROBLEM_OPENING';
 	$url   ||= $songUrl;
 
-	_playersMessage($self, $url, {}, $error, undef, 1, 5);
+	_playersMessage($self, $url, {}, $error, undef, 1, 5, 'isError');
 }
 
 sub _playersMessage {
-	my ($self, $url, $remoteMeta, $message, $icon, $block, $duration) = @_;
+	my ($self, $url, $remoteMeta, $message, $icon, $block, $duration, $isError) = @_;
 	
 	$block    = 0  unless defined $block;
 	$duration = 10 unless defined $duration;
@@ -786,7 +783,7 @@ sub _playersMessage {
 		# Show an error message
 		$client->showBriefly( {
 			line => [ $line1, $line2 ],
-			jive => { type => 'song', text => [ $line1, $line2 ], $iconType => $icon, duration => $duration * 1000},
+			jive => { type => ($isError ? 'popupplay' : 'song'), text => [ $line1, $line2 ], $iconType => $icon, duration => $duration * 1000},
 		}, {
 			scroll    => 1,
 			firstline => 1,
@@ -850,7 +847,8 @@ sub nextsong {
 }
 
 # FIXME - this algorithm is not safe enough. 
-# (a) It may be that the Track object does not have a duration available for fixed-length stream;
+# (a) It may be that the Track object does not have a duration available for fixed-length stream
+# better checks in place now represented by Song::isLive;
 # (b) It may be that the duration is only a guess and not good enough for resuming.
 #
 # If we are playing a remote stream and it ends prematurely, either because it is radio
@@ -871,7 +869,8 @@ sub _RetryOrNext {		# -> Idle; IF [shouldretry && canretry] THEN continue
 		&& $song->isRemote()
 		&& $elapsed > 10)				# have we managed to play at least 10s?
 	{
-		if ($song->duration()			# of known duration and more that 10s left
+		if (0 # XXX disabled
+			&& $song->duration()			# of known duration and more that 10s left
 			&& $song->duration() > ($elapsed + $stillToPlay + 10)
 			&& $song->canSeek)
 		{
@@ -882,7 +881,7 @@ sub _RetryOrNext {		# -> Idle; IF [shouldretry && canretry] THEN continue
 			}
 			# else fall
 			main::INFOLOG && $log->is_info && $log->info('Unable to re-stream ', $song->currentTrack()->url, ', duration=', $song->duration(), ' at time offset ', $elapsed + $stillToPlay);
-		} elsif (!$song->duration()) {	# unknown duration => assume radio
+		} elsif (!$song->duration() && $song->isLive()) {	# unknown duration => assume radio
 			main::INFOLOG && $log->is_info && $log->info('Attempting to re-stream ', $song->currentTrack()->url, ' after time ', $elapsed);
 			_Stream($self, $event, {song => $song});
 			return;
@@ -1027,7 +1026,9 @@ sub _JumpToTime {			# IF [canSeek] THEN stop, stream -> Buffering, Streaming END
 	my $song = playingSong($self) || return;
 	my $handler = $song->currentTrackHandler();
 
-	if ($newtime !~ /^[\+\-]/ && $newtime == 0) {
+	if ($newtime !~ /^[\+\-]/ && $newtime == 0
+		|| !$song->duration()
+	) {
 		# User is trying to restart the current track
 		my $url         = $song->currentTrack()->url;
 		
@@ -1052,7 +1053,7 @@ sub _JumpToTime {			# IF [canSeek] THEN stop, stream -> Buffering, Streaming END
 		}
 	}
 	
-	if ($newtime > $self->playingSongDuration()) {
+	if ($newtime > $song->duration()) {
 		_Skip($self, $event);
 		return;
 	}
@@ -1169,6 +1170,12 @@ sub _Stream {				# play -> Buffering, Streaming
 		return $song->currentTrackHandler()->overridePlayback( $self->master(), $song->currentTrack()->url );
 	}
 	
+	# close any existing source stream if necessary
+	if ($self->{'songStreamController'}) {
+		$self->{'songStreamController'}->close();
+		$self->{'songStreamController'} = undef;
+	}
+	
 	my ($songStreamController, @error) = $song->open($seekdata);
 		
 	if (!$songStreamController) {
@@ -1179,8 +1186,6 @@ sub _Stream {				# play -> Buffering, Streaming
 
 	Slim::Control::Request::notifyFromArray( $self->master(),
 		[ 'playlist', 'open', $songStreamController->streamUrl() ] );
-
-	$self->{'songStreamController'} = $songStreamController;
 
 	my $paused = (scalar @{$self->{'players'}} > 1) && 
 		($self->{'playingState'} == STOPPED || $self->{'playingState'} == BUFFERING);
@@ -1207,7 +1212,7 @@ sub _Stream {				# play -> Buffering, Streaming
 		}
 		
 		my $myFadeIn = $fadeIn;
-		if ($fadeIn > $player->maxTransitionInterval()) {
+		if ($fadeIn > $player->maxTransitionDuration()) {
 			$myFadeIn = 0;
 		}
 		
@@ -1240,6 +1245,10 @@ sub _Stream {				# play -> Buffering, Streaming
 		_NextIfMore($self);
 		return;
 	}
+
+	# Bug 15477: Delayed to here so that $player->play() has the opportunity to close any old stream 
+	# before the new one becomes available
+	$self->{'songStreamController'} = $songStreamController;
 
 	if ( main::INFOLOG && $log->is_info ) {
 		$log->info("Song queue is now " . join(',', map { $_->index() } @$queue));
@@ -1283,7 +1292,7 @@ sub _StreamIfReady {		# IF [allReadyToStream] THEN play -> Streaming ENDIF
 	
 	my $ready = 1;
 	foreach my $player (@{$self->{'players'}})	{
-		if (!$player->isReadyToStream($song)) {
+		if (!$player->isReadyToStream( $song, $self->playingSong() )) {
 			$ready = 0;
 			last;
 		}
@@ -1415,9 +1424,9 @@ sub _Pause {				# pause -> Paused
 			$player->fade_volume(-(FADEVOLUME));
 		}
 		
-		Slim::Control::Request::notifyFromArray( $player, ['playlist', 'pause', 1] );
 	}
 	
+	Slim::Control::Request::notifyFromArray( $self->master(), ['playlist', 'pause', 1] );
 }
 
 # Bug 8861
@@ -1460,8 +1469,9 @@ sub _Resume {				# resume -> Playing
 		$player->volume(0,1);
 		$player->resume();
 		$player->fade_volume($self->{'fadeIn'} ? $self->{'fadeIn'} : FADEVOLUME);
-		Slim::Control::Request::notifyFromArray( $player, ['playlist', 'pause', 0] );
 	}
+
+	Slim::Control::Request::notifyFromArray( $self->master(), ['playlist', 'pause', 0] );
 	
 	$self->{'resumeTime'} = undef;
 	$self->{'fadeIn'} = undef;
@@ -1764,9 +1774,7 @@ sub sync {
 		}
 	}
 	
-	foreach (@{$self->{'allPlayers'}}) {
-		Slim::Control::Request::notifyFromArray($_, ['playlist', 'sync']);
-	}
+	Slim::Control::Request::notifyFromArray($self->master(), ['playlist', 'sync']);
 	
 	if (main::INFOLOG && $log->is_info) {
 		$log->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
@@ -1797,7 +1805,6 @@ sub unsync {
 				} else {
 					# Otherwise just stop the one we are unsyncing
 					_stopClient($player);
-					Slim::Control::Request::notifyFromArray($player, ['playlist', 'stop']);	
 				}
 			} else {
 				# Force stop anyway in case it was paused, off
@@ -1829,10 +1836,11 @@ sub unsync {
 	Slim::Player::Playlist::copyPlaylist($player, $self->master());
 	
 	$prefs->client($player)->remove('syncgroupid') unless $keepSyncGroupId;
+
+	Slim::Control::Request::notifyFromArray($player, ['playlist', 'stop']);	
+	Slim::Control::Request::notifyFromArray($player, ['playlist', 'sync']);
 	
-	foreach ($player, @{$self->{'allPlayers'}}) {
-		Slim::Control::Request::notifyFromArray($_, ['playlist', 'sync']);
-	}
+	Slim::Control::Request::notifyFromArray($self->master(), ['playlist', 'sync']);
 	
 	if (main::INFOLOG && $log->is_info) {
 		$log->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
@@ -1899,7 +1907,8 @@ sub playerInactive {
 				} else {
 					# Otherwise just stop the one we are unsyncing
 					_stopClient($player);
-					Slim::Control::Request::notifyFromArray($player, ['playlist', 'stop']);	
+					# We do not send a 'playlist stop' notification so as not to notify the 
+					# whole sync-group
 				}
 			}
 	
