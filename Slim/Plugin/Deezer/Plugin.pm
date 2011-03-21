@@ -1,6 +1,6 @@
 package Slim::Plugin::Deezer::Plugin;
 
-# $Id: Plugin.pm 24241 2008-12-06 23:13:34Z andy $
+# $Id: Plugin.pm 25897 2009-04-09 17:22:00Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -26,7 +26,7 @@ sub initPlugin {
 		feed   => Slim::Networking::SqueezeNetwork->url( '/api/deezer/v1/opml' ),
 		tag    => 'deezer',
 		menu   => 'music_services',
-		weight => 30,
+		weight => 35,
 	);
 	
 	# Note: Deezer does not wish to be included in context menus
@@ -38,8 +38,24 @@ sub initPlugin {
 			'plugins/deezer/trackinfo.html',
 			sub {
 				my $client = $_[0];
+				my $params = $_[1];
 				
-				my $url = Slim::Player::Playlist::url($client);
+				my $url;
+				
+				my $id = $params->{sess} || $params->{item};
+				
+				if ( $id ) {
+					# The user clicked on a different URL than is currently playing
+					if ( my $track = Slim::Schema->find( Track => $id ) ) {
+						$url = $track->url;
+					}
+					
+					# Pass-through track ID as sess param
+					$params->{sess} = $id;
+				}
+				else {
+					$url = Slim::Player::Playlist::url($client);
+				}
 				
 				Slim::Web::XMLBrowser->handleWebIndex( {
 					client  => $client,

@@ -14,6 +14,7 @@ use base qw(Slim::Utils::OS);
 my $driveList  = {};
 my $driveState = {};
 my $writablePath;
+my $isWHS; 		# Windows Home Server is different
 
 sub name {
 	return 'win';
@@ -47,6 +48,19 @@ sub initDetails {
 	$class->{osDetails}->{isVista} = 1 if $class->{osDetails}->{'osName'} =~ /Vista/;
 
 	return $class->{osDetails};
+}
+
+sub isWHS {
+	return $isWHS if defined $isWHS;
+	
+	$isWHS = 0;
+	
+	my ($string, $major, $minor, $build, $id, $spmajor, $spminor, $suitemask, $producttype) = Win32::GetOSVersion();
+	
+	# WHS is 2003 server based but with suitemask 0x00008000
+	if ($major == 5 && $minor == 2 && $suitemask && $suitemask >= 0x00008000 && $suitemask < 0x00009000) {
+		$isWHS = 1;
+	}
 }
 
 sub initSearchPath {

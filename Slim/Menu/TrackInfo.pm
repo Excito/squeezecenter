@@ -1,6 +1,6 @@
 package Slim::Menu::TrackInfo;
 
-# $Id: TrackInfo.pm 24314 2008-12-15 20:56:26Z andy $
+# $Id: TrackInfo.pm 25030 2009-02-16 17:13:26Z andy $
 
 # SqueezeCenter Copyright 2001-2008 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -78,43 +78,47 @@ sub registerDefaultInfoProviders {
 		func      => \&showArtwork,
 	) );
 
-	$class->registerInfoProvider( contributors => (
-		after => 'top',
-		func  => \&infoContributors,
-	) );
+	if ( !main::SLIM_SERVICE ) {
+		$class->registerInfoProvider( contributors => (
+			after => 'top',
+			func  => \&infoContributors,
+		) );
 
-	$class->registerInfoProvider( album => (
-		after => 'contributors',
-		func  => \&infoAlbum,
-	) );
+		$class->registerInfoProvider( album => (
+			after => 'contributors',
+			func  => \&infoAlbum,
+		) );
 
-	$class->registerInfoProvider( genres => (
-		after => 'album',
-		func  => \&infoGenres,
-	) );
+		$class->registerInfoProvider( genres => (
+			after => 'album',
+			func  => \&infoGenres,
+		) );
+	}
 
 	$class->registerInfoProvider( remotetitle => (
-		after => 'album',
+		after => main::SLIM_SERVICE ? 'top' : 'album',
 		func  => \&infoRemoteTitle,
 	) );
 	
-	$class->registerInfoProvider( year => (
-		after => 'genres',
-		func  => \&infoYear,
-	) );
-	
-	$class->registerInfoProvider( comment => (
-		after => 'year',
-		func  => \&infoComment,
-	) );
-	
-	$class->registerInfoProvider( lyrics => (
-		after => 'comment',
-		func  => \&infoLyrics,
-	) );
+	if ( !main::SLIM_SERVICE ) {
+		$class->registerInfoProvider( year => (
+			after => 'genres',
+			func  => \&infoYear,
+		) );
+
+		$class->registerInfoProvider( comment => (
+			after => 'year',
+			func  => \&infoComment,
+		) );
+
+		$class->registerInfoProvider( lyrics => (
+			after => 'comment',
+			func  => \&infoLyrics,
+		) );
+	}
 	
 	$class->registerInfoProvider( moreinfo => (
-		after => 'comment',
+		after => main::SLIM_SERVICE ? 'remotetitle' : 'comment',
 		func  => \&infoMoreInfo,
 	) );
 	

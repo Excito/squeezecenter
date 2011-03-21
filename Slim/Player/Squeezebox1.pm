@@ -1,6 +1,6 @@
 package Slim::Player::Squeezebox1;
 
-# $Id: Squeezebox1.pm 24408 2008-12-23 16:40:48Z awy $
+# $Id: Squeezebox1.pm 26670 2009-05-18 16:49:53Z michael $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -16,6 +16,7 @@ package Slim::Player::Squeezebox1;
 use strict;
 use base qw(Slim::Player::Squeezebox);
 
+use File::Spec::Functions qw(catdir);
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Utils::Prefs;
@@ -320,6 +321,7 @@ sub upgradeFirmware {
 	} else {
 		# for the "upgrade by ip address" web form:
 		$to_version = 10;
+		$client = Slim::Player::Client::getClient($client);
 	}
 
 	# if no upgrade path is given, then "upgrade" the client to itself.

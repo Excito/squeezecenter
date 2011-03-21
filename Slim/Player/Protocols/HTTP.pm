@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::HTTP;
 
-# $Id: HTTP.pm 24274 2008-12-11 03:43:56Z andy $
+# $Id: HTTP.pm 24744 2009-01-23 20:58:53Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -169,6 +169,47 @@ sub parseMetadata {
 		
 		# Delay the title set
 		Slim::Music::Info::setDelayedTitle( $client, $url, $newTitle );
+	}
+	
+	# Check for Ogg metadata, which is formatted as a series of
+	# 2-byte length/string pairs.
+	elsif ( $metadata =~ /^Ogg(.+)/ ) {
+		my $comments = $1;
+		my $meta = {};
+		while ( $comments ) {
+			my $length = unpack 'n', substr( $comments, 0, 2, '' );
+			my $value  = substr $comments, 0, $length, '';
+			
+			$directlog->is_debug && $directlog->debug("Ogg comment: $value");
+			
+			# Look for artist/title/album
+			if ( $value =~ /ARTIST=(.+)/i ) {
+				$meta->{artist} = $1;
+			}
+			elsif ( $value =~ /ALBUM=(.+)/i ) {
+				$meta->{album} = $1;
+			}
+			elsif ( $value =~ /TITLE=(.+)/i ) {
+				$meta->{title} = $1;
+			}
+		}
+		
+		# Re-use wmaMeta field
+		my $song = $client->controller()->songStreamController()->song();
+		
+		my $cb = sub {
+			$song->pluginData( wmaMeta => $meta );
+		};
+		
+		# Delay metadata according to buffer size if we already have metadata
+		if ( $song->pluginData('wmaMeta') ) {
+			Slim::Music::Info::setDelayedCallback( $client, $cb, 'output-only' );
+		}
+		else {
+			$cb->();
+		}
+		
+		return;
 	}
 	
 	# Check for an image URL in the metadata.  Currently, only Radio Paradise supports this

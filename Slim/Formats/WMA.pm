@@ -1,6 +1,6 @@
 package Slim::Formats::WMA;
 
-# $Id: WMA.pm 15258 2007-12-13 15:29:14Z mherger $
+# $Id: WMA.pm 25608 2009-03-18 15:07:53Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -24,6 +24,8 @@ my %tagMapping = (
 	'GAIN_ALBUM_GAIN'    => 'REPLAYGAIN_ALBUM_GAIN',
 	'GAIN_ALBUM_PEAK'    => 'REPLAYGAIN_ALBUM_PEAK',
 	'PARTOFSET'          => 'DISC',
+	'ARTISTSORTORDER'    => 'ARTISTSORT',
+	'COMMENTS'           => 'COMMENT',
 );
 
 {

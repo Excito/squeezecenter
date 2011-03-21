@@ -1,6 +1,6 @@
 package Slim::Plugin::LastFM::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 24479 2009-01-04 12:06:03Z awy $
+# $Id: ProtocolHandler.pm 24943 2009-02-09 22:19:50Z michael $
 
 # Handler for lastfm:// URLs
 
@@ -342,14 +342,14 @@ sub getMetadataFor {
 
 				# replace repeat with Love
 				repeat  => {
-					icon    => 'html/images/btn_lastfm_love.gif',
+					icon    => main::SLIM_SERVICE ? 'static/sc/images/LastFM/btn_lastfm_love.gif' : 'html/images/btn_lastfm_love.gif',
 					tooltip => $client->string('PLUGIN_LFM_LOVE'),
 					command => [ 'lfm', 'rate', 'L' ],
 				},
 
 				# replace shuffle with Ban
 				shuffle => {
-					icon    => 'html/images/btn_lastfm_ban.gif',
+					icon    => main::SLIM_SERVICE ? 'static/sc/images/LastFM/btn_lastfm_ban.gif' : 'html/images/btn_lastfm_ban.gif',
 					tooltip => $client->string('PLUGIN_LFM_BAN'),
 					command => [ 'lfm', 'rate', 'B' ],
 				},

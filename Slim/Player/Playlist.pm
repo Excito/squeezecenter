@@ -23,7 +23,7 @@ if (!main::SCANNER) {
 
 my $prefs = preferences('server');
 
-our %validSubCommands = map { $_ => 1 } qw(play append load_done loadalbum addalbum loadtracks addtracks clear delete move sync);
+our %validSubCommands = map { $_ => 1 } qw(play append load_done loadalbum addalbum loadtracks playtracks addtracks inserttracks deletetracks clear delete move sync);
 
 our %shuffleTypes = (
 	1 => 'track',
@@ -280,7 +280,7 @@ sub removeTrack {
 			$tracknum = $songcount - 1;
 		}
 		
-		$client->execute([ 'playlist', 'jump', $tracknum, $oldMode ne "play" ]);
+		$client->execute([ 'playlist', 'jump', $tracknum, undef, $oldMode ne "play" ]);
 	}
 
 	# browseplaylistindex could return a non-sensical number if we are not in playlist mode

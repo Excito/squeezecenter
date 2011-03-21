@@ -1,6 +1,6 @@
 package Slim::Buttons::Common;
 
-# $Id: Common.pm 24460 2009-01-01 12:10:56Z adrian $
+# $Id: Common.pm 25903 2009-04-09 19:00:45Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -677,12 +677,6 @@ our %functions = (
 		my $button = shift;
 		my $buttonarg = shift;
 		my $playdisp = undef;
-		
-		if ( main::SLIM_SERVICE ) {
-			# For SqueezeNetwork, disable search
-			$client->showBriefly("", "Coming Soon...");
-			return;
-		}
 
 		# Repeat presses of 'search' will step through search menu
 		if ($client->curSelection($client->curDepth) eq 'SEARCH' && mode($client) eq 'INPUT.List') {
@@ -1243,6 +1237,12 @@ our %functions = (
 		}
 	},
 );
+
+# Delete Browse/Search on SN
+if ( main::SLIM_SERVICE ) {
+	$functions{browse} = sub {};
+	$functions{search} = sub {};
+}
 
 sub getFunction {
 	my $client     = shift || return;

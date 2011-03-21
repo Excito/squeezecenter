@@ -1,6 +1,6 @@
 package Slim::Utils::OSDetect;
 
-# $Id: OSDetect.pm 23471 2008-10-08 18:21:07Z andy $
+# $Id: OSDetect.pm 25316 2009-03-04 12:16:46Z michael $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -69,7 +69,7 @@ sub init {
 	eval {
 		require Slim::Utils::OS::Custom;
 		$os = Slim::Utils::OS::Custom->new();
-		print STDOUT "Found custom OS support file for " . $os->name . "\n";
+		#print STDOUT "Found custom OS support file for " . $os->name . "\n";
 	};
 
 

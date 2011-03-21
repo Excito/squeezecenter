@@ -1040,24 +1040,26 @@ SqueezeJS.UI.Buttons.PlayerDropdown = Ext.extend(Ext.SplitButton, {
 			this._addSNPlayerlistMenu(response);
 			this._addOtherPlayerlistMenu(response);
 
-			// add the sync option menu item
-			this.menu.add(
-				'-',
-				new Ext.menu.Item({
-					text: SqueezeJS.string('synchronize') + '...',
-					// query the currently synced players and show the dialog
-					handler: function(){
-						SqueezeJS.Controller.request({
-							params: ['', ['syncgroups', '?']],
-							success: this.showSyncDialog,
-							failure: this.showSyncDialog,
-							scope: this
-						});	
-					},
-					scope: this,
-					disabled: (this.playerList.getCount() < 2) 
-				})
-			);
+			if (!this.noSync) {
+				// add the sync option menu item
+				this.menu.add(
+					'-',
+					new Ext.menu.Item({
+						text: SqueezeJS.string('synchronize') + '...',
+						// query the currently synced players and show the dialog
+						handler: function(){
+							SqueezeJS.Controller.request({
+								params: ['', ['syncgroups', '?']],
+								success: this.showSyncDialog,
+								failure: this.showSyncDialog,
+								scope: this
+							});	
+						},
+						scope: this,
+						disabled: (this.playerList.getCount() < 2) 
+					})
+				);
+			}
 		}
 
 		else {
@@ -1092,6 +1094,9 @@ SqueezeJS.UI.Buttons.PlayerDropdown = Ext.extend(Ext.SplitButton, {
 
 			for (var x=0; x < response.players_loop.length; x++) {
 				var playerInfo = response.players_loop[x];
+				
+				if (!playerInfo.connected)
+					continue;
 
 				// mark the current player as selected
 				if (playerInfo.playerid == SqueezeJS.Controller.getPlayer()) {
@@ -1766,7 +1771,7 @@ SqueezeJS.UI.Playlist = Ext.extend(SqueezeJS.UI.Component, {
 			this.container.getUpdateManager().showLoadIndicator = true;
 
 		this.container.load(
-			{ url: (url || webroot + 'playlist.html?ajaxRequest=1&player=' + SqueezeJS.getPlayer()) + '&uid=' + Date.parse(Date()) },
+			{ url: (url || this.url || webroot + 'playlist.html?ajaxRequest=1&player=' + SqueezeJS.getPlayer()) + '&uid=' + Date.parse(Date()) },
 			{},
 			this._onUpdated.createDelegate(this),
 			true
@@ -2120,8 +2125,12 @@ SqueezeJS.UI.ScannerInfoExtended = function(){
 				}
 			}
 
-			if (result.message && result['total_time'])
+			if (result.message && result['total_time']) {
 				Ext.get('message').update(result.message + '<br>' + SqueezeJS.string('total_time') + '&nbsp;' + result.total_time);
+				
+				if (Ext.get('abortscanlink'))
+					Ext.get('abortscanlink').hide();
+			}
 
 			else
 				Ext.get('message').update(result.message);
@@ -2134,44 +2143,6 @@ SqueezeJS.UI.ScannerInfoExtended = function(){
 
 // only load the following if Ext.grid is available
 if (Ext.grid && Ext.grid.GridView && Ext.grid.GridPanel) {
-	// XXXX fix an issue with grids in Safari/Chrome/Webkit Ext 2.2
-	Ext.override(Ext.grid.GridView, {
-		layout : function(){
-			if (!this.mainBody) {
-				return;
-			}
-			var g = this.grid;
-			var c = g.getGridEl();
-			var csize = c.getSize(true);
-			var vw = csize.width;
-			if(vw < 20 || csize.height < 20){
-				return;
-			}
-			if(g.autoHeight){
-				this.scroller.dom.style.overflow = 'visible';
-				this.scroller.dom.style.position = 'static';
-			}else{
-				this.el.setSize(csize.width, csize.height);
-				var hdHeight = this.mainHd.getHeight();
-				var vh = csize.height - (hdHeight);
-				this.scroller.setSize(vw, vh);
-				if(this.innerHd){
-					this.innerHd.style.width = (vw)+'px';
-				}
-			}
-			if(this.forceFit){
-				if(this.lastViewWidth != vw){
-					this.fitColumns(false, false);
-					this.lastViewWidth = vw;
-				}
-			}else {
-				this.autoExpand();
-				this.syncHeaderScroll();
-			}
-			this.onLayout(vw, vh);
-		}
-	});
-	// END XXXXX
 
 	// create sortable table from HTML table, basically a copy of the TableGrid sample
 	// http://extjs.com/deploy/dev/examples/grid/from-markup.html

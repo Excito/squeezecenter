@@ -663,12 +663,6 @@ sub artistsQuery {
 	my $where_va = {'me.compilation' => 1};
 	my $attr_va = {};
 
- 	# Normalize any search parameters
- 	if (specified($search)) {
- 
- 		$where->{'me.namesearch'} = {'like', Slim::Utils::Text::searchStringSplit($search)};
- 	}
-
 	my $rs;
 	my $cacheKey;
 
@@ -742,7 +736,12 @@ sub artistsQuery {
 		}
 		
 		# use browse here
-		$rs = Slim::Schema->rs('Contributor')->browse( undef, $where )->search( {}, $attr );
+		if ($search) {
+			$rs = Slim::Schema->rs('Contributor')->searchNames(Slim::Utils::Text::searchStringSplit($search), $attr);
+		}
+		else {
+			$rs = Slim::Schema->rs('Contributor')->browse( undef, $where )->search( {}, $attr );
+		}
 	}
 	
 	my $count = $rs->count;
@@ -1110,7 +1109,7 @@ sub displaystatusQuery_filter {
 
 	# retrieve the clientid, abort if not about us
 	my $clientid = $request->clientid();
-	return 0 if !defined $clientid;
+	return 0 if !defined $clientid || !defined $self->clientid();
 	return 0 if $clientid ne $self->clientid();
 
 	my $subs  = $self->getParam('subscribe');
@@ -3269,7 +3268,7 @@ sub statusQuery_filter {
 	
 	# retrieve the clientid, abort if not about us
 	my $clientid = $request->clientid();
-	return 0 if !defined $clientid;
+	return 0 if !defined $clientid || !defined $self->clientid();
 	return 0 if $clientid ne $self->clientid();
 	
 	# commands we ignore
@@ -5100,7 +5099,7 @@ sub _addJiveSong {
 	$text .= ( defined $album ) ? "\n$album" : '';
 	
 	my $artist;
-	if ( defined( my $artistObj = $track->artist() ) ) {
+	if ( !main::SLIM_SERVICE && defined( my $artistObj = $track->artist() ) ) {
 		$artist = $artistObj->name();
 	}
 	elsif ( $remoteMeta->{artist} ) {
@@ -5566,7 +5565,7 @@ sub _songData {
 				next;
 			}
 			
-			if (defined(my $submethod = $tagMap{$tag}->[3])) {
+			if ( defined(my $submethod = $tagMap{$tag}->[3]) && !main::SLIM_SERVICE ) {
 				
 				my $postfix = ($tag eq 'S')?"_ids":"";
 			

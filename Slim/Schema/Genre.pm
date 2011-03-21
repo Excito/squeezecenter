@@ -1,6 +1,6 @@
 package Slim::Schema::Genre;
 
-# $Id: Genre.pm 14226 2007-10-30 19:15:03Z kdf $
+# $Id: Genre.pm 24729 2009-01-21 14:21:41Z michael $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -36,7 +36,7 @@ use Slim::Utils::Misc;
 sub url {
 	my $self = shift;
 
-	return sprintf('db:genre.namesearch=%s', Slim::Utils::Misc::escape($self->namesearch));
+	return sprintf('db:genre.namesearch=%s', URI::Escape::uri_escape($self->namesearch));
 }
 
 sub tracks {

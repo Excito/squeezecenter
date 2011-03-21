@@ -1,6 +1,6 @@
 package Slim::Schema;
 
-# $Id: Schema.pm 24400 2008-12-23 02:12:46Z andy $
+# $Id: Schema.pm 25638 2009-03-19 20:51:10Z adrian $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -122,7 +122,13 @@ sub init {
 		AutoCommit    => 1,
 		PrintError    => 0,
 		Taint         => 1,
-		on_connect_do => [ 'SET NAMES UTF8' ],
+		on_connect_do => main::SLIM_SERVICE
+			? [
+				'PRAGMA synchronous = OFF',
+				'PRAGMA journal_mode = MEMORY',
+				'PRAGMA temp_store = MEMORY',
+			]
+			: [ 'SET NAMES UTF8' ],
 	}) or do {
 
 		logBacktrace("Couldn't connect to database! Fatal error: [$!] Exiting!");
@@ -170,24 +176,33 @@ sub init {
 
 	# Load the DBIx::Class::Schema classes we've defined.
 	# If you add a class to the schema, you must add it here as well.
-	$class->load_classes(qw/
-		Age
-		Album
-		Comment
-		Contributor
-		ContributorAlbum
-		ContributorTrack
-		Genre
-		GenreTrack
-		MetaInformation
-		Playlist
-		PlaylistTrack
-		Rescan
-		Track
-		TrackPersistent
-		Year
-		Progress
-	/);
+	if ( main::SLIM_SERVICE ) {
+		$class->load_classes(qw/
+			Playlist
+			PlaylistTrack
+			Track
+		/);
+	}
+	else {
+		$class->load_classes(qw/
+			Age
+			Album
+			Comment
+			Contributor
+			ContributorAlbum
+			ContributorTrack
+			Genre
+			GenreTrack
+			MetaInformation
+			Playlist
+			PlaylistTrack
+			Rescan
+			Track
+			TrackPersistent
+			Year
+			Progress
+		/);
+	}
 
 	# Build all our class accessors and populate them.
 	for my $accessor (qw(lastTrackURL lastTrack trackAttrs trackPersistentAttrs driver schemaUpdated)) {
@@ -201,7 +216,11 @@ sub init {
 	}
 
 	$trackAttrs = Slim::Schema::Track->attributes;
-	$trackPersistentAttrs = Slim::Schema::TrackPersistent->attributes;
+	
+	if ( !main::SLIM_SERVICE ) {
+		$trackPersistentAttrs = Slim::Schema::TrackPersistent->attributes;
+	}
+	
 	$class->driver($driver);
 
 	# Use our debug and stats class to get logging and perfmon for db queries
@@ -212,6 +231,46 @@ sub init {
 	$class->_buildValidHierarchies;
 
 	$class->schemaUpdated($update);
+	
+	if ( main::SLIM_SERVICE ) {
+		# Create new empty database every time we startup
+		require File::Slurp;
+		require FindBin;
+		
+		my $text = File::Slurp::read_file( "$FindBin::Bin/SQL/slimservice/slimservice-sqlite.sql" );
+		
+		$text =~ s/\s*--.*$//g;
+		for my $sql ( split /;/, $text ) {
+			next unless $sql =~ /\w/;
+			$dbh->do($sql);
+		}
+	}
+
+	# Migrate the old Mov content type to mp4 and aac - done here as at pref migration time, the database is not loaded
+	if ( !main::SLIM_SERVICE && !main::SCANNER &&
+		 !$prefs->get('migratedMovCT') && Slim::Schema->count('Track', { 'me.content_type' => 'mov' }) ) {
+
+		$log->warn("Migrating 'mov' tracks to new database format");
+
+		Slim::Schema->rs('Track')->search({ 'me.content_type' => 'mov', 'me.remote' => 1 })->delete_all;
+
+		my $rs = Slim::Schema->rs('Track')->search({ 'me.content_type' => 'mov' });
+
+		while (my $track = $rs->next) {
+
+			if ($track->url =~ /\.(mp4|m4a|m4b)$/) {
+				$track->content_type('mp4');
+				$track->update;
+			}
+
+			if ($track->url =~ /\.aac$/) {
+				$track->content_type('aac');
+				$track->update;
+			}
+		}
+
+		$prefs->set('migratedMovCT' => 1);
+	}
 
 	$initialized = 1;
 }
@@ -254,6 +313,13 @@ sub disconnect {
 	my $class = shift;
 
 	eval { $class->storage->dbh->disconnect };
+	
+	if ( main::SLIM_SERVICE ) {
+		# Delete the database file on shutdown
+		my $config = SDI::Util::SNConfig::get_config();
+		my $db = ( $config->{database}->{sqlite_path} || '.' ) . "/slimservice.$$.db";
+		unlink $db;
+	}
 
 	$initialized = 0;
 }
@@ -288,9 +354,13 @@ sub sourceInformation {
 	
 	if ( main::SLIM_SERVICE ) {
 		my $config = SDI::Util::SNConfig::get_config();
-		$source   = $config->{database}->{dsn};
-		$username = $config->{database}->{username};
-		$password = $config->{database}->{password};
+		my $db = ( $config->{database}->{sqlite_path} || '.' ) . "/slimservice.$$.db";
+		
+		unlink $db if -e $db;
+		
+		$source = "dbi:SQLite:dbname=$db";
+		$username = '';
+		$password = '';
 	}
 	
 	my ($driver) = ($source =~ /^dbi:(\w+):/);
@@ -933,7 +1003,7 @@ sub newTrack {
 		$log->info(sprintf("Created track '%s' (id: [%d])", $track->title, $track->id));
 	}
 
-	if ( $track->audio ) {
+	if ( !main::SLIM_SERVICE && $track->audio ) {
 		# Pull the track persistent object for the DB
 		my $trackPersistent = $track->_retrievePersistent();
 
@@ -1969,19 +2039,21 @@ sub _preCheckAttributes {
 		$attributes->{'LYRICS'} = join("\n", @{$attributes->{'LYRICS'}});
 	}
 
-	# Normalize ARTISTSORT in Contributor->add() the tag may need to be split. See bug #295
-	#
-	# Push these back until we have a Track object.
-	for my $tag (Slim::Schema::Contributor->contributorRoles, qw(
-		COMMENT GENRE ARTISTSORT PIC APIC ALBUM ALBUMSORT DISCC
-		COMPILATION REPLAYGAIN_ALBUM_PEAK REPLAYGAIN_ALBUM_GAIN 
-		MUSICBRAINZ_ARTIST_ID MUSICBRAINZ_ALBUM_ARTIST_ID MUSICBRAINZ_ALBUM_ID 
-		MUSICBRAINZ_ALBUM_TYPE MUSICBRAINZ_ALBUM_STATUS
-	)) {
+	if ( !main::SLIM_SERVICE ) {
+		# Normalize ARTISTSORT in Contributor->add() the tag may need to be split. See bug #295
+		#
+		# Push these back until we have a Track object.
+		for my $tag (Slim::Schema::Contributor->contributorRoles, qw(
+			COMMENT GENRE ARTISTSORT PIC APIC ALBUM ALBUMSORT DISCC
+			COMPILATION REPLAYGAIN_ALBUM_PEAK REPLAYGAIN_ALBUM_GAIN 
+			MUSICBRAINZ_ARTIST_ID MUSICBRAINZ_ALBUM_ARTIST_ID MUSICBRAINZ_ALBUM_ID 
+			MUSICBRAINZ_ALBUM_TYPE MUSICBRAINZ_ALBUM_STATUS
+		)) {
 
-		next unless defined $attributes->{$tag};
+			next unless defined $attributes->{$tag};
 
-		$deferredAttributes->{$tag} = delete $attributes->{$tag};
+			$deferredAttributes->{$tag} = delete $attributes->{$tag};
+		}
 	}
 
 	# We also need these in _postCheckAttributes, but they should be set during create()
@@ -1998,7 +2070,13 @@ sub _preCheckAttributes {
 
 		while (my ($tag, $value) = each %{$attributes}) {
 
-			$log->debug(".. $tag : $value") if defined $value;
+			# Artwork dump is unreadable in logs, so replace with a text tag.  Mor thorough artwork
+			# debugging is available using artwork setting and this avoids pointless log bloat.
+			if ($tag eq 'ARTWORK') {
+				$log->debug(".. $tag : [Binary Image Data]") if defined $value;
+			} else {
+				$log->debug(".. $tag : $value") if defined $value;
+			}
 		}
 
 		$log->debug("* Deferred Attributes *");
@@ -2162,13 +2240,20 @@ sub _postCheckAttributes {
 	my $album    = $attributes->{'ALBUM'};
 	my $disc     = $attributes->{'DISC'};
 	my $discc    = $attributes->{'DISCC'};
+	# Bug 10583 - Also check for MusicBrainz Album Id
+	my $albumid  = $attributes->{'MUSICBRAINZ_ALBUM_ID'};
 	
 	# Bug 4361, Some programs (iTunes) tag things as Disc 1/1, but
 	# we want to ignore that or the group discs logic below gets confused
-	if ( $discc && $discc == 1 ) {
-		$log->debug( '-- Ignoring useless DISCC tag value of 1' );
-		$disc = $discc = undef;
-	}
+	# Bug 10583 - Revert disc 1/1 change.
+	# "Minimal tags" don't help for the "Greatest Hits" problem,
+	# either main contributor (ALBUMARTIST) or MB Album Id should be used.
+	# In the contrary, "disc 1/1" helps aggregating compilation tracks in different directories.
+	# At least, visible presentation is now the same for compilations: disc 1/1 behaves like x/x.
+	#if ( $discc && $discc == 1 ) {
+	#	$log->debug( '-- Ignoring useless DISCC tag value of 1' );
+	#	$disc = $discc = undef;
+	#}
 
 	# we may have an album object already..
 	# But mark it undef first - bug 3685
@@ -2226,8 +2311,9 @@ sub _postCheckAttributes {
 		# if we have a disc, provided we're not in the iTunes situation (disc == discc == 1)
 		my $checkDisc = 0;
 
+		# Bug 10583 - Revert disc 1/1 change. Use MB Album Id in addition (unique id per disc, not per set!)
 		if (!$prefs->get('groupdiscs') && 
-			(($disc && $discc && $discc > 1) || ($disc && !$discc))) {
+			(($disc && $discc) || ($disc && !$discc) || $albumid)) {
 
 			$checkDisc = 1;
 		}
@@ -2277,7 +2363,14 @@ sub _postCheckAttributes {
 
 				$search->{'me.disc'} = $disc;
 
-			} elsif ($discc && $discc > 1) {
+				# Bug 10583 - Also check musicbrainz_id if defined.
+				# Can't be used in groupdiscs mode since id is unique per disc, not per set.
+				if (defined $albumid) {
+					$search->{'me.musicbrainz_id'} = $albumid;
+					$log->debug(sprintf("-- Checking for MusicBrainz Album Id: %s", $albumid));
+				}
+
+			} elsif ($discc) {
 
 				# If we're not checking discs - ie: we're in
 				# groupdiscs mode, check discc if it exists,
@@ -2336,8 +2429,14 @@ sub _postCheckAttributes {
 				'group_by' => 'me.id',
 			};
 
+			# Bug 10583 - If we had the MUSICBRAINZ_ALBUM_ID in the tracks table,
+			# we could join on it here ...
+			# TODO: Join on MUSICBRAINZ_ALBUM_ID if it ever makes it into the tracks table.
+
 			# Join on tracks with the same basename to determine a unique album.
-			if (!defined $disc && !defined $discc) {
+			# Bug 10583 - Only try to aggregate from basename
+			# if no MUSICBRAINZ_ALBUM_ID and no DISC and no DISCC available.
+			if (!defined $albumid && !defined $disc && !defined $discc) {
 
 				$search->{'tracks.url'} = { 'like' => "$basename%" };
 

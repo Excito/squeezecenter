@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# SqueezeCenter Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -212,7 +212,7 @@ our @AUTHORS = (
 
 my $prefs        = preferences('server');
 
-our $VERSION     = '7.3.2';
+our $VERSION     = '7.3.3';
 our $REVISION    = undef;
 our $BUILDDATE   = undef;
 our $audiodir    = undef;
@@ -263,16 +263,11 @@ sub init {
 	# initialize the process and daemonize, etc...
 	srand();
 
-	# The revision file may not exist for svn copies.
-	my $tempBuildInfo = eval { File::Slurp::read_file(
-		catdir(Slim::Utils::OSDetect::dirsFor('revision'), 'revision.txt')
-	) } || "TRUNK\nUNKNOWN";
+	($REVISION, $BUILDDATE) = Slim::Utils::Misc::parseRevision();
 
-	# Once we've read the file, split it up so we have the Revision and Build Date
-	my @tempBuildArray = split (/\n/, $tempBuildInfo);
-	$REVISION = $tempBuildArray[0];
-	$BUILDDATE = $tempBuildArray[1];
+	my $log = logger('server');
 
+	$log->error("Starting SqueezeCenter (v$VERSION, r$REVISION, $BUILDDATE)");
 
 	if ($diag) { 
 		eval "use diagnostics";
@@ -288,8 +283,6 @@ sub init {
 
 	# Redirect STDERR to the log file.
 	tie *STDERR, 'Slim::Utils::Log::Trapper';
-
-	my $log = logger('server');
 
 	$log->info("SqueezeCenter OS Specific init...");
 
@@ -501,7 +494,9 @@ sub idle {
 	# check for time travel (i.e. If time skips backwards for DST or clock drift adjustments)
 	if ( $now < $lastlooptime || ( $now - $lastlooptime > 300 ) ) {
 
-		Slim::Utils::Timers::adjustAllTimers($now - $lastlooptime);
+		# bug 10325 - only adjust timer when travelled back
+		# queue isn't influenced when travelling forward (eg. waking from suspend mode)
+		Slim::Utils::Timers::adjustAllTimers($now - $lastlooptime) if $now < $lastlooptime;
 		
 		# For all clients that support RTC, we need to adjust their clocks
 		for my $client ( Slim::Player::Client::clients() ) {
@@ -998,6 +993,18 @@ sub stopServer {
 }
 
 sub cleanup {
+	
+	if (Slim::Music::Import->stillScanning()) {
+		logger('')->info("Cancel running scanner.");
+		Slim::Music::Import->abortScan();
+	}
+	
+	# Bug 11827, export tracks_persistent data for future use
+	my ($dir) = Slim::Utils::OSDetect::dirsFor('prefs');
+	logger('')->info("Exporting persistent track data to $dir");
+	Slim::Schema::TrackPersistent->export(
+		catfile( $dir, 'tracks_persistent.json' )
+	);	
 
 	logger('')->info("SqueezeCenter cleaning up.");
 	

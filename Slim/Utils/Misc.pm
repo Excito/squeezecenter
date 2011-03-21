@@ -1,6 +1,6 @@
 package Slim::Utils::Misc;
 
-# $Id: Misc.pm 24557 2009-01-08 11:15:23Z mherger $
+# $Id: Misc.pm 25463 2009-03-10 17:21:24Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -37,6 +37,7 @@ use Config;
 use Cwd ();
 use File::Spec::Functions qw(:ALL);
 use File::Which ();
+use File::Slurp;
 use FindBin qw($Bin);
 use Log::Log4perl;
 use Net::IP;
@@ -949,6 +950,22 @@ sub isWinDrive {
 	return $path =~ /^[a-z]{1}:[\\]?$/i;
 }
 
+=head2 parseRevision( )
+
+Read revision number and build time
+
+=cut
+
+sub parseRevision {
+
+	# The revision file may not exist for svn copies.
+	my $tempBuildInfo = eval { File::Slurp::read_file(
+		catdir(Slim::Utils::OSDetect::dirsFor('revision'), 'revision.txt')
+	) } || "TRUNK\nUNKNOWN";
+
+	# Once we've read the file, split it up so we have the Revision and Build Date
+	return split (/\n/, $tempBuildInfo);
+}
 
 =head2 userAgentString( )
 
@@ -1307,6 +1324,17 @@ Generate a new UUID and return it.
 
 sub createUUID {
 	return substr( sha1_hex( Time::HiRes::time() . $$ . Slim::Utils::Network::hostName() ), 0, 8 );
+}
+
+=head2 round ( )
+
+Round a number to an integer
+
+=cut
+
+sub round {
+	my $number = shift;
+	return int($number + .5 * ($number <=> 0));
 }
 
 =head1 SEE ALSO

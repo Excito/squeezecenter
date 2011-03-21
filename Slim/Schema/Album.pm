@@ -1,6 +1,6 @@
 package Slim::Schema::Album;
 
-# $Id: Album.pm 22939 2008-08-28 16:42:33Z andy $
+# $Id: Album.pm 24729 2009-01-21 14:21:41Z michael $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -54,7 +54,7 @@ my $log = logger('database.info');
 sub url {
 	my $self = shift;
 
-	return sprintf('db:album.titlesearch=%s', Slim::Utils::Misc::escape($self->titlesearch));
+	return sprintf('db:album.titlesearch=%s', URI::Escape::uri_escape($self->titlesearch));
 }
 
 sub name { 

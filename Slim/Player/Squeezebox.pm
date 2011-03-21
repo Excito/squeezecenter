@@ -19,6 +19,7 @@ use File::Spec::Functions qw(:ALL);
 use IO::Socket;
 use MIME::Base64;
 use Scalar::Util qw(blessed);
+use Socket qw(:crlf);
 
 use Slim::Hardware::IR;
 use Slim::Player::ProtocolHandlers;
@@ -580,6 +581,8 @@ sub stream_s {
 			($params->{'paused'} ? ' paused' : ''), ($format || 'undef'), ($params->{'url'} || 'undef')
 		));
 	}
+	
+	$client->streamStartTimestamp(undef);
 
 	# autostart off when pausing, otherwise 75%
 	my $autostart = $params->{'paused'} ? 0 : 1;
@@ -772,13 +775,15 @@ sub stream_s {
 
 		} else {
 
-			$log->info("setting up direct stream ($server_ip:$server_port) autostart: $autostart.");
-			$log->info("request string: $request_string");
+			if ( $log->is_info ) {
+				$log->info("setting up direct stream ($server_ip:$server_port) autostart: $autostart format: $formatbyte.");
+				$log->info("request string: $request_string");
+			}
 		}
 				
 	} else {
 
-		$request_string = sprintf("GET /stream.mp3?player=%s HTTP/1.0\n", $client->id);
+		$request_string = sprintf("GET /stream.mp3?player=%s HTTP/1.0" . $CRLF, $client->id);
 			
 		if ($prefs->get('authorize')) {
 
@@ -786,19 +791,15 @@ sub stream_s {
 				
 			my $password = encode_base64('squeezeboxXXX:' . $client->password);
 				
-			$request_string .= "Authorization: Basic $password\n";
+			$request_string .= "Authorization: Basic $password" . $CRLF;
 		}
 
 		$server_port = $prefs->get('httpport');
 
 		# server IP of 0 means use IP of control server
 		$server_ip = 0;
-		$request_string .= "\n";
+		$request_string .= $CRLF;
 
-		if (length($request_string) % 2) {
-			$request_string .= "\n";
-		}
-		
 		# Possible fix for another problem when using a transcoder:
 		# if ($controller->streamHandler()->isa($handler) && $handler->can('handlesStreamHeaders')) {
 		#
@@ -845,28 +846,41 @@ sub stream_s {
 
 	$log->debug("flags: $flags");
 
-	my $transitionType = $prefs->client($master)->get('transitionType') || 0;
+	my $transitionType;
+	my $transitionDuration;
 	
-	# If we need to determine dynamically
-	if (
-		$prefs->client($master)->get('transitionSmart') 
-		&&
-		( Slim::Player::ReplayGain->trackAlbumMatch( $master, -1 ) 
-		  ||
-		  Slim::Player::ReplayGain->trackAlbumMatch( $master, 1 )
-		)
-	) {
-		$log->info('Using smart transition mode');
-		$transitionType = 0;
+	if ($params->{'fadeIn'}) {
+		$transitionType = 2;
+		$transitionDuration = $params->{'fadeIn'};
+	} else {
+		$transitionType = $prefs->client($master)->get('transitionType') || 0;
+		$transitionDuration = $prefs->client($master)->get('transitionDuration') || 0;
+		
+		# If we need to determine dynamically
+		if (
+			$prefs->client($master)->get('transitionSmart') 
+			&&
+			( Slim::Player::ReplayGain->trackAlbumMatch( $master, -1 ) 
+			  ||
+			  Slim::Player::ReplayGain->trackAlbumMatch( $master, 1 )
+			)
+		) {
+			$log->info('Using smart transition mode');
+			$transitionType = 0;
+		}
+		
+		# Bug 10567, allow plugins to override transition setting
+		if ( $songHandler && $songHandler->can('transitionType') ) {
+			my $override = $songHandler->transitionType( $master, $controller->song(), $transitionType );
+			if ( defined $override ) {
+				$log->is_info && $log->info("$songHandler changed transition type to $override");
+				$transitionType = $override;
+			}
+		}
 	}
 	
-	# Bug 10567, allow plugins to override transition setting
-	if ( $songHandler && $songHandler->can('transitionType') ) {
-		my $override = $songHandler->transitionType( $master, $controller->song(), $transitionType );
-		if ( defined $override ) {
-			$log->is_info && $log->info("$songHandler changed transition type to $override");
-			$transitionType = $override;
-		}
+	if ($transitionDuration > $client->maxTransitionDuration()) {
+		$transitionDuration = $client->maxTransitionDuration();
 	}
 	
 	my $frame = pack 'aaaaaaaCCCaCCCNnN', (
@@ -879,7 +893,7 @@ sub stream_s {
 		$pcmendian,
 		$bufferThreshold,
 		0,		# s/pdif auto
-		$prefs->client($master)->get('transitionDuration') || 0,
+		$transitionDuration,
 		$transitionType,
 		$flags,		# flags	     
 		$outputThreshold,

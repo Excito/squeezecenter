@@ -1,6 +1,6 @@
 package Slim::Player::Song;
 
-# $Id: Song.pm 24415 2008-12-24 09:10:27Z awy $
+# $Id: Song.pm 25723 2009-03-28 19:20:33Z adrian $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -332,14 +332,14 @@ sub open {
 	
 	push @streamFormats, ($handler->isRemote ? 'R' : 'F');
 	
-	my $transcoder = Slim::Player::TranscodingHelper::getConvertCommand2(
+	my ($transcoder, $error) = Slim::Player::TranscodingHelper::getConvertCommand2(
 		$self,
 		$format,
 		\@streamFormats, [], \@wantOptions);
 	
 	if (! $transcoder) {
 		logError("Couldn't create command line for $format playback for [$url]");
-		return (undef, 'PROBLEM_CONVERT_FILE', $url);
+		return (undef, ($error || 'PROBLEM_CONVERT_FILE'), $url);
 	} elsif ($log->is_info) {
 		$log->info("Transcoder: streamMode=", $transcoder->{'streamMode'}, ", streamformat=", $transcoder->{'streamformat'});
 	}
@@ -385,7 +385,7 @@ sub open {
 				$log->info("URL is a song (audio): $url, type=$contentType");
 	
 				if ($sock->opened() && !defined(Slim::Utils::Network::blocking($sock, 0))) {
-					logError("Can't set remote stream nonblocking for url: [$url]");
+					logError("Can't set nonblocking for url: [$url]");
 					return (undef, 'PROBLEM_OPENING', $url);
 				}
 				
@@ -444,9 +444,12 @@ sub open {
 			# Need to transcode
 				
 			my $quality = $prefs->client($client)->get('lameQuality');
-				
+			
+			# use a pipeline on windows when remote as we need socketwrapper to ensure we get non blocking IO
+			my $usepipe = (defined $sock || ($handler->isRemote && Slim::Utils::OSDetect::OS() eq 'win')) ? 1 : undef;
+	
 			my $command = Slim::Player::TranscodingHelper::tokenizeConvertCommand2(
-				$transcoder, $sock ? '-' : $track->path, $self->{'streamUrl'}, $sock, $quality
+				$transcoder, $sock ? '-' : $track->path, $self->{'streamUrl'}, $usepipe, $quality
 			);
 
 			if (!defined($command)) {
@@ -460,7 +463,7 @@ sub open {
 			
 			# Bug 10451: only use Pipeline when really necessary 
 			# and indicate if local or remote source
-			if ($sock) { 
+			if ($usepipe) { 
 				$pipeline = Slim::Player::Pipeline->new($sock, $command, !$handler->isRemote);
 			} else {
 				# Bug: 4318
@@ -472,8 +475,11 @@ sub open {
 				} else {
 					$pipeline =  new FileHandle $command;
 				}
-				
-				
+
+				if ($pipeline && $pipeline->opened() && !defined(Slim::Utils::Network::blocking($pipeline, 0))) {
+					logError("Can't set nonblocking for url: [$url]");
+					return (undef, 'PROBLEM_OPENING', $url);
+				}
 			}
 
 			if (!defined($pipeline)) {
@@ -483,7 +489,7 @@ sub open {
 			}
 	
 			$sock = $pipeline;
-				
+			
 			$self->{'transcoded'} = 1;
 				
 			$self->{'streambitrate'} = guessBitrateFromFormat($transcoder->{'streamformat'}, $transcoder->{'rateLimit'});
@@ -595,9 +601,9 @@ sub master              {return $_[0]->{'owner'}->master();}
 sub currentTrack        {return $_[0]->{'currentTrack'}        || $_[0]->{'track'};}
 sub currentTrackHandler {return $_[0]->{'currentTrackHandler'} || $_[0]->{'handler'};}
 sub isRemote            {return $_[0]->currentTrackHandler()->isRemote();}  
-sub duration            {return $_[0]->{'duration'} || $_[0]->currentTrack()->durationSeconds();}
-sub bitrate             {return $_[0]->{'bitrate'} || $_[0]->currentTrack()->bitrate();}
-sub streamformat        {return $_[0]->{'streamFormat'} || Slim::Music::Info::contentType($_[0]->currentTrack());}
+sub duration            {return $_[0]->{'duration'} || Slim::Music::Info::getDuration($_[0]->currentTrack()->url);}
+sub bitrate             {return $_[0]->{'bitrate'} || Slim::Music::Info::getBitrate($_[0]->currentTrack()->url);}
+sub streamformat        {return $_[0]->{'streamFormat'} || Slim::Music::Info::contentType($_[0]->currentTrack()->url);}
 sub isPlaylist          {return $_[0]->{'playlist'};}
 
 sub getSeekDataByPosition {
@@ -617,6 +623,15 @@ sub getSeekDataByPosition {
 sub streambitrate {
 	my $self = shift;
 	return (exists $self->{'streambitrate'} ? $self->{'streambitrate'} : $self->bitrate());
+}
+
+sub setStatus {
+	my ($self, $status) = @_;
+	$self->{'status'} = $status;
+	
+	# Bug 11156 - we reset the seekability evaluation here in case we now now more after
+	# parsing the actual stream headers or the background sanner has had time to finish.
+	$self->{'canSeek'} = undef;
 }
 
 sub canSeek {

@@ -5,7 +5,7 @@ package Slim::Utils::PluginManager;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 #
-# $Id: PluginManager.pm 24481 2009-01-04 12:54:21Z adrian $
+# $Id: PluginManager.pm 24700 2009-01-17 11:17:46Z adrian $
 
 # TODO:
 #
@@ -363,6 +363,11 @@ sub checkPluginVersions {
 	my $class = shift;
 
 	while (my ($name, $manifest) = each %{$plugins}) {
+
+		if ($manifest->{'error'} eq 'INSTALLERROR_NO_PLUGIN') {
+			# skip plugins with no module - these do not need to have a target version
+			next;
+		}
 
 		if (!$class->checkPluginVersion($manifest)) {
 

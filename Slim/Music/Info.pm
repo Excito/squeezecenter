@@ -1,6 +1,6 @@
 package Slim::Music::Info;
 
-# $Id: Info.pm 24623 2009-01-12 16:00:28Z mherger $
+# $Id: Info.pm 25121 2009-02-22 14:04:23Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -527,6 +527,8 @@ sub getCurrentTitle {
 sub getStreamDelay {
 	my ( $client, $outputDelayOnly ) = @_;
 	
+	return 0 unless $client->streamingSong();
+	
 	my $bitrate = $client->streamingSong()->streambitrate() || 128000;
 	my $delay   = 0;
 	
@@ -900,11 +902,22 @@ sub fileName {
 }
 
 sub sortFilename {
+	
+	use locale;
+	
 	# build the sort index
 	# File sorting should look like ls -l, Windows Explorer, or Finder -
 	# really, we shouldn't be doing any of this, but we'll ignore
 	# punctuation, and fold the case. DON'T strip articles.
-	my @nocase = map { Slim::Utils::Text::ignorePunct(Slim::Utils::Text::matchCase(fileName($_))) } @_;
+	my @nocase = map {
+		Slim::Utils::Text::ignorePunct(
+			uc(
+				Slim::Utils::Unicode::utf8encode_locale( 
+					fileName($_)
+				)
+			)
+		)
+	} @_;
 
 	# return the input array sliced by the sorted array
 	return @_[sort {$nocase[$a] cmp $nocase[$b]} 0..$#_];

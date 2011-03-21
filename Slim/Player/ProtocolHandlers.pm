@@ -1,6 +1,6 @@
 package Slim::Player::ProtocolHandlers;
 
-# $Id: ProtocolHandlers.pm 23721 2008-10-28 16:57:01Z awy $
+# $Id: ProtocolHandlers.pm 25581 2009-03-17 15:34:28Z michael $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -124,20 +124,8 @@ sub iconForURL {
 		}
 	}
 
-	elsif ( ($url =~ /^file:/ && Slim::Music::Info::isPlaylist($url)) || $url =~ /^[a-z0-9\-]*playlist:/) {
+	elsif ($url =~ /^[a-z0-9\-]*playlist:/) {
 		return 'html/images/playlists.png';
-	}
-
-	elsif ( ($url =~ /^file:/ && Slim::Music::Info::isSong($url))) {
-		my $track = Slim::Schema->rs('Track')->objectForUrl({
-			'url' => $url,
-		});
-
-		if ($track && $track->coverArt) {
-			return 'music/' . $track->id . '/cover.png';
-		}
-
-		return 'html/images/cover.png';
 	}
 
 	elsif ($url =~ /^db:album\.(\w+)=(.+)/) {

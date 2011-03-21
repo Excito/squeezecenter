@@ -1,6 +1,6 @@
 package Slim::Formats;
 
-# $Id: Formats.pm 23663 2008-10-23 11:47:52Z mherger $
+# $Id: Formats.pm 25391 2009-03-07 13:22:05Z adrian $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -55,6 +55,8 @@ sub init {
 		'wma' => 'Slim::Formats::WMA',
 		'mov' => 'Slim::Formats::Movie',
 		'alc' => 'Slim::Formats::Movie',
+		'aac' => 'Slim::Formats::Movie',
+		'mp4' => 'Slim::Formats::Movie',
 		'shn' => 'Slim::Formats::Shorten',
 		'mpc' => 'Slim::Formats::Musepack',
 		'ape' => 'Slim::Formats::APE',

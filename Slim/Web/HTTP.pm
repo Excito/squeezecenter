@@ -1,6 +1,6 @@
 package Slim::Web::HTTP;
 
-# $Id: HTTP.pm 24494 2009-01-05 08:24:01Z mherger $
+# $Id: HTTP.pm 24957 2009-02-10 16:33:16Z michael $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -196,27 +196,65 @@ sub init2 {
 sub openport {
 	my ($listenerport, $listeneraddr) = @_;
 
+	my %tested;
+	my $testSocket;
+	
 	# start our listener
-	$http_server_socket = HTTP::Daemon->new(
-		LocalPort => $listenerport,
-		LocalAddr => $listeneraddr,
-		Listen    => SOMAXCONN,
-		ReuseAddr => 1,
-		Reuse => 1,
-		Timeout   => 0.001,
+	foreach my $port ($listenerport, 9000..9010, 9100, 8000, 10000) {
+		
+		next if $tested{$port};
+		
+		$openedport    = $port;
+		$tested{$port} = 1;
 
-	) or $log->logdie("Can't setup the listening port $listenerport for the HTTP server: $!");
+		if ( $testSocket = IO::Socket::INET->new(Proto     => "tcp",
+				PeerAddr  => 'localhost',
+				PeerPort  => $port) )
+		{
+			$testSocket->close;
+		}
+		
+		else {
+
+			$http_server_socket = HTTP::Daemon->new(
+				LocalPort => $port,
+				LocalAddr => $listeneraddr,
+				Listen    => SOMAXCONN,
+				ReuseAddr => 1,
+				Reuse => 1,
+				Timeout   => 0.001,
+			) and last;
+		}
+		
+		$log->error("Can't setup the listening port $port for the HTTP server: $!");
+	}
+	
+	# if none of our ports could be opened, we'll have to give up
+	if (!$http_server_socket) {
+		
+		$log->logdie("Running out of good ideas for the listening port for the HTTP server - giving up.");
+	}
 	
 	defined(Slim::Utils::Network::blocking($http_server_socket,0)) || $log->logdie("Cannot set port nonblocking");
 
-	$openedport = $listenerport;
-
 	Slim::Networking::Select::addRead($http_server_socket, \&acceptHTTP);
 
-	$log->info("Server $0 accepting http connections on port $listenerport");
+	$log->info("Server $0 accepting http connections on port $openedport");
 
-	Slim::Networking::mDNS->addService('_http._tcp', $listenerport);
-	Slim::Networking::mDNS->addService('_slimhttp._tcp', $listenerport);
+	Slim::Networking::mDNS->addService('_http._tcp', $openedport);
+	Slim::Networking::mDNS->addService('_slimhttp._tcp', $openedport);
+	
+	if ($openedport != $listenerport) {
+
+		$log->error("Previously configured port $listenerport was busy - we're now using port $openedport instead");
+
+		# we might want to push this message in the user's face
+		if (Slim::Utils::OSDetect::isWindows()) {
+			$log->error("Please make sure your firewall does allow access to port $openedport!");
+		}
+
+		$prefs->set('httpport', $openedport) ;
+	}
 }
 
 sub adjustHTTPPort {
@@ -1235,6 +1273,11 @@ sub generateHTTPResponse {
 			my $obj = Slim::Schema->find('Track', $1);
 
 			if (blessed($obj) && Slim::Music::Info::isSong($obj) && Slim::Music::Info::isFile($obj->url)) {
+				
+				# Bug 10730
+				$log->is_info && $log->info("Disabling keep-alive for file download");
+				delete $keepAlives{$httpClient};
+				Slim::Utils::Timers::killTimers( $httpClient, \&closeHTTPSocket );
 
 				$log->is_info && $log->info("Opening $obj to stream...");
 			
