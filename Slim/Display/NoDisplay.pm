@@ -5,7 +5,7 @@ package Slim::Display::NoDisplay;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: NoDisplay.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: NoDisplay.pm 22943 2008-08-28 17:56:34Z andy $
 
 =head1 NAME
 
@@ -23,9 +23,16 @@ use base qw(Slim::Display::Display);
 
 use strict;
 use Slim::Utils::Misc;
+use Slim::Utils::Log;
 
 sub showBriefly {
 	my $display = shift;
+
+	if (logger('player.display')->is_info) {
+		my ($line, $subr) = (caller(1))[2,3];
+		($line, $subr) = (caller(2))[2,3] if $subr eq 'Slim::Player::Player::showBriefly';
+		logger('player.display')->info(sprintf "caller %s (%d) notifyLevel=%d ", $subr, $line, $display->notifyLevel);
+	}
 
 	if ($display->notifyLevel) {
 		$display->notify('showbriefly', @_)

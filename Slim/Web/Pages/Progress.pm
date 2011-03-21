@@ -3,6 +3,7 @@ package Slim::Web::Pages::Progress;
 use strict;
 
 use Slim::Schema;
+use Slim::Utils::Strings qw(string);
 
 sub init {
 	Slim::Web::HTTP::addPageFunction(qr/^progress\.(?:htm|xml)/,\&progress);
@@ -26,6 +27,8 @@ sub progress {
 	$args->{'type'} = $params->{'type'} if $params->{'type'};
 
 	my @progress = Slim::Schema->rs('Progress')->search( $args, { 'order_by' => 'start,id' } )->all;
+
+	my $finished;
 
 	for my $p (@progress) {
 
@@ -51,6 +54,8 @@ sub progress {
 		$total_time += $runtime;
 
 		push @{$params->{'progress_items'}}, $item;
+		
+		$finished = $p->finish;
 	}
 
 	$params->{'desc'} = 1;
@@ -60,17 +65,18 @@ sub progress {
 
 		if (@progress) {
 
-			$params->{'message'}    = Slim::Utils::Strings::string('PROGRESS_IMPORTER_COMPLETE_DESC');
-
+			$params->{'message'} = Slim::Utils::Strings::string('PROGRESS_IMPORTER_COMPLETE_DESC');
+			
 			my $hrs  = int($total_time / 3600);
 			my $mins = int(($total_time - $hrs * 3600)/60);
 			my $sec  = $total_time - 3600 * $hrs - 60 * $mins;
 			
 			$params->{'total_time'} = sprintf("%02d:%02d:%02d", $hrs, $mins, $sec);
+			$params->{'total_time'} .= '&nbsp;(' . Slim::Utils::DateTime::longDateF($finished) . ' / ' . Slim::Utils::DateTime::timeF($finished) . ')' if $finished;
 
 		} else {
 
-			$params->{'message'}    = Slim::Utils::Strings::string('PROGRESS_IMPORTER_NO_INFO');
+			$params->{'message'} = string('PROGRESS_IMPORTER_NO_INFO');
 			$params->{'desc'} = 0;
 		}
 	}

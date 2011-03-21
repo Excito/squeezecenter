@@ -144,13 +144,13 @@ sub initPlugin {
 #        |  |  |  |Function to call
 #        C  Q  T  F
 	Slim::Control::Request::addDispatch(['randomplay', '_mode'],
-	[1, 0, 0, \&cliRequest]);
-	Slim::Control::Request::addDispatch(['randomplaygenrelist'],
-	[1, 1, 0, \&chooseGenresMenu]);
+        [1, 0, 0, \&cliRequest]);
+	Slim::Control::Request::addDispatch(['randomplaygenrelist', '_index', '_quantity'],
+        [1, 1, 0, \&chooseGenresMenu]);
 	Slim::Control::Request::addDispatch(['randomplaychoosegenre', '_genre', '_value'],
-	[1, 0, 0, \&chooseGenre]);
+        [1, 0, 0, \&chooseGenre]);
 	Slim::Control::Request::addDispatch(['randomplaygenreselectall', '_value'],
-	[1, 0, 0, \&genreSelectAllOrNone]);
+        [1, 0, 0, \&genreSelectAllOrNone]);
 	
 	Slim::Player::ProtocolHandlers->registerHandler(
 		randomplay => 'Slim::Plugin::RandomPlay::ProtocolHandler'
@@ -263,8 +263,8 @@ sub genreSelectAllOrNone {
 	my $request = shift;
 	my $client  = $request->client();
 	my $enable  = $request->getParam('');
-	my $value     = $request->getParam('_value');
-	my $genres    = getGenres($client);
+	my $value   = $request->getParam('_value');
+	my $genres  = getGenres($client);
 
 	my @excluded = ();
 	for my $genre (keys %$genres) {
@@ -307,6 +307,7 @@ sub chooseGenresMenu {
 	my $filteredGenres = getFilteredGenres($client);
 
 	my @menu = ();
+
 	# first a "choose all" item
 	push @menu, {
 		text => $client->string('PLUGIN_RANDOM_SELECT_ALL'),
@@ -318,6 +319,7 @@ sub chooseGenresMenu {
 			},
 		},
 	};
+	
 	# then a "choose none" item
 	push @menu, {
 		text => $client->string('PLUGIN_RANDOM_SELECT_NONE'),
@@ -348,15 +350,8 @@ sub chooseGenresMenu {
                         },
 		};
 	}
-	my $numitems = scalar(@menu);
-	$request->addResult("count", $numitems);
-	$request->addResult("offset", 0);
-	my $cnt = 0;
-	for my $eachGenreMenu (@menu[0..$#menu]) {
-		$request->setResultLoopHash('item_loop', $cnt, $eachGenreMenu);
-		$cnt++;
-	}
-	$request->setStatusDone();
+	
+	Slim::Control::Jive::sliceAndShip($request, $client, \@menu);
 }
 
 # Find tracks matching parameters and add them to the playlist
@@ -450,7 +445,8 @@ sub findAndAdd {
 
 		if (!$rs->count) {
 			# we've gone through all songs - start looping
-			delete $find->{lastPlayed}; 
+			delete $find->{'persistent.lastPlayed'}; 
+	
 			$rs = Slim::Schema->rs($type)->search($find, { 'join' => \@joins });
 		}
 
@@ -618,7 +614,7 @@ sub playRandom {
 
 	$log->debug("Called with type $type");
 
-	$mixInfo{$client->masterOrSelf->id}->{'type'} ||= '';
+	$mixInfo{$client->master()->id}->{'type'} ||= '';
 	
 	$type ||= 'track';
 	$type = lc($type);
@@ -629,9 +625,9 @@ sub playRandom {
 	# If this is a new mix, store the start time
 	my $startTime = undef;
 
-	if ($type ne $mixInfo{$client->masterOrSelf->id}->{'type'}) {
+	if ($type ne $mixInfo{$client->master()->id}->{'type'}) {
 
-		$mixInfo{$client->masterOrSelf->id}->{'idList'} = undef;
+		$mixInfo{$client->master()->id}->{'idList'} = undef;
 
 		$prefs->client($client)->set('type', $type) unless ($type eq 'disable');
 
@@ -664,7 +660,7 @@ sub playRandom {
 			$log->debug("$songsRemaining items remaining so not adding new track");
 		}
 
-	} elsif ($type ne 'disable' && ($type ne $mixInfo{$client->masterOrSelf->id}->{'type'} || !$addOnly || $songsRemaining <= 0)) {
+	} elsif ($type ne 'disable' && ($type ne $mixInfo{$client->master()->id}->{'type'} || !$addOnly || $songsRemaining <= 0)) {
 
 		# Old artist/album/year is finished or new random mix started.  Add a new one
 		$numItems = 1;
@@ -696,11 +692,11 @@ sub playRandom {
 
 		# Prevent items that have already been played from being played again
 		# This fails when multiple clients are playing random mixes. -- Max
-		if ($mixInfo{$client->masterOrSelf->id}->{'startTime'}) {
+		if ($mixInfo{$client->master()->id}->{'startTime'}) {
 
 			$find->{'persistent.lastPlayed'} = [
 				{ '=' => undef },
-				{ '<' => $mixInfo{$client->masterOrSelf->id}->{'startTime'} }
+				{ '<' => $mixInfo{$client->master()->id}->{'startTime'} }
 			];
 		}
 
@@ -747,7 +743,7 @@ sub playRandom {
 				    $type eq 'year' ? 'track' : $type,
 				    $find,
 				    $type eq 'year' ? undef : $numItems,
-					$mixInfo{$client->masterOrSelf->id}->{'idList'} ||= [],
+					$mixInfo{$client->master()->id}->{'idList'} ||= [],
 					# 2nd time round just add tracks to end
 					$i == 0 ? $addOnly : 1
 				);
@@ -761,7 +757,7 @@ sub playRandom {
 		}
 
 		# Do a show briefly the first time things are added, or every time a new album/artist/year is added
-		if (!$addOnly || $type ne $mixInfo{$client->masterOrSelf->id}->{'type'} || $type ne 'track') {
+		if (!$addOnly || $type ne $mixInfo{$client->master()->id}->{'type'} || $type ne 'track') {
 
 			if ($type eq 'track') {
 				$string = $client->string("PLUGIN_RANDOM_TRACK");
@@ -796,7 +792,7 @@ sub playRandom {
 			} );
 		}
 
-		$mixInfo{$client->masterOrSelf->id} = undef;
+		$mixInfo{$client->master()->id} = undef;
 
 	} else {
 
@@ -810,7 +806,7 @@ sub playRandom {
 		#BUG 5444: store the status so that users re-visiting the random mix 
 		#will see a continuous mode state.
 		if ($continuousMode) {
-			$mixInfo{$client->masterOrSelf->id}->{'type'} = $type;
+			$mixInfo{$client->master()->id}->{'type'} = $type;
 		}
 
 		# $startTime will only be defined if this is a new (or restarted) mix
@@ -820,7 +816,7 @@ sub playRandom {
 			# Do this last to prevent menu items changing too soon
 			$log->info("New mix started at $startTime");
 
-			$mixInfo{$client->masterOrSelf->id}->{'startTime'} = $startTime;
+			$mixInfo{$client->master()->id}->{'startTime'} = $startTime;
 		}
 	}
 }
@@ -830,16 +826,16 @@ sub getDisplayText {
 	my ($client, $item) = @_;
 
 	# if showing the current mode, show altered string
-	if (defined $mixInfo{$client->masterOrSelf->id}->{'type'} && $item eq $mixInfo{$client->masterOrSelf->id}->{'type'}) {
+	if (defined $mixInfo{$client->master()->id}->{'type'} && $item eq $mixInfo{$client->master()->id}->{'type'}) {
 
 		return string($displayText{$item} . '_PLAYING');
 		
 	# if a mode is active, handle the temporarily added disable option
-	} elsif ($item eq 'disable' && $mixInfo{$client->masterOrSelf->id}) {
+	} elsif ($item eq 'disable' && $mixInfo{$client->master()->id}) {
 
 		return join(' ',
 			string('PLUGIN_RANDOM_PRESS_RIGHT'),
-			string('PLUGIN_RANDOM_' . uc($mixInfo{$client->masterOrSelf->id}->{'type'}) . '_DISABLE')
+			string('PLUGIN_RANDOM_' . uc($mixInfo{$client->master()->id}->{'type'}) . '_DISABLE')
 		);
 
 	} else {
@@ -935,7 +931,7 @@ sub handlePlayOrAdd {
 
 			pop @$listRef;
 
-		} elsif (!$mixInfo{$client->masterOrSelf->id}) {
+		} elsif (!$mixInfo{$client->master()->id}) {
 
 			# only add disable option if starting a mode from idle state
 			push @$listRef, 'disable';
@@ -944,7 +940,7 @@ sub handlePlayOrAdd {
 		$client->modeParam('listRef', $listRef);
 
 		# Clear any current mix type in case user is restarting an already playing mix
-		$mixInfo{$client->masterOrSelf->id}->{'type'} = undef;
+		$mixInfo{$client->master()->id}->{'type'} = undef;
 
 		# Go go go!
 		playRandom($client, $item, $add);
@@ -1013,7 +1009,7 @@ sub setMode {
 	);
 
 	# if we have an active mode, temporarily add the disable option to the list.
-	if ($mixInfo{$client->masterOrSelf->id} && $mixInfo{$client->masterOrSelf->id}->{'type'}) {
+	if ($mixInfo{$client->master()->id} && $mixInfo{$client->master()->id}->{'type'}) {
 		push @{$params{'listRef'}}, 'disable';
 	}
 
@@ -1031,14 +1027,14 @@ sub commandCallback {
 		return;
 	}
 
-	if (!defined $client || !defined $mixInfo{$client->masterOrSelf->id}->{'type'} || !$prefs->get('continuous')) {
+	if (!defined $client || !defined $mixInfo{$client->master()->id}->{'type'} || !$prefs->get('continuous')) {
 		return;
 	}
 	
 	# Bug 8652, ignore playlist play commands for our randomplay:// URL
 	if ( $request->isCommand( [['playlist'], ['play']] ) ) {
 		my $url  = $request->getParam('_item');
-		my $type = $mixInfo{ $client->masterOrSelf->id }->{'type'};
+		my $type = $mixInfo{ $client->master()->id }->{'type'};
 		if ( $url eq "randomplay://$type" ) {
 			return;
 		}
@@ -1046,7 +1042,7 @@ sub commandCallback {
 
 	if ( $log->is_debug ) {
 		$log->debug(sprintf("Received command %s", $request->getRequestString));
-		$log->debug(sprintf("While in mode: %s, from %s", $mixInfo{$client->masterOrSelf->id}->{'type'}, $client->name));
+		$log->debug(sprintf("While in mode: %s, from %s", $mixInfo{$client->master()->id}->{'type'}, $client->name));
 	}
 
 	my $songIndex = Slim::Player::Source::streamingSongIndex($client);
@@ -1088,7 +1084,7 @@ sub commandCallback {
 			}
 		}
 
-		playRandom($client, $mixInfo{$client->masterOrSelf->id}->{'type'}, 1);
+		playRandom($client, $mixInfo{$client->master()->id}->{'type'}, 1);
 
 	} elsif ($request->isCommand([['playlist'], [keys %stopcommands]])) {
 
@@ -1189,7 +1185,7 @@ sub handleWebList {
 		$params->{'pluginRandomNumTracks'}     = $prefs->get('newtracks');
 		$params->{'pluginRandomNumOldTracks'}  = $prefs->get('oldtracks');
 		$params->{'pluginRandomContinuousMode'}= $prefs->get('continuous');
-		$params->{'pluginRandomNowPlaying'}    = $mixInfo{$client->masterOrSelf->id}->{'type'};
+		$params->{'pluginRandomNowPlaying'}    = $mixInfo{$client->master()->id}->{'type'};
 
 		$params->{'mixTypes'}                  = \@mixTypes;
 		$params->{'favorites'}                 = {};
@@ -1235,6 +1231,8 @@ sub handleWebSettings {
  	$prefs->set('oldtracks', $params->{'numOldTracks'});
 	$prefs->set('continuous', $params->{'continuousMode'} ? 1 : 0);
 
+	$mixInfo{$client->master()->id}->{'idList'} = undef;
+
 	# Pass on to check if the user requested a new mix as well
 	handleWebMix($client, $params);
 }
@@ -1242,7 +1240,7 @@ sub handleWebSettings {
 sub active {
 	my $client = shift;
 	
-	my $id = $client->masterOrSelf->id;
+	my $id = $client->master()->id;
 	
 	if ( exists $mixInfo{$id} && exists $mixInfo{$id}->{'type'} ) {
 		return 1;

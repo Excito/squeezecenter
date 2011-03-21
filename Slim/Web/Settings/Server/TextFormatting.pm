@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::TextFormatting;
 
-# $Id: TextFormatting.pm 19150 2008-04-25 12:31:47Z andy $
+# $Id: TextFormatting.pm 23830 2008-11-06 10:18:47Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -13,20 +13,6 @@ use base qw(Slim::Web::Settings);
 use Slim::Utils::Prefs;
 
 my $prefs = preferences('server');
-
-$prefs->setValidate({
-	validator => sub {
-					if ($_[1] =~ /.+\.([^.]+)$/) {
-						my $suffix = $1;
-
-						return grep(/^$suffix$/, qw(jpg gif png jpeg));
-				
-					} else {
-						return 1;
-					}
-				}
-	}, 'coverArt',
-);
 
 sub name {
 	return Slim::Web::HTTP::protectName('FORMATTING_SETTINGS');

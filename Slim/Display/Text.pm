@@ -5,7 +5,7 @@ package Slim::Display::Text;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Text.pm 22999 2008-09-02 09:42:30Z mherger $
+# $Id: Text.pm 23008 2008-09-02 15:03:00Z andy $
 
 =head1 NAME
 

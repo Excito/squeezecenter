@@ -1,6 +1,6 @@
 package Slim::Web::HTTP;
 
-# $Id: HTTP.pm 23240 2008-09-22 21:47:24Z andy $
+# $Id: HTTP.pm 24494 2009-01-05 08:24:01Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -24,7 +24,6 @@ use MIME::QuotedPrint;
 use Scalar::Util qw(blessed);
 use Socket qw(:DEFAULT :crlf);
 use Storable qw(thaw);
-use Template;
 use Tie::RegexpHash;
 use URI::Escape;
 use YAML::Syck qw(LoadFile);
@@ -49,13 +48,29 @@ use Slim::Web::Cometd;
 use Slim::Utils::Prefs;
 
 BEGIN {
-	# Use our custom Template::Context subclass
-	$Template::Config::CONTEXT = 'Slim::Web::Template::Context';
+	if (!$::noweb) {
+		# have perlapp ignore this
+		eval 'use '. 'Template';
+
+		if (!$@) {
+
+			# Use our custom Template::Context subclass
+			$Template::Config::CONTEXT = 'Slim::Web::Template::Context';
+			$Template::Provider::MAX_DIRS = 128;
+
+		} else {
+
+			logError ("can't load module Template - $@");
+		}
+	}
 	
 	# Use Cookie::XS if available
 	my $hasCookieXS;
 
 	sub hasCookieXS {
+		# Bug 9830, disable Cookie::XS for now as it has a bug
+		return 0;
+		
 		return $hasCookieXS if defined $hasCookieXS;
 
 		$hasCookieXS = 0;
@@ -68,16 +83,17 @@ BEGIN {
 	}
 }
 
-use constant defaultSkin => 'Default';
 use constant baseSkin	 => 'EN';
 use constant HALFYEAR	 => 60 * 60 * 24 * 180;
 
 use constant METADATAINTERVAL => 32768;
 use constant MAXCHUNKSIZE     => 32768;
 
-use constant RETRY_TIME       => 0.05; # normal retry time
-use constant RETRY_TIME_FAST  => 0.02; # faster retry for streaming pcm on platforms with small pipe buffer
-use constant PIPE_BUF_THRES   => 4096; # threshold for switching between retry times
+# This used to be 0.05s but the CPU load associated with such fast retries is 
+# really noticeable when playing remote streams. I guess that it is possible
+# that certain combinations of pipe buffers in a transcoding pipeline
+# might get caught by this but I have not been able to think of any - Alan.
+use constant RETRY_TIME       => 0.40; # normal retry time
 
 use constant MAXKEEPALIVES    => -1;   # unlimited keepalive requests
 use constant KEEPALIVETIMEOUT => 75;
@@ -87,11 +103,10 @@ use constant KEEPALIVETIMEOUT => 75;
 my $openedport = undef;
 my $http_server_socket;
 my $connected = 0;
+my $absolutePathRegex = Slim::Utils::OSDetect::isWindows() ? qr{^(?:/|[a-z]:)}i :  qr{^/};
 
 our %outbuf = (); # a hash for each writeable socket containing a queue of output segments
                  #   each segment is a hash of a ref to data, an offset and a length
-
-our %lastSegLen = (); # length of last segment
 
 our %sendMetaData   = ();
 our %metaDataBytes  = ();
@@ -117,7 +132,7 @@ our @closeHandlers = ();
 
 # raw files we serve directly outside the html directory
 our %rawFiles = ();
-my $rawFilesRegexp = qr//;
+my $rawFilesRegexp;
 
 
 our $pageBuild = Slim::Utils::PerfMon->new('Web Page Build', [0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 1, 5]);
@@ -134,25 +149,29 @@ sub init {
 	push @templateDirs, Slim::Utils::OSDetect::dirsFor('HTML');
 
 	# Try and use the faster XS module if it's available.
-	Slim::bootstrap::tryModuleLoad('Template::Stash::XS');
-
-	if ($@) {
-
-		# Pure perl is the default, so we don't need to do anything.
-		$log->warn("Couldn't find Template::Stash::XS - falling back to pure perl version.");
-
-	} else {
-
-		$log->info("Found Template::Stash::XS!");
-
-		$Template::Config::STASH = 'Template::Stash::XS';
+	if (!$::noweb) {
+		Slim::bootstrap::tryModuleLoad('Template::Stash::XS');
+	
+		if ($@) {
+	
+			# Pure perl is the default, so we don't need to do anything.
+			$log->warn("Couldn't find Template::Stash::XS - falling back to pure perl version.");
+	
+		} else {
+	
+			$log->info("Found Template::Stash::XS!");
+	
+			$Template::Config::STASH = 'Template::Stash::XS';
+		}
 	}
 	
 	# Preload skins so they aren't loaded on the first request
 	%skins = skins();
 
 	# Initialize all the web page handlers.
-	Slim::Web::Pages::init();
+	if (!$::noweb) {	
+		Slim::Web::Pages::init();
+	}
 
 	# Initialize graphics resizing
 	Slim::Web::Graphics::init();
@@ -319,12 +338,17 @@ sub skins {
 
 			$log->is_info && $log->info("skin entry: $dir");
 
-			if ($dir eq defaultSkin()) {
-				$skinlist{ $UI ? $dir : uc $dir } = $UI ? string('DEFAULT_SKIN') : defaultSkin();
-			} elsif ($dir eq baseSkin()) {
-				$skinlist{ $UI ? $dir : uc $dir } = $UI ? string('BASE_SKIN') : baseSkin();
-			} else {
-				$skinlist{ $UI ? $dir : uc $dir } = Slim::Utils::Misc::unescape($dir);
+			if ($UI) {
+				
+				$dir = Slim::Utils::Misc::unescape($dir);
+				my $name = Slim::Utils::Strings::getString( uc($dir) . '_SKIN' );
+				
+				$skinlist{ $UI ? $dir : uc $dir } = $name eq uc($dir) . '_SKIN' ? $dir : $name;
+			}
+			
+			else {
+				
+				$skinlist{ uc $dir } = $dir;
 			}
 		}
 	}
@@ -540,24 +564,25 @@ sub processHTTP {
 			$request->push_header("X-Slim-CSRF",$csrfAuth);
 		}
 		
-		
-		# Read cookie(s)
-		if ( my $cookie = $request->header('Cookie') ) {
-			if ( hasCookieXS() ) {
-				# Parsing cookies this way is about 8x faster than using CGI::Cookie directly
-				my $cookies = Cookie::XS->parse($cookie);
-				$params->{'cookies'} = {
-					map {
-						$_ => bless {
-							name  => $_,
-							path  => '/',
-							value => $cookies->{ $_ },
-						}, 'CGI::Cookie';
-					} keys %{ $cookies }
-				};
-			}
-			else {
-				$params->{'cookies'} = { CGI::Cookie->parse($cookie) };
+		# Dont' process cookies for graphics
+		if ($path && $path !~ m/(gif|png)$/i) {
+			if ( my $cookie = $request->header('Cookie') ) {
+				if ( hasCookieXS() ) {
+					# Parsing cookies this way is about 8x faster than using CGI::Cookie directly
+					my $cookies = Cookie::XS->parse($cookie);
+					$params->{'cookies'} = {
+						map {
+							$_ => bless {
+								name  => $_,
+								path  => '/',
+								value => $cookies->{ $_ },
+							}, 'CGI::Cookie';
+						} keys %{ $cookies }
+					};
+				}
+				else {
+					$params->{'cookies'} = { CGI::Cookie->parse($cookie) };
+				}
 			}
 		}
 		
@@ -567,7 +592,6 @@ sub processHTTP {
 		if ($request->header('Icy-MetaData')) {
 			$sendMetaData{$httpClient} = 1;
 		}
-
 
 		# parse out URI		
 		my $query = ($request->method() eq "POST") ? $request->content() : $uri->query();
@@ -680,7 +704,7 @@ sub processHTTP {
 
 			$path =~ s|^/+||;
 
-			if ($path =~ m{^(?:html|music|plugins|settings|firmware)/}i || $path =~ $rawFilesRegexp ) {
+			if ($path =~ m{^(?:html|music|plugins|settings|firmware)/}i || isRawDownload($path) ) {
 				# not a skin
 
 			} elsif ($path =~ m|^([a-zA-Z0-9]+)$| && isaSkin($1)) {
@@ -1022,7 +1046,7 @@ sub generateHTTPResponse {
 	# lots of people need this
 	my $contentType = $params->{'Content-Type'} = $Slim::Music::Info::types{$type};
 
-	if ( $path =~ $rawFilesRegexp ) {
+	if ( isRawDownload($path) ) {
 		$contentType = 'application/octet-stream';
 	}
 	
@@ -1176,6 +1200,10 @@ sub generateHTTPResponse {
 				$response->header("icy-metaint" => METADATAINTERVAL);
 				$response->header("icy-name"    => string('WELCOME_TO_SQUEEZECENTER'));
 			}
+			
+			$log->is_info && $log->info("Disabling keep-alive for stream.mp3");
+			delete $keepAlives{$httpClient};
+			Slim::Utils::Timers::killTimers( $httpClient, \&closeHTTPSocket );
 
 			my $headers = _stringifyHeaders($response) . $CRLF;
 
@@ -1186,7 +1214,8 @@ sub generateHTTPResponse {
 			return 0;
 
 		} elsif ($path =~ /music\/(\w+)\/(cover|thumb)/ || 
-			$path  =~ /\/\w+_(X|\d+)x(X|\d+)
+			$path =~ m{^plugins/cache/icons} || 
+			$path =~ /\/\w+_(X|\d+)x(X|\d+)
 	                        (?:_([sSfFpc]))?        # resizeMode, given by a single character
 	                        (?:_[\da-fA-F]+)? 		# background color, optional
 				/x   # extend this to also include any image that gives resizing parameters
@@ -1290,7 +1319,7 @@ sub generateHTTPResponse {
 
 			}
 
-		} elsif ( $path =~ $rawFilesRegexp ) {
+		} elsif ( isRawDownload($path) ) {
 			# path is for download of known file outside http directory
 			my ($file, $ct);
 
@@ -2017,7 +2046,7 @@ sub sendStreamingResponse {
 	}
 	
 	if (!$streamingFile && $client && $client->isa("Slim::Player::Squeezebox") && 
-		(Slim::Player::Source::playmode($client) eq 'stop')) {
+		$client->isStopped()) {
 
 		closeStreamingSocket($httpClient);
 
@@ -2030,8 +2059,8 @@ sub sendStreamingResponse {
 		((Slim::Player::Source::playmode($client) ne 'play') || (Slim::Player::Playlist::count($client) == 0))) {
 
 		$silence = 1;
-	} 
-
+	}
+	
 	# if we don't have anything in our queue, then get something
 	if (!defined($segment)) {
 
@@ -2091,37 +2120,42 @@ sub sendStreamingResponse {
 				}
 
 			} else {
+				# bug 10534
+				if (!$client) {
+					closeStreamingSocket($httpClient);
+					$log->info("Abandoning orphened streaming connection");
+					return 0;
+				} 
 
-				$chunkRef = Slim::Player::Source::nextChunk($client, MAXCHUNKSIZE);
+				$chunkRef = $client->nextChunk(MAXCHUNKSIZE, sub {tryStreamingLater(shift, $httpClient);});
 			}
 
 			# otherwise, queue up the next chunk of sound
-			if ($chunkRef && length($$chunkRef)) {
-
-				if ( $log->is_info ) {
-					$log->info("(audio: " . length($$chunkRef) . " bytes)");
+			if ($chunkRef) {
+					
+				if (length($$chunkRef)) {
+	
+					if ( $log->is_info ) {
+						$log->info("(audio: " . length($$chunkRef) . " bytes)");
+					}
+	
+					my %segment = ( 
+						'data'   => $chunkRef,
+						'offset' => 0,
+						'length' => length($$chunkRef)
+					);
+	
+					unshift @{$outbuf{$httpClient}},\%segment;
+					
+				} else {
+					$log->info("Found an empty chunk on the queue - dropping the streaming connection.");
+					forgetClient($client);
 				}
-
-				my %segment = ( 
-					'data'   => $chunkRef,
-					'offset' => 0,
-					'length' => length($$chunkRef)
-				);
-
-				$lastSegLen{$httpClient} = length($$chunkRef);
-
-				unshift @{$outbuf{$httpClient}},\%segment;
 
 			} else {
 
-				# let's try again after RETRY_TIME
+				# let's try again after RETRY_TIME - not really necessary as we are selecting on source, ...
 				my $retry = RETRY_TIME;
-
-				if (defined $lastSegLen{$httpClient} && ($lastSegLen{$httpClient} <= PIPE_BUF_THRES) &&
-					$client->streamformat() ne 'mp3') {
-					# high bit rate on platform with potentially constrained pipe buffer - switch to fast retry
-					$retry = RETRY_TIME_FAST;
-				}
 
 				$log->is_info && $log->info("Nothing to stream, let's wait for $retry seconds...");
 				
@@ -2266,7 +2300,16 @@ sub tryStreamingLater {
 	my $client     = shift;
 	my $httpClient = shift;
 
-	Slim::Networking::Select::addWrite($httpClient, \&sendStreamingResponse, 1);
+	if ( $httpClient->connected() ) {
+		
+		# Bug 10085 - This might be a callback for an old connection  
+		# which we decided to close after establishing the timer, so
+		# only kill the timer if we were called for an active connection;
+		# otherwise we might kill the timer related to the next connection too.
+		Slim::Utils::Timers::killTimers($client, \&tryStreamingLater);
+		
+		Slim::Networking::Select::addWrite($httpClient, \&sendStreamingResponse, 1);
+	}
 }
 
 sub nonBreaking {
@@ -2279,6 +2322,8 @@ sub nonBreaking {
 
 sub newSkinTemplate {
 	my $skin = shift;
+
+	return if $::noweb;
 
 	my $baseSkin = baseSkin();
 
@@ -2420,6 +2465,7 @@ sub _generateContentFromFile {
 
 	my $skin = $params->{'skinOverride'} || $prefs->get('skin');
 
+	$params->{'thumbSize'} = $prefs->get('thumbSize') unless defined $params->{'thumbSize'};
 	$params->{'systemSkin'} = $skin;
 	$params->{'systemLanguage'} = $prefs->get('language');
 
@@ -2486,7 +2532,10 @@ sub _getFileContent {
 
 	my ($content, $template, $mtime, $inode, $size);
 
-	$path = fixHttpPath($skin, $path) || return;
+	if ( $path !~ $absolutePathRegex  ) {
+		# Fixup relative paths according to skin
+		$path = fixHttpPath($skin, $path) || return;
+	}
 
 	$log->is_info && $log->info("Reading http file for ($path)");
 	
@@ -2601,7 +2650,7 @@ sub buildStatusHeaders {
 			my $track = Slim::Schema->rs('Track')->objectForUrl(Slim::Player::Playlist::song($client));
 	
 			$headers{"x-playertrack"} = Slim::Player::Playlist::url($client); 
-			$headers{"x-playerindex"} = Slim::Player::Source::currentSongIndex($client) + 1;
+			$headers{"x-playerindex"} = Slim::Player::Source::streamingSongIndex($client) + 1;
 			$headers{"x-playertime"}  = Slim::Player::Source::songTime($client);
 
 			if (blessed($track) && $track->can('artist')) {
@@ -2683,7 +2732,6 @@ sub closeHTTPSocket {
 	delete($peeraddr{$httpClient});
 	delete($keepAlives{$httpClient});
 	delete($peerclient{$httpClient});
-	delete($lastSegLen{$httpClient}) if (defined $lastSegLen{$httpClient});
 	
 	# heads up to handlers, if any
 	for my $func (@closeHandlers) {
@@ -2701,7 +2749,7 @@ sub closeHTTPSocket {
 	# little more assertive about closing the socket. Windows-only
 	# for now, but could be considered for other platforms and
 	# non-streaming connections.
-	if (Slim::Utils::OSDetect::OS() eq 'win') {
+	if (Slim::Utils::OSDetect::isWindows()) {
 		$httpClient->shutdown(2);
 	}
 
@@ -2848,7 +2896,7 @@ sub addRawDownload {
 	};
 
 	my $str = join('|', keys %rawFiles);
-	$rawFilesRegexp = qr/$str/;
+	$rawFilesRegexp = $str ? qr/$str/ : undef;
 }
 
 
@@ -2858,7 +2906,13 @@ sub removeRawDownload {
    
 	delete $rawFiles{$regexp};
 	my $str = join('|', keys %rawFiles);
-	$rawFilesRegexp = qr/$str/;
+	$rawFilesRegexp = $str ? qr/$str/ : undef;
+}
+
+sub isRawDownload {
+	my $path = shift;
+	
+	return $path && $rawFilesRegexp && $path =~ $rawFilesRegexp
 }
 
 

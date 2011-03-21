@@ -1,6 +1,6 @@
 package Slim::Schema::Track;
 
-# $Id: Track.pm 23565 2008-10-14 19:20:50Z andy $
+# $Id: Track.pm 23566 2008-10-14 20:52:59Z andy $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -21,7 +21,7 @@ our @allColumns = (qw(
 	timestamp filesize disc remote audio audio_size audio_offset year secs
 	cover vbr_scale bitrate samplerate samplesize channels block_alignment endian
 	bpm tagversion drm musicmagic_mixable
-	musicbrainz_id lossless lyrics replay_gain replay_peak
+	musicbrainz_id lossless lyrics replay_gain replay_peak extid
 ));
 
 {

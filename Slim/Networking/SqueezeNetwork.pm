@@ -11,11 +11,11 @@ use Digest::SHA1 qw(sha1_base64);
 use JSON::XS::VersionOneAndTwo;
 use URI::Escape qw(uri_escape);
 
-if ( !main::SLIM_SERVICE ) {
+if ( !main::SLIM_SERVICE && !main::SCANNER ) {
 	# init() is never called on SN so these aren't used
- 	require Slim::Networking::SqueezeNetwork::Players;
- 	require Slim::Networking::SqueezeNetwork::PrefSync;
- 	require Slim::Networking::SqueezeNetwork::Stats;
+	require Slim::Networking::SqueezeNetwork::Players;
+	require Slim::Networking::SqueezeNetwork::PrefSync;
+	require Slim::Networking::SqueezeNetwork::Stats;
 }
 
 use Slim::Utils::IPDetect;
@@ -34,7 +34,7 @@ my $prefs = preferences('server');
 my $_Servers = {
 	sn      => 'www.squeezenetwork.com',
 	content => 'content.squeezenetwork.com',
-	update  => 'update.slimdevices.com',
+	update  => 'update.squeezenetwork.com',
 	test    => 'www.test.squeezenetwork.com',
 };
 
@@ -99,6 +99,15 @@ sub init {
 					ecb => \&_init_error,
 				);
 			}
+			else {
+				# Initialize radio menu for non-SN user
+				my $http = $class->new(
+					\&_gotRadio,
+					\&_gotRadioError,
+				);
+				
+				$http->get( $class->url('/api/v1/radio') );
+			}
 		},
 	);
 }
@@ -131,24 +140,33 @@ sub _init_done {
 			for my $plugin ( @{ $json->{disabled_plugins} } ) {
 				my $pclass = "Slim::Plugin::${plugin}::Plugin";
 				if ( $pclass->can('setMode') ) {
-					Slim::Buttons::Home::delSubMenu( $pclass->playerMenu, $pclass->displayName );
+					Slim::Buttons::Home::delSubMenu( $pclass->playerMenu, $pclass->getDisplayName );
 					$log->debug( "Removing $plugin from player UI, service not allowed in country" );
 				}
 				
-				if ( $pclass->can('webPages') ) {
-					Slim::Web::Pages->delPageLinks( $pclass->menu, $pclass->displayName );
+				if ( $pclass->can('webPages') && $pclass->can('menu') ) {
+					Slim::Web::Pages->delPageLinks( $pclass->menu, $pclass->getDisplayName );
 					$log->debug( "Removing $plugin from web UI, service not allowed in country" );
 				}
 			}
 		}
+		
+		$prefs->set( sn_disabled_plugins => $json->{disabled_plugins} || [] );
 	}
 	
 	if ( $json->{active_services} ) {
 		$prefs->set( sn_active_services => $json->{active_services} );
 	}
 	
+	# Init the Internet Radio menu
+	if ( $json->{radio_menu} ) {
+		if ( Slim::Utils::PluginManager->isEnabled('Slim::Plugin::InternetRadio::Plugin') ) {
+			Slim::Plugin::InternetRadio::Plugin->buildMenus( $json->{radio_menu} );
+		}
+	}
+	
 	# Init pref syncing
-	Slim::Networking::SqueezeNetwork::PrefSync->init();
+	Slim::Networking::SqueezeNetwork::PrefSync->init() if $prefs->get('sn_sync');
 	
 	# Init polling for list of SN-connected players
 	Slim::Networking::SqueezeNetwork::Players->init();
@@ -180,6 +198,28 @@ sub _init_error {
 			__PACKAGE__->init();
 		}
 	);
+}
+
+sub _gotRadio {
+	my $http = shift;
+	
+	my $json = eval { from_json( $http->content ) };
+	
+	if ( $@ ) {
+		$http->error( $@ );
+		return _gotRadioError($http);
+	}
+	
+	if ( Slim::Utils::PluginManager->isEnabled('Slim::Plugin::InternetRadio::Plugin') ) {
+		Slim::Plugin::InternetRadio::Plugin->buildMenus( $json->{radio_menu} );
+	}
+}
+
+sub _gotRadioError {
+	my $http  = shift;
+	my $error = $http->error;
+	
+	$log->error( "Unable to retrieve radio directory from SN: $error" );
 }
 
 # Stop all communication with SN, if the user removed their login info for example
@@ -297,15 +337,10 @@ sub getHeaders {
 	
 	my @headers;
 	
-	# Indicate our language preference
-	if ( !main::SLIM_SERVICE ) {
-		push @headers, 'Accept-Language', lc( $prefs->get('language') ) || 'en';
-	}
-	
 	# Add player ID data
 	if ( $client ) {
-		push @headers, 'X-Player-MAC', $client->masterOrSelf->id;
-		if ( my $uuid = $client->masterOrSelf->uuid ) {
+		push @headers, 'X-Player-MAC', $client->master()->id;
+		if ( my $uuid = $client->master()->uuid ) {
 			push @headers, 'X-Player-UUID', $uuid;
 		}
 		
@@ -313,6 +348,9 @@ sub getHeaders {
 		if ( $client->deviceid ) {
 			push @headers, 'X-Player-DeviceInfo', $client->deviceid . ':' . $client->revision;
 		}
+		
+		# Request JSON instead of XML, it is much faster to parse
+		push @headers, 'Accept', 'text/x-json, text/xml';
 		
 		if ( main::SLIM_SERVICE ) {
 			# Indicate player is on SN and provide real client IP
@@ -359,7 +397,7 @@ sub _createHTTPRequest {
 		unshift @args, 'Cookie', $cookie;
 	}
 	
-	if ( !$cookie && $url !~ m{api/v1/login} ) {
+	if ( !$cookie && $url !~ m{api/v1/(login|radio)|public|update} ) {
 		$log->info("Logging in to SqueezeNetwork to obtain session ID");
 	
 		# Login and get a session ID
@@ -445,8 +483,8 @@ sub hasAccount {
 	if ( main::SLIM_SERVICE ) {
 		my $type_pref = {
 			pandora  => 'pandora_username',
-			rhapsody => 'plugin_rhapsody_direct_username',
-			lastfm   => 'plugin_audioscrobbler_accounts',
+			rhapsody => 'plugin_rhapsody_direct_accounts',
+			lfm      => 'plugin_audioscrobbler_accounts',
 			slacker  => 'plugin_slacker_username',
 		};
 		
@@ -457,6 +495,22 @@ sub hasAccount {
 		
 		return $services->{$type};
 	}
+}
+
+sub isServiceEnabled {
+	my ( $class, $client, $service ) = @_;
+	
+	if ( main::SLIM_SERVICE ) {
+		return $client->playerData->userid->isAllowedService($service);
+	}
+	
+	my $disabled = $prefs->get('sn_disabled_plugins') || [];
+	
+	if ( grep { lc($_) eq lc($service) } @{$disabled} ) {
+		return 0;
+	}
+	
+	return 1;
 }
 
 1;

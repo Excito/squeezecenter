@@ -1,6 +1,6 @@
 package Slim::Schema::ResultSet::Playlist;
 
-# $Id: Playlist.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Playlist.pm 23324 2008-09-28 19:37:49Z mherger $
 
 use strict;
 use base qw(Slim::Schema::ResultSet::Base);
@@ -43,7 +43,7 @@ sub clearExternalPlaylists {
 	my $url  = shift;
 
 	# We can specify a url prefix to only delete certain types of external
-	# playlists - ie: only iTunes, or only MusicMagic.
+	# playlists - ie: only iTunes, or only MusicIP.
 	for my $track ($self->getPlaylists('external')) {
 
 		# XXX - exception should go here. Comming soon.
@@ -97,7 +97,7 @@ sub getPlaylists {
 	
 			if ($prefs->get($importer)) {
 	
-				push @playlists, $Slim::Music::Info::suffixes{sprintf('%splaylist:', $importer eq 'musicip' ? 'musicmagic' : $importer)};
+				push @playlists, $Slim::Music::Info::suffixes{sprintf('%splaylist:', $importer)};
 			}
 		}
 	}

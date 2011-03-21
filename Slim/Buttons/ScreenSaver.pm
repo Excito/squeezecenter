@@ -1,6 +1,6 @@
 package Slim::Buttons::ScreenSaver;
 
-# $Id: ScreenSaver.pm 22945 2008-08-28 20:46:25Z adrian $
+# $Id: ScreenSaver.pm 22964 2008-08-29 16:22:28Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

@@ -1,6 +1,6 @@
 # Main SqueezeCenter strings file
 
-# $Id: strings.txt 23518 2008-10-10 16:24:31Z andy $
+# $Id: strings.txt 24496 2009-01-05 10:10:54Z mherger $
 
 #
 # This tab-delimited file contains all the text strings used in SqueezeCenter
@@ -108,10 +108,10 @@ LOADING_SQUEEZECENTER
 	NO	Laster SqueezeCenter...
 	SV	Läser in SqueezeCenter ...
 
-BASE_SKIN
+EN_SKIN
 	CS	Světlý
 	DA	Let
-	DE	Leicht
+	DE	Light
 	EN	Light
 	ES	Ligera
 	FI	Valo
@@ -120,9 +120,9 @@ BASE_SKIN
 	IT	Chiaro
 	JA	ライト
 	NL	Licht
-	NO	Lett
+	NO	Lys
 	PT	Leve
-	SV	Lätt
+	SV	Enkel
 	ZH_CN	清淡
 
 DEFAULT_SKIN
@@ -140,6 +140,18 @@ DEFAULT_SKIN
 	NO	Standard
 	SV	Standard
 	ZH_CN	缺省
+
+SCREENREADER_SKIN
+	DA	Skærmaflæser
+	DE	Screen Reader
+	EN	Screen Reader
+	ES	Lector de pantalla
+	FI	Näytön lukija
+	FR	Lecteur d'écran
+	IT	Utilità lettura schermo
+	NL	Schermlezer
+	NO	Skjermleser
+	SV	Skärmläsare
 
 DEFAULT_MAP
 	CS	Standardní
@@ -359,20 +371,17 @@ LIBRARY_CONTAINS
 
 MUSIC
 	CS	Hudební archiv
-	DA	Musikmappe
-	DE	Musikordner
-	EN	Music Folder
-	ES	Carpeta de música
-	FI	Musiikkikansio
-	FR	Dossier de musique
-	HE	תיקיית מוסיקה
-	IT	Cartella Musica
-	JA	ミュージック フォルダ
-	NL	Muziekmap
-	NO	Musikkmappe
+	DA	Musik
+	DE	Musik
+	EN	Music
+	ES	Música
+	FI	Musiik
+	FR	Musique
+	IT	Musica
+	NL	Muziek
+	NO	Musikk
 	PT	Música
-	SV	Musikmapp
-	ZH_CN	音乐文件夹
+	SV	Musik
 
 SETTINGS
 	CS	Nastavení
@@ -498,6 +507,9 @@ MY_MUSIC
 	NO	Musikkbibliotek
 	SV	Musikbibliotek
 
+MUSIC_STORES
+	EN	Music Stores
+
 GAMES
 	CS	Hry
 	DA	Spil
@@ -587,7 +599,7 @@ NOW_PLAYING
 	FI	Nyt soi
 	FR	Lecture
 	HE	מושמע כעת
-	IT	Riproduzione in corso
+	IT	Riproduzione
 	JA	再生中
 	NL	Speelt nu
 	NO	Spilles nå
@@ -1196,6 +1208,42 @@ SLEEPING_IN
 	SV	Viloläge aktiveras om
 	ZH_CN	关机倒数进行中
 
+SLEEP_AT_END_OF_SONG
+	DA	Slumrefunktion når nummeret er slut
+	DE	Schlafmodus bei Titelende
+	EN	Sleep at end of song
+	ES	Suspender al final de canción
+	FI	Nuku kappaleen lopussa
+	FR	Veille à la fin du morceau
+	IT	Sospendi al termine del brano
+	NL	Sluimermodus aan einde van nummer
+	NO	Hvilemodus etter avsluttet sang
+	SV	Viloläge när låten har tagit slut
+
+SLEEPING_AT_END_OF_SONG
+	DA	Slumrefunktion når nummeret er slut
+	DE	Schlafmodus bei Titelende
+	EN	Sleeping at end of song
+	ES	Suspensión al final de canción
+	FI	Unessa kappaleen lopussa
+	FR	Veille à la fin du morceau
+	IT	Sospensione al termine del brano
+	NL	Sluimermodus aan einde van nummer
+	NO	Går i hvilemodus etter avsluttet sang
+	SV	Viloläge när låten har tagit slut
+
+NOTHING_CURRENTLY_PLAYING
+	DA	Der afspilles ikke noget i øjeblikket
+	DE	Keine Wiedergabe
+	EN	Nothing currently playing
+	ES	No se está reproduciendo nada
+	FI	Tällä hetkellä ei soi mikään
+	FR	Aucun morceau en cours de lecture
+	IT	Nessun elemento in corso di riproduzione
+	NL	Er wordt momenteel niets afgespeeld
+	NO	Ingenting spilles for øyeblikket
+	SV	Just nu spelas inget upp
+
 END_OF_SONG
 	DA	slut på nummeret
 	DE	Titelende
@@ -1548,6 +1596,18 @@ ALARM_ALARM_REPEAT
 	NL	Weksignaal herhalen
 	NO	Gjenta vekking
 	SV	Upprepa alarm
+
+ALARM_ALARM_ONETIME
+	DA	Engangsvækning
+	DE	Einmaliger Alarm
+	EN	One Time Alarm
+	ES	Alarma única
+	FI	Kertahälytys
+	FR	Alarme ponctuelle
+	IT	Sveglia non ripetuta
+	NL	Eén alarm
+	NO	Engangsvekking
+	SV	Engångsalarm
 
 ALARM_ALARM_REPEAT_DESC
 	DA	Indstillingen bruges til at angive om dette vækkeur skal ringe mere end én gang. Hvis du vælger Nej, bliver det automatisk slået fra når det har ringet. derefter vil vækkeuret ikke ringe igen før du slår det til igen.
@@ -2212,6 +2272,42 @@ WELCOME_TO_BOOM
 	NO	Velkommen til Squeezebox
 	SV	Välkommen till Squeezebox!
 
+WELCOME_TO_SQUEEZEPLAY
+	DA	Velkommen til SqueezePlay
+	DE	Willkommen bei SqueezePlay!
+	EN	Welcome to SqueezePlay
+	ES	Bienvenido a SqueezePlay
+	FI	Tervetuloa SqueezePlayhin
+	FR	Bienvenue dans SqueezePlay
+	IT	Benvenuti in SqueezePlay
+	NL	Welkom bij SqueezePlay
+	NO	Velkommen til SqueezePlay
+	SV	Välkommen till SqueezePlay
+
+WELCOME_TO_CONTROLLER
+	DA	Velkommen til Controller
+	DE	Willkommen bei Controller!
+	EN	Welcome to Controller
+	ES	Bienvenido a Controller
+	FI	Tervetuloa Controllerhin
+	FR	Bienvenue dans Controller
+	IT	Benvenuti in Controller
+	NL	Welkom bij Controller
+	NO	Velkommen til Controller
+	SV	Välkommen till Controller
+
+LOGIN
+	DA	Log på
+	DE	Anmelden
+	EN	Sign In
+	ES	Iniciar sesión
+	FI	Kirjaudu sisään
+	FR	Se connecter
+	IT	Accedi
+	NL	Aanmelden
+	NO	Logg på
+	SV	Logga in
+
 FREE_YOUR_MUSIC
 	CS	Svobodu Tvojí muzice
 	DA	Lyt til din musik!
@@ -2344,6 +2440,31 @@ CHECKING_STREAM
 	NO	Kontrollerer datastrøm...
 	SV	Kontrollerar ström ...
 	ZH_CN	检查频流
+
+GETTING_STREAM_INFO
+	DA	Henter oplysninger om stream...
+	DE	Streaminfos werden geladen...
+	EN	Getting stream info...
+	ES	Obteniendo información de secuencia...
+	FI	Haetaan virran tietoja...
+	FR	Obtention des informations de flux...
+	HE	מקבל פרטי זרימה...
+	IT	Recupero info su stream...
+	NL	Stroominfo wordt opgehaald...
+	NO	Henter informasjon om strøm ...
+	SV	Hämtar signalinformation ...
+
+GETTING_TRACK_DETAILS
+	DA	Henter detaljer om nummer...
+	DE	Titelinfos werden geladen...
+	EN	Fetching track details...
+	ES	Obteniendo detalles de pista...
+	FI	Noudetaan raidan tietoja...
+	FR	Récupération des détails du morceau...
+	IT	Recupero informazioni sul brano in corso...
+	NL	Nummerdetails worden opgehaald...
+	NO	Henter spordetaljer ...
+	SV	Hämtar spårinformation ...
 
 CONNECTING_FOR
 	CS	Připojuji ke hraní:
@@ -3340,8 +3461,8 @@ SETUP_GROUP_PLUGINS_DESC
 
 SETUP_GROUP_PLUGINS_NEEDS_RESTART
 	DA	Programmet skal genstartes før ændringerne træder i kraft
-	DE	Änderung tritt nach Neustart in Kraft
-	EN	Change requires restart to take effect
+	DE	Änderung tritt nach Neustart in Kraft.
+	EN	Change requires restart to take effect.
 	ES	Para que el cambio entre en vigor, debe reiniciar
 	FI	Muutoksen voimaantulo edellyttää uudelleenkäynnistystä
 	FR	La modification requiert un redémarrage pour être appliquée.
@@ -3786,16 +3907,16 @@ SETUP_IDLEBRIGHTNESS
 	SV	Ljusstyrka i viloläge
 
 SETUP_POWERONBRIGHTNESS_ABBR
-	DA	Mens den er tændt
+	DA	Mens den er aktiv
 	DE	Wenn aktiv
-	EN	While On
-	ES	Mientras está encendido
-	FI	Laitteen ollessa päällä
-	FR	En état activé
+	EN	While Active
+	ES	Mientras está activo
+	FI	Aktiivisena
+	FR	En étant activé
 	IT	Se attivato
-	NL	Wanneer aan
-	NO	Når på
-	SV	I påslaget läge
+	NL	Wanneer actief
+	NO	Når aktiv
+	SV	I aktivt läge
 
 SETUP_POWEROFFBRIGHTNESS_ABBR
 	DA	Mens den er slukket
@@ -3810,16 +3931,88 @@ SETUP_POWEROFFBRIGHTNESS_ABBR
 	SV	I avstängt läge
 
 SETUP_IDLEBRIGHTNESS_ABBR
-	DA	Lysstyrke når afspilleren ikke bruges
-	DE	Helligkeit im Standbymodus
-	EN	Idle Brightness
-	ES	Brillo en inactividad
-	FI	Kirkkaus käyttämättömänä
-	FR	Luminosité (inactif)
-	IT	Luminosità quando inattivo
-	NL	Helderheid in ruststand
-	NO	Lysstyrke i hvilemodus
-	SV	Ljusstyrka i viloläge
+	DA	Ledig
+	DE	Inaktivität
+	EN	Idle
+	ES	Inactivo
+	FI	Vapaa
+	FR	Inactif
+	IT	Inattivo
+	NL	Inactief
+	NO	Inaktiv
+	SV	Inaktiv
+
+SETUP_MINAUTOBRIGHTNESS
+	DA	Minimal lysstyrke (automatisk)
+	DE	Minimale Helligkeit (automatisch)
+	EN	Minimal Brightness (Automatic)
+	ES	Brillo mínimo (automático)
+	FI	Vähimmäiskirkkaus (automaattinen)
+	FR	Luminosité minimale (automatique)
+	IT	Luminosità minima (automatica)
+	NL	Minimale helderheid (automatisch)
+	NO	Minimal lysstyrke (Automatisk)
+	SV	Minimal ljusstyrka (automatiskt)
+
+SETUP_MINAUTOBRIGHTNESS_ABBR
+	DA	Mindste lysstyrke (auto)
+	DE	Min. Helligkeit (Autom.)
+	EN	Min. Brightness (Auto)
+	ES	Brillo mínimo (automático)
+	FI	Minimikirkkaus (autom.)
+	FR	Luminosité min. (auto)
+	IT	Luminosità min. (auto)
+	NL	Min. helderheid (autom.)
+	NO	Min. lysstyrke (Auto)
+	SV	Min. ljusstyrka (auto)
+
+SETUP_MINAUTOBRIGHTNESS_DESC
+	DA	Juster minimumsniveauet i forbindelse med den automatiske regulering af lysstyrken.
+	DE	Passt die minimale Helligkeitsstufe für die automatischen Helligkeitseinstellungen an.
+	EN	Adjust the minimal brightness level for automatic brightness settings.
+	ES	Ajustar el nivel mínimo de brillo para la configuración de brillo automático.
+	FI	Säädä minimikirkkaustasoa automaattisia kirkkausasetuksia varten.
+	FR	Ajustez le niveau de luminosité minimal pour les paramètres de luminosité automatique.
+	IT	Regolare il livello minimo di luminosità per le impostazioni della luminosità automatica.
+	NL	Pas het minimale helderheidsniveau voor automatische helderheidsinstellingen aan.
+	NO	Juster minstenivå for lysstyrke i innstillinger for automatisk lysstyrke.
+	SV	Justera den minsta möjliga ljusnivån för den automatiska inställningen av ljusstyrkan.
+
+SETUP_SENSAUTOBRIGHTNESS
+	DA	Følsomhed for lysstyrke (automatisk)
+	DE	Empfindlichkeit der Helligkeit (automatisch)
+	EN	Brightness Sensitivity (Automatic)
+	ES	Sensibilidad de brillo (automático)
+	FI	Kirkkauden herkkyys (automaattinen)
+	FR	Sensibilité de la luminosité (automatique)
+	IT	Sensibilità luminosità (automatica)
+	NL	Helderheidsgevoeligheid (automatisch)
+	NO	Følsomhet for lysstyrke (Automatisk)
+	SV	Känslighet för ljusstyrka (automatiskt)
+
+SETUP_SENSAUTOBRIGHTNESS_ABBR
+	DA	Lysstyrkesensor (automatisk)
+	DE	Empf. d. Helligkeit (Auto)
+	EN	Sens. Brightness (Auto)
+	ES	Sens. brillo (automático)
+	FI	Kirkkaussensorin herkkyys (autom.)
+	FR	Sensibilité de la luminosité (auto)
+	IT	Sens. luminosità (auto)
+	NL	Gev. helderheid (autom.)
+	NO	Føls. lysstyrke (Auto)
+	SV	Käns. för ljusstyrkan (auto)
+
+SETUP_SENSAUTOBRIGHTNESS_DESC
+	DA	Juster følsomheden for den automatiske lysstyrkeregulering.
+	DE	Passt die Empfindlichkeit an automatische Helligkeitseinstellungen an
+	EN	Adjust the sensitivity for automatic brightness settings.
+	ES	Ajustar la sensibilidad para configuración de brillo automático.
+	FI	Säädä automaattisten kirkkausasetuksien herkkyyttä.
+	FR	Ajustez la sensibilité pour les paramètres de luminosité automatique.
+	IT	Regolare la sensibilità delle impostazioni di luminosità automatica.
+	NL	Pas de gevoeligheid voor automatische helderheidsinstellingen aan.
+	NO	Juster følsomheten for automatisk lysstyrke.
+	SV	Ändra känsligheten för automatisk ljusstyrka.
 
 SETUP_ALARM
 	CS	Budík
@@ -4171,7 +4364,7 @@ SETUP_DIGITALVOLUMECONTROL_DESC
 	IT	Se si utilizza il controllo del volume dell'amplificatore per regolare l'audio oppure si desidera ottenere un passthrough digitale perfetto, è possibile mantenere il controllo del volume fisso su 100%. Questa impostazione ha effetto sia sul volume digitale sia su quello analogico.
 	NL	Je kunt de volumeregeling op 100% vastzetten als je de volumeregeling op je versterker gebruikt voor geluidssterkte of als perfecte digitale doorvoer is vereist. Dit is zowel op digitaal als analoog volume van invloed.
 	NO	Du kan fastsette volumet til 100 % hvis du bruker volumkontrollen på forsterkeren til å styre lydnivået, eller hvis du trenger perfekt digital gjennomgang. Dette påvirker både digitalt og analogt volum.
-	SV	Du kan ställa in volymen på 100 % om du använder volymkontrollen på förstärkaren för att justera ljudnivån eller om du vill ha perfekt digital genomströmning. Detta påverkar både digital och analog volym.
+	SV	Du kan ställa in volymen på 100% om du använder volymkontrollen på förstärkaren för att justera ljudnivån eller om du vill ha perfekt digital genomströmning. Detta påverkar både digital och analog volym.
 
 SETUP_PREAMPVOLUMECONTROL
 	DA	Lydstyrkekontrol for forforstærker
@@ -5148,6 +5341,18 @@ FOLDER
 	SV	Mapp
 	ZH_CN	文件夹
 
+FOLDERS
+	DA	Mapper
+	DE	Ordner
+	EN	Folders
+	ES	Carpetas
+	FI	Kansiot
+	FR	Dossiers
+	IT	Cartelle
+	NL	Mappen
+	NO	Mapper
+	SV	Mappar
+
 YES
 	DA	Ja
 	DE	Ja
@@ -5974,19 +6179,19 @@ SETUP_COVERART
 
 SETUP_COVERART_DESC
 	CS	Obrázky s náhledy obalů alb, pokud jsou dostupné, jsou zobrazovány na stránce s informacemi o albu, nebo obsažené skladbě. Tyto náhledy jsou uloženy v ID3 tagu pro každou skladbu, nebo je nastaven soubor ve stejném adresáři, jako jsou soubory skladeb. Soubory obrázku se mohou jmenovat "cover.jpg", "folder.jpg", "album.jpg", nebo "thumb.jpg". Zde můžete určita další dodatečné názvy souborů, které budou brány jako obrázky náhledů alb. Můžete specifikovat rozdílné názvy pro náhledy a pro zobrazení v plné velikosti. Prefix pro tuto volbu je %, za ním následuje volba stejná jako jsou volby pro formát názvu skladby (např. %ARTIST - ALBUM  will look for Artist - Album.jpg to fit the artist and album information found.
-	DA	Når der er fundet billeder af albumcovere, vises de når du ser på oplysningerne om et album eller et nummer. Billederne af albumcovere findes i ID3-mærker for enkeltnumre eller de kan være placeret i den samme mappe som lydfilerne. Som standard vil billeder med navne som cover.jpg, folder.jpg, album.jpg og thumb.jpg blive brugt. Du kan angive et andet filnavn som skal bruges til billeder af albumcovere. Du kan angive forskellige filnavne for miniaturer og billeder i fuld størrelse. Hvis en streng består af de samme elementer som bruges i titelformaterne, skal du bruge %-tegnet som præfiks (fx vil %ARTIST - ALBUM søge efter filer med navneformatet Kunstner – Album.jpg som svarer til de fundne oplysninger om kunstneren og albummet.
+	DA	Der vises billeder af albumcovere når du vælger at se oplysninger om et album eller nummer. Coverbillederne hentes fra ID3-koderne i de enkelte numre eller fra mappen hvor filerne er placeret. Som standard indlæses følgende grafikfiler hvis der ikke er et billede i ID3-koden: "cover.jpg", "folder.jpg", "album.jpg" eller "thumb.jpg". Du kan angive flere filnavne der skal anvendes. Du kan endvidere angive forskellige filnavne for billeder i fuld størrelse og mindre størrelse.
 	DE	Plattenhüllen werden (falls verfügbar) beim Anzeigen eines Albums oder Titelinformationen angezeigt. Diese Bilder sind in den ID3-Tags der Titel bzw. demselben Ordner wie die Musikdateien enthalten. Standardmäßig werden Dateinamen wie "cover.jpg", "album.jpg" oder "thumb.jpg" verwendet. Sie können einen weiteren Dateinamen für Plattenhüllen angeben. Sie können unterschiedliche Dateinamen für Miniaturen und Vollbilder angeben. Stellen Sie ein % voran. Der Name kann aus denselben Elementen bestehen, die für Titelformate zulässig sind (z.B. %ARTIST - ALBUM sucht nach 'Interpret - Album.jpg', um die passende Datei zu finden.
 	EN	Images of album artwork, when available, are displayed when viewing an album or song information.  Artwork images are found in the ID3 tags for individual songs or can reside in the same folder as song files.  By default, images named "cover.jpg", "folder.jpg", "album.jpg", or "thumb.jpg" are used.  You can specify an additional file name to use for album art images. You can specify different file names for thumbnail or full size images. Prefix the option with % and you can follow it with any string made up of the same elements available for Title Formats (eg %ARTIST - ALBUM, will look for Artist - Album.jpg to fit the artist and album information found.
-	ES	Cuando están disponibles, las imágenes de carátula de álbum se muestran al ver la información de un álbum o de una canción. Las imágenes de carátula se encuentran en las etiquetas ID3 para canciones individuales o pueden residir en la misma carpeta que los archivos de canciones. De forma predeterminada, se usan las imágenes llamadas "cover.jpg", "folder.jpg", "album.jpg" o "thumb.jpg". Se puede especificar un nombre de archivo adicional para usarlo para imágenes de carátula de álbum. Se pueden especificar nombres de archivo diferentes para las imágenes en miniatura o a tamaño completo. Coloque el prefijo % a la opción y podrá seguirlo de cualquier cadena con los mismos elementos disponibles para formatos de título (por ejemplo, %ARTIST - ALBUM, buscará Artista - Álbum.jpg que coincida con la información de artista y álbum encontrada.
-	FI	Levyjen kansikuvat - kun niitä on saatavilla - näytetään levyn tai kappaleen tietojen kanssa.  Kansikuvat ovat kappaleiden ID3-tunnisteissa tai ne saattavat olla samassa kansiossa kuin musiikkitiedostot.  Oletuksena käytetään kuvatiedostoja nimeltä "cover.jpg", "folder.jpg", "album.jpg" tai "thumb.jpg".  Voit määrittää erikseen tiedostonimen, jota voit käyttää levyjen kansikuvissa. Voit määrittää eri tiedostonimet pienoiskuville ja täysikokoisille kuville. Lisää etuliitteeksi %, niin voit lisätä sen perään minkä tahansa samoista elementeistä koostuvan komentosarjan, jota voidaan käyttää kappaleiden nimien muodoissa (esim. %ARTIST - ALBUM etsii tiedostonimiä Artist - Album.jpg, jotka sopivat löydettyihin artisti- ja levytietoihin).
-	FR	Si elle existe, l'image de la pochette du disque est affichée en regard des informations d'un album ou d'un morceau. Les images se trouvent dans un repère ID3 pour les morceaux individuels ou dans le même dossier que les fichiers. Le serveur recherche par défaut les noms de fichiers suivants: "cover.jpg", "folder.jpg", "album.jpg" ou "thumb.jpg. Vous pouvez spécifier des noms de fichiers supplémentaires pour les images de pochettes et spécifier différents noms de fichiers pour les vignettes ou les images. Si vous ajoutez % en préfixe, vous pouvez faire suivre ce signe d'une chaîne créée à partir des mêmes éléments disponibles pour les formats des titres. La chaîne %ARTIST - ALBUM permet par exemple de rechercher une image Artiste - Album.jpg pour correspondre aux informations d'artiste et d'album trouvées.
+	ES	Cuando están disponibles, las imágenes de carátula de álbum se muestran al ver la información de un álbum o de una canción. Las imágenes de carátula se encuentran en las etiquetas ID3 para canciones individuales o pueden residir en la misma carpeta que los archivos de canciones. De forma predeterminada, se usan las imágenes llamadas "cover.jpg", "folder.jpg", "album.jpg" o "thumb.jpg". Se puede especificar un nombre de archivo adicional para usarlo para imágenes de carátula de álbum. Se pueden especificar nombres de archivo diferentes para las imágenes en miniatura o a tamaño completo. Coloque el prefijo % a la opción y podrá seguirlo de cualquier cadena con los mismos elementos disponibles para formatos de título (por ejemplo, %ARTIST - ALBUM, buscará Artist - Album.jpg que coincida con la información de artista y álbum encontrada.
+	FI	Kansikuvat näytetään (jos niitä on), kun albumin tai kappaleen tietoja katsellaan. Kansikuvat haetaan joko ID3-otsikoista tai samassa hakemistossa olevista kuvatiedostoista. Oletusarvoisesti palvelin etsii cover.jpg-, folder.jpg-, album.jpg- tai thumb.jpg-tyypin kuvatiedostoja. Voit myös määritellä muita tiedostonimiä kansikuville. Jos lisäät option eteen %-merkin, voit käyttää mitä tahansa otsikkokenttiä. Esim. %ARTIST - ALBUM, etsii tiedostoja, joissa nimi on muodossa Artist - album.jpg.
+	FR	Si elle existe, l'image de la pochette du disque est affichée en regard des informations d'un album ou d'un morceau. Les images se trouvent dans un repère ID3 pour les morceaux individuels ou dans le même dossier que les fichiers. Le serveur recherche par défaut les noms de fichiers suivants: "cover.jpg", "folder.jpg", "album.jpg" ou "thumb.jpg". Vous pouvez spécifier des noms de fichiers supplémentaires pour les images de pochettes et spécifier différents noms de fichiers pour les vignettes ou les images. Si vous ajoutez % en préfixe, vous pouvez faire suivre ce signe d'une chaîne créée à partir des mêmes éléments disponibles pour les formats des titres. La chaîne %ARTIST - ALBUM permet par exemple de rechercher une image Artiste - Album.jpg pour correspondre aux informations d'artiste et d'album trouvées.
 	HE	תמונות של עטיפות אלבומים, כאשר זמינות, מופיעות בעת הצגה של פרטי אלבום או שיר. תמונות של עטיפות נמצאות בתגים מסוג ID3 עבור שירים נפרדים, או מאוחסנות באותה תיקייה עם קובצי השירים. כברירת מחדל, נעשה שימוש בקבצים בשם "cover.jpg"‏, "albumartsmall.jpg"‏, "folder.jpg"‏, "album.jpg" או "thumb.jpg". באפשרותך לציין שם קובץ נוסף שישמש עבור תמונות של עטיפות אלבומים. באפשרותך לציין שמות קובץ שונים עבור תמונות ממוזערות או תמונות בגודל מלא. הוסף את הקידומת % לאפשרות וציין לאחר מכן כל מחרוזת המורכבת מאותם רכיבים הזמינים עבור תבניות שם (לדוגמה, ‎%ARTIST - ALBUM יחפש את Artist - Album.jpg בהתאם למידע המבצע והאלבום שנמצא.)
-	IT	Le immagini delle copertine, se disponibili, sono visualizzate insieme all'album o alle informazioni sul brano. Le copertine possono essere inserite nei tag ID3 di ogni singolo brano o risiedere nella stessa cartella dei file dei brani. Per impostazione predefinita vengono utilizzate immagini denominate cover.jpg, albumartsmall.jpg, folder.jpg, album.jpg o thumb.jpg. È possibile specificare un nome di file aggiuntivo da utilizzare per le copertine e nomi diversi per le miniature e le immagini intere. Anteporre all'opzione il carattere %, a cui può far seguito qualsiasi stringa composta dagli stessi elementi disponibili per il formato titolo. Ad esempio, con %ARTIST - ALBUM viene cercato il file Artista - Album.jpg che corrisponde alle informazioni sull'artista e l'album trovati.
+	IT	Le immagini delle copertine, se disponibili, sono visualizzate insieme alle informazioni su un album o un brano. Le copertine possono essere inserite nei tag ID3 di ogni singolo brano o risiedere nella stessa cartella dei file dei brani. Per impostazione predefinita vengono utilizzate immagini denominate cover.jpg, folder.jpg, album.jpg o thumb.jpg. È possibile specificare un nome di file aggiuntivo da utilizzare per le copertine e nomi diversi per le miniature e le immagini intere. Anteporre all'opzione il carattere %, a cui può far seguito qualsiasi stringa composta dagli stessi elementi disponibili per il formato titolo. Ad esempio, con %ARTIST - ALBUM viene cercato il file Artista - Album.jpg corrispondente alle informazioni sull'artista e sull'album trovati.
 	JA	アルバムのアートワークがある場合には、アルバム/曲情報を見るときに表示されます。アートワーク イメージはそれぞれの曲のID3タグか、曲のファイルと同じフォルダーに入っています。工場出荷設定では"cover.jpg", "folder.jpg", "album.jpg", "thumb.jpg" が使われています。これらアルバム アートワークのファイル名は変更することができます。例えば%ARTIST - ALBUM, は Artist - Album.jpg を探します。
-	NL	Als er een hoesafbeelding beschikbaar is, wordt deze getoond wanneer je een album of informatie over een liedje bekijkt. Deze afbeeldingen staan in de ID3-tags voor afzonderlijke liedjes of in dezelfde map als muziekbestanden. Standaard worden afbeeldingen met de volgende namen gebruikt: folder.jpg, album.jpg of thumb.jpg. Je kunt een aanvullende bestandsnaam opgeven voor hoesafbeeldingen. Je kunt andere bestandsnamen opgeven voor miniatuurafbeeldingen of afbeeldingen op volledig formaat. Wanneer je het voorvoegsel % voor de optie zet, kun je er een willekeurige string op laten volgen die gemaakt is van dezelfde elementen als titelformaten (bijv. %ARTIST - ALBUM zoekt naar 'Artist - Album.jpg' om artiest- en albuminformatie te vinden.)
+	NL	Als er een hoesafbeelding beschikbaar is, wordt deze getoond wanneer je informatie over een album of liedje bekijkt. Deze afbeeldingen staan in de ID3-tags voor afzonderlijke liedjes of in dezelfde map als muziekbestanden. Standaard worden afbeeldingen met de volgende namen gebruikt: folder.jpg, album.jpg of thumb.jpg. Je kunt een aanvullende bestandsnaam opgeven voor hoesafbeeldingen. Je kunt andere bestandsnamen opgeven voor miniatuurafbeeldingen of afbeeldingen op volledig formaat. Wanneer je het voorvoegsel % voor de optie zet, kun je er een willekeurige string op laten volgen die uit dezelfde elementen als titelformaten bestaat (bijv. %ARTIST - ALBUM zoekt naar 'Artist - Album.jpg' om artiest- en albuminformatie te vinden).
 	NO	Hvis albumomslag er tilgjengelig, kan dette vises når du ser informasjon om et album eller en sang. Bildefiler med albumomslag finnes i ID3-etikettene for enkeltsanger, eller de kan ligge i samme mappe som sangfilene. Bildefiler med navn som «cover.jpg», «folder.jpg», «album.jpg» eller «thumb.jpg» brukes som standard. Du kan angi et annet mulig navn på bildefilene for albumomslag, og også angi egne navn på filer med miniatyrversjoner av bildene. Hvis du skriver % før alternativet, kan du legge inn enhver streng med de samme elementene som er tilgjengelige for tittelformater etter det. (Eksempel: %ARTIST - ALBUM gjør at det søkes etter en fil som heter Artist – Album.jpg ut fra informasjon om artist og album som er å finne.
 	PT	As imagens da capa do álbum, quando disponíveis, são mostradas na visualização da informação do álbum ou da música. As capas dos álbuns poderão estar integradas nas "tags ID3" do próprio ficheiro, ou em ficheiros separados na pasta dos ficheiros de música. Por omissão, serão usados os nomes de ficheiros "cover.jpg", "folder.jpg", "album.jpg" ou "thumb.jpg". Pode especificar nomes de ficheiros adicionais para a imagem da capa do álbum. Pode especificar nomes diferentes para a miniatura ou para a imagem completa.
-	SV	Omslagsbilder för album, när sådana finns tillgängliga, visas när du öppnar album- eller låtinformation.  Omslagsbilderna finns i ID3-taggarna för enskilda låtar eller i samma mapp som låtfilerna.  Som standard används bilder med namnen cover.jpg, folder.jpg, album.jpg, och thumb.jpg.  Du ange fler filnamn för albumomslagsbilder. Det går att ange olika filnamn för miniatyrer och bilder i full storlek. Om du börjar med prefixet % kan du fortsätta med vilken kombination som helst av samma element som är tillgängliga för Titelformat. %ARTIST – ALBUM genererar t.ex. sökningar efter artist – album.jpg med den artist- och albuminformation som hittats.
+	SV	Omslagsbilder för album, visas (om de finns tillgängliga) när du öppnar album- eller låtinformationen. Omslagsbilderna finns i ID3-taggarna för enskilda låtar eller i samma mapp som låtfilerna. Som standard används bilder med namnen cover.jpg, folder.jpg, album.jpg, och thumb.jpg. Du ange fler filnamn för albumomslagsbilder. Det går att ange olika filnamn för miniatyrer och bilder i full storlek. Om du börjar med prefixet % kan du fortsätta med vilken kombination som helst av samma element som är tillgängliga för Titelformat. %ARTIST – ALBUM genererar t.ex. sökningar efter artist – album.jpg med den artist- och albuminformation som hittats.
 	ZH_CN	若专辑的封面图象存在，观看专辑或歌曲信息时图象将一同显示。图象除了可内藏于个别歌曲文件的ID3标签内，也可以放置在同歌曲文件一起的文件夹内。根据缺省规定，图象名为＇cover.jpg＇、＇albumartsmall.jpg＇、＇folder.jpg＇、＇album.jpg＇、或＇thumb.jpg＇将被接受使用。您可以指定额外的图像文件名。您也可以为指图或大型图象指定不同的文件名字。如果以%为前缀，您可以利用同标题格式一样的元素（例如%ARTIST - ALBUM, 将寻找匹配的ARTIST - Album.jpg。
 
 SETUP_COVERART_OK
@@ -6401,66 +6606,6 @@ SETUP_IDLESAVER_ABBR
 	NL	Wanneer gestopt
 	NO	Ved stopp
 	SV	I stoppat läge
-
-SETUP_SCREENSAVER_USE
-	DA	Anvend som pauseskærm
-	DE	Als Bildschirmschoner verwenden
-	EN	Use as current screensaver
-	ES	Usar como protector de pantalla actual
-	FI	Käytä näytönsäästäjänä
-	FR	Utiliser comme Ecran de veille en cours
-	HE	שימוש בשומר המסך הנוכחי
-	IT	Usa come screen saver corrente
-	NL	Als huidige schermbeveiliger gebruiken
-	NO	Bruk som aktiv skjermsparer
-	SV	Använd som skärmsläckare
-	ZH_CN	设为当前的有效屏幕保护程序
-
-SETUP_SCREENSAVER_CHOOSE
-	CS	Vyberte spořič pro dobu, kdy přehrávač hraje:
-	DA	Vælg den pauseskærm der skal bruges når der spilles noget:
-	DE	Wählen Sie einen Bildschirmschoner:
-	EN	Choose a screensaver to use when playing:
-	ES	Elegir un protector de pantalla para usar al reproducir:
-	FI	Valitse näytönsäästäjä, jota käytetään toiston aikana:
-	FR	Ecran de veille lorsque la platine est en lecture:
-	HE	בחירת שומר מסך לשימוש כאשר מושמעת מוסיקה:
-	IT	Scegliere uno screen saver da usare durante la riproduzione:
-	JA	お好きなスクリーンセーバーを選んでください:
-	NL	Te gebruiken schermbeveiliger wanneer muzieksysteem afspeelt:
-	NO	Velg en skjermsparer som skal brukes under avspilling:
-	SV	Välj skärmsläckare för uppspelning:
-	ZH_CN	请选择一个在播放时应用的屏幕保护程序：
-
-SETUP_IDLESAVER_CHOOSE
-	CS	Vyberte spořič pro dobu, kdy přehrávač nehraje.
-	DA	Vælg den pauseskærm der skal bruges når der ikke spilles noget:
-	DE	Wählen Sie den Bildschirmschoner, der bei Inaktivität angezeigt werden soll:
-	EN	Choose a screensaver to use when not playing:
-	ES	Elegir un protector de pantalla para usar cuando no se esté reproduciendo:
-	FI	Valitse näytönsäästäjä, jota käytetään, kun soitin ei toista:
-	FR	Ecran de veille lorsque la platine est arrêtée:
-	HE	בחירת שומר מסך לשימוש כאשר לא מושמעת מוסיקה:
-	IT	Scegli screen saver da utilizzare quando viene interrotta la riproduzione:
-	NL	Te gebruiken schermbeveiliger wanneer muzieksysteem niets afspeelt:
-	NO	Velg en skjermsparer for når du ikke spiller av noe:
-	SV	Välj skärmsläckare för stoppat läge:
-	ZH_CN	请选择一个在非播放时应用的屏幕保护程序：
-
-SETUP_OFFSAVER_CHOOSE
-	CS	Vyberte spořič pro dobu, kdy bude přehrávač vypnut:
-	DA	Vælg den pauseskærm der bruges når afspilleren er slukket:
-	DE	Wählen Sie den Bildschirmschoner, der in ausgeschaltetem Zustand angezeigt wird:
-	EN	Choose a screensaver to use when powered off:
-	ES	Elegir un protector de pantalla para usar cuando está apagado:
-	FI	Valitse näytönsäästäjä:
-	FR	Ecran de veille lorsque la platine est éteinte:
-	HE	בחירת שומר מסך לשימוש במצב כבוי:
-	IT	Scegli screen saver da utilizzare quando il dispositivo è spento:
-	NL	Te gebruiken schermbeveiliger wanneer uit:
-	NO	Velg en skjermsparer til bruk når spilleren er avskrudd:
-	SV	Välj vilken skärmsläckare som ska användas när strömmen slås av:
-	ZH_CN	请选择一个在关机时应用的屏幕保护程序：
 
 SETUP_SCREENSAVER_DESC
 	CS	Můžete zvolit spořič k zobrazení informací v době kdy přehrávač neovládáte. Můžete nastavit dobu neaktivity, po které se spořič zobrazí. Můžete si také vybrat různé spořiče, pro různé stavy přehrávače: hraje, je zastaven, vypnut apod.
@@ -7606,7 +7751,7 @@ SETUP_IPFILTER_DESC
 	NL	Met behulp van deze optie kunnen inkomende CLI- en HTTP-aanvragen op IP-bronadres geblokkeerd worden.
 	NO	Dette valget gir deg muligheten til å blokkere for inngående CLI- og HTTP-forbindelser basert på ip-adresse.
 	PT	Esta opção permite bloquear ligações remotas à porta HTTP ou à da linha de comando, baseado no IP de origem.
-	SV	Med det här alternativet kan du blockera inkommande CLI- och HTTP-begäranden baserat på källans IP-adress.
+	SV	Med det här alternativet kan du blockera inkommande förfrågningar (från kommandoraden eller http) baserat på källans IP-adress.
 	ZH_CN	您可以通过这个选项由IP来源地址而决定对向内的CLI和HTTP请求进行阻拦。
 
 SETUP_IPFILTER
@@ -8402,16 +8547,16 @@ SETUP_SN_PASSWORD_DESC
 	SV	Ange lösenordet för ditt SqueezeNetwork-konto.
 
 SETUP_SN_INVALID_LOGIN
-	DA	Vi kunne ikke finde dine kontooplysninger. Derfor beder vi dig angive dem igen. Hvis du ikke har en brugerkonto, skal du klikke på <a href="http://%s" target="_blank">Jeg har brug for en konto</a> for at fortsætte.
-	DE	Ihre Kontoangaben wurden nicht gefunden. Geben Sie sie erneut ein und versuchen Sie es noch einmal. Wenn Sie kein Konto haben, klicken Sie auf "<a href="http://www.squeezenetwork.com" target="_blank">Ich brauche ein Konto</a>".
-	EN	We couldn't find your account information, please re-enter your information and try again. If you don't have an account please click "<a href="http://%s" target="_blank">I need an account</a>" to continue.
-	ES	No hemos encontrado la información de su cuenta; vuelva a introducir los datos e inténtelo de nuevo. Si no tiene una cuenta, haga clic en "<a href="http://www.squeezenetwork.com" target="_blank">Necesito una cuenta</a>" para continuar.
-	FI	Tilitietojasi ei löytynyt. Anna tietosi ja yritä uudelleen. Jos sinulla ei ole tiliä, valitse "<a href="http://%s" target="_blank">Haluan avata tilin</a>".
-	FR	Informations du compte introuvables. Spécifiez vos informations à nouveau et réessayez. Si vous ne possédez pas de compte, cliquez sur <a href="http://www.squeezenetwork.com" target="_blank">Je souhaite créer un compte</a> pour continuer.
-	IT	Impossibile recuperare le informazioni account. Inserire nuovamente i dati e riprovare. Se non si dispone di un account, fare clic su <a href="http://www.squeezenetwork.com" target="_blank">Nuovo account</a> per continuare.
-	NL	We kunnen je accountgegevens niet vinden; voer je gegevens opnieuw in en probeer het nogmaals. Heb je geen account, klik dan op <a href="http://%s" target="_blank">Ik heb een account nodig</a> om verder te gaan.
-	NO	Vi fant ikke kontoinformasjonen din. Oppgi informasjonen og prøv på nytt. Hvis du ikke har en konto, klikker du på <a href="http://%s" target="_blank">Jeg trenger en konto</a>  for å fortsette.
-	SV	Det gick inte att hitta din kontoinformation. Ange informationen på nytt och försök igen. Om du inte har något konto klickar du på  "<a href="http://%s" target="_blank">Jag behöver ett konto</a>" för att fortsätta.
+	DA	Ugyldigt brugernavn eller adgangskode til SqueezeNetwork.
+	DE	SqueezeNetwork-Benutzername oder -Kennwort ungültig.
+	EN	Invalid SqueezeNetwork username or password.
+	ES	Contraseña o nombre de usuario SqueezeNetwork no válidos.
+	FI	Virheellinen SqueezeNetworkin käyttäjätunnus tai salasana.
+	FR	Nom d'utilisateur ou mot de passe SqueezeNetwork non valide.
+	IT	Nome utente o password di SqueezeNetwork non validi.
+	NL	Gebruikersnaam of wachtwoord van SqueezeNetwork ongeldig.
+	NO	Ugyldig brukernavn eller passord for SqueezeNetwork.
+	SV	Ogiltigt användarnamn eller lösenord SqueezeNetwork
 
 SETUP_SN_VALID_LOGIN
 	DA	Der er etableret forbindelse til SqueezeNetwork.
@@ -8438,16 +8583,16 @@ SETUP_SN_FORGOT_PASSWORD
 	SV	Jag har glömt lösenordet
 
 SETUP_SN_NEED_ACCOUNT
-	DA	Jeg har brug for en konto
-	DE	Ich brauche ein Konto
-	EN	I need an account
-	ES	Necesito una cuenta
-	FI	Haluan avata tilin
-	FR	Je souhaite créer un compte
-	IT	Nuovo account
-	NL	Ik heb een account nodig
-	NO	Jeg må åpne en konto
-	SV	Jag behöver ett konto
+	DA	Jeg vil gerne oprette en SqueezeNetwork-konto
+	DE	Ich muss ein SqueezeNetwork-Konto erstellen
+	EN	I need to create a SqueezeNetwork account
+	ES	Necesito crear una cuenta SqueezeNetwork
+	FI	Haluan luoda SqueezeNetwork-tilin
+	FR	Je souhaite créer un compte SqueezeNetwork
+	IT	Crea un nuovo account SqueezeNetwork
+	NL	Ik moet een SqueezeNetwork-account aanmaken
+	NO	Jeg må opprette en SqueezeNetwork-konto
+	SV	Jag behöver ett SqueezeNetwork-konto
 
 SETUP_SN_SYNC
 	DA	Integration med SqueezeNetwork
@@ -8510,16 +8655,16 @@ SETUP_SN_REPORT_STATS
 	SV	Statistik
 
 SETUP_SN_REPORT_STATS_DESC
-	DA	For at forbedre SqueezeNetwork indsamles statistiske data vedrørende internetradio og brug af musiktjenester. Oplysningerne bruges samlet og er omfattet af vores politik vedrørende <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">beskyttelse af personlige oplysninger</a>.
-	DE	Wir sammeln statistische Informationen über den Einsatz von Internetradio und -Musikdiensten. Diese Informationen werden im Ganzen gesammelt und unterliegen unseren <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">Datenschutzbestimmungen</a>.
-	EN	To help improve SqueezeNetwork, we collect statistics on Internet radio and music service listening.  This information is collected in aggregate and is protected under our <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">privacy policy</a>.
-	ES	Con el fin de mejorar SqueezeNetwork, recopilamos estadísticas sobre el uso de radio y música por Internet. Dicha información se utiliza en conjunto y está protegida según los términos de nuestra <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">política de privacidad</a>.
-	FI	Pidämme tilastoja internet-radion ja musiikkipalvelujen kuuntelusta, jotta voisimme parantaa SqueezeNetwork-verkkoa.  Tiedot kerätään kootusti ja ne on suojattu <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">tietosuojakäytäntömme</a> mukaisesti.
+	DA	Du kan hjælpe med at forbedre SqueezeNetwork ved at sende statistiske data vedrørende internetradio og brug af musiktjenester. Oplysningerne bruges samlet og er omfattet af vores politik vedrørende <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">beskyttelse af personlige oplysninger</a>.
+	DE	Helfen Sie mit,  SqueezeNetwork zu verbessern, und melden Sie statistische Informationen über den Einsatz von Internetradio und -Musikdiensten. (Diese Informationen werden im Ganzen gesammelt und unterliegen unseren <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">Datenschutzbestimmungen</a>).
+	EN	Help improve SqueezeNetwork by reporting statistics on internet radio and music service listening. (This information is collected in aggregate and is protected under our <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">privacy policy</a>).
+	ES	Ayude a mejorar SqueezeNetwork, proporciónenos estadísticas sobre el uso de radio y música por Internet (dicha información se utiliza en conjunto y está protegida según los términos de nuestra <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">política de privacidad</a>).
+	FI	Auta parantamaan SqueezeNetworkin toimintaa ilmoittamalla, miten käytät nettiradiota ja musiikkipalveluita (tiedot kerätään kootusti ja ne on suojattu <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">tietosuojakäytäntömme</a> mukaisesti).
 	FR	Pour améliorer SqueezeNetwork, nous collectons des informations sur les radios Internet et services musicaux utilisés. Ces informations sont collectées par agrégats et restent confidentielles en vertu de notre <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">politique de confidentialité</a>.
-	IT	Al fine di migliorare SqueezeNetwork, elaboriamo statistiche sulle radio Internet e sui servizi di musica più ascoltati. Questi dati vengono raccolti collettivamente e il loro trattamento è regolato dall'<a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">informativa sulla privacy</a>.
-	NL	Teneinde SqueezeNetwork te verbeteren, verzamelen we statistieken over het luisteren naar internetradio en muziekservices. Deze informatie wordt globaal verzameld en wordt beschermd door ons <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">privacybeleid</a>.
-	NO	Vi samler inn statistisk informasjon om bruk av Internett-radio og musikktjenester, for å hjelpe til med å forbedre SqueezeNetwork. Informasjonen innhentes samlet, og beskyttes av <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">personvernerklæringen</a> vår.
-	SV	Vi vill göra SqueezeNetwork ännu bättre. Därför samlar vi in statistik över hur webbradio och musiktjänster används.  Informationen samlas in på aggregerad nivå och skyddas av vår <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">sekretesspolicy</a>.
+	IT	Al fine di migliorare SqueezeNetwork, è possibile segnalare statistiche sulle radio Internet e sui servizi di musica più ascoltati. Tali dati vengono raccolti collettivamente e il loro trattamento è regolato dall'<a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">informativa sulla privacy</a>.
+	NL	Help SqueezeNetwork te verbeteren door statistieken over het luisteren naar internetradio en muziekservices te rapporteren. (Deze informatie wordt globaal verzameld en wordt beschermd door ons <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">privacybeleid</a>.)
+	NO	Du kan hjelpe til med å forbedre SqueezeNetwork ved å sende inn statistisk informasjon om bruk av Internett-radio og musikktjenester. (Informasjonen innhentes samlet, og beskyttes av <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">personvernerklæringen</a> vår.)
+	SV	Varför inte göra SqueezeNetwork ännu bättre genom att tala om för oss hur webbradion och musiktjänsterna används? Informationen samlas in på aggregerad nivå och skyddas av vår <a href="http://www.logitech.com/index.cfm/footer/privacy/&cl=us,en" target="_blank">sekretesspolicy</a>.
 
 SETUP_SN_REPORT_STATS_ENABLE
 	DA	Ja, hjælp med at forbedre SqueezeNetwork ved at indsende statistikker.
@@ -8557,66 +8702,6 @@ SETUP_NO_JAVASCRIPT
 	NO	Du må bruke en oppdatert versjon av nettleseren (Firefox&reg;, Apple Safari&reg;, Microsoft&reg; Internet Explorer 6, Opera 9 eller nyere) samt ha JavaScript aktivert i nettleseren for å komme inn på SqueezeCenter. Du kan eventuelt bruke et enklere grensesnitt, som <a href="/Classic/?skipWizard=1">Classic</a> eller <a href="/Handheld/?skipWizard=1">Handheld</a> (laget for små skjermer).
 	SV	Använd en aktuell webbläsare (Firefox&reg;, Apple Safari&reg;, Microsoft&reg; Internet Explorer 6, Opera 9 eller senare) och kontrollera att JavaScript är aktiverat i webbläsaren för att få tillgång till SqueezeCenter. Alternativ kan du använda ett enklare skal, t.ex. <a href="/Classic/?skipWizard=1">Classic</a> eller <a href="/Handheld/?skipWizard=1">Handheld</a> (optimerat för små skärmar).
 
-SETUP_WIZARD_LANG_DESC
-	DA	Hvis du ønsker at ændre sprog, skal du gøre det her:
-	DE	Hier können Sie eine andere Sprache wählen:
-	EN	If you want to change the language, select it here:
-	ES	Si quiera cambiar el idioma, seleccione aquí el deseado:
-	FI	Jos haluat vaihtaa kieltä, valitse se tässä:
-	FR	Sélectionnez la langue ici si vous souhaitez la changer.
-	IT	Per cambiare lingua, selezionare un'opzione:
-	NL	Als je de taal wilt wijzigen, selecteer je deze hier:
-	NO	Hvis du vil endre språk, kan du velge det du vil ha her:
-	SV	Om du vill ändra språkinställningen väljer du språk här:
-
-SETUP_WIZARD_WELCOME
-	DA	Velkommen til guiden Konfiguration af SqueezeCenter&reg;
-	DE	Willkommen beim Assistenten zum Einrichten von SqueezeCenter&reg;
-	EN	Welcome to the SqueezeCenter&reg; Setup Assistant
-	ES	El Asistente de configuración de SqueezeCenter&reg; le da la bienvenida
-	FI	Tervetuloa SqueezeCenterin&reg; ohjattuun asennukseen
-	FR	Bienvenue dans l'assistant de configuration du SqueezeCenter&reg;
-	IT	Assistente configurazione SqueezeCenter&reg;
-	NL	Welkom bij de assistent voor SqueezeCenter&reg;-setup
-	NO	Velkommen til konfigurasjonsveiviseren for SqueezeCenter&reg;
-	SV	Välkommen till konfigurationsassistenten för SqueezeCenter&reg;!
-
-SETUP_WIZARD_WELCOME_DESC
-	DA	Tak fordi du valgte et trådløst musiksystem fra Logitech&reg;.<br><br>Denne guide vil hjælpe dig med at konfigurere din nye afspiller. Vi begynder med at etablere forbindelse til SqueezeNetwork&reg;, og derefter vil vi hjælpe dig med at finde dine musikfiler.<br/><br/>Hvis du ikke har oprettet en konto på SqueezeNetwork, bedes du afslutte denne guide og gå til <a href="http://%s" target="_blank">SqueezeNetwork</a> og oprette en.
-	DE	Vielen Dank, dass Sie sich für ein kabelloses Musiksystem von Logitech&reg; entschieden haben.<br><br>Der Assistent zum Einrichten von SqueezeCenter führt Sie durch die zum Einrichten des Players erforderlichen Schritte. Zuerst erstellen Sie eine Verbindung zu SqueezeNetwork&reg; und greifen dann auf Ihre lokale Musiksammlung zu.<br/><br/>Wenn Sie noch kein Konto für SqueezeNetwork haben, beenden Sie diesen Assistenten und richten Sie eines auf <a href="http://%s" target="_blank">SqueezeNetwork</a> ein.
-	EN	Thank you for purchasing a Logitech&reg; wireless music system.<br><br>This SqueezeCenter Setup Assistant will guide you through the steps of setting up your new player. We'll start by connecting you to SqueezeNetwork&reg;, then we'll help you find and access your local music.<br/><br/>If you haven't set up an account on SqueezeNetwork, please exit this Setup Assistant and go to <a href="http://%s" target="_blank">SqueezeNetwork</a> to create your account.
-	ES	Gracias por adquirir un sistema de música inalámbrico Logitech&reg;.<br><br>Este Asistente de configuración de SqueezeCenter le guiará en el proceso de configuración de su nuevo reproductor. Empezaremos por conectarle a SqueezeNetwork&reg; y, a continuación, le ayudaremos a encontrar y acceder a su música local.<br/><br/>Si no ha creado una cuenta en SqueezeNetwork, cierre este asistente y acceda a <a href="http://%s" target="_blank">SqueezeNetwork</a> para crear su cuenta.
-	FI	Kiitos Logitechin&reg; langattoman musiikkijärjestelmän hankinnasta.<br><br>SqueezeCenterin asennusapuohjelma opastaa sinua uuden soittimesi käyttöönotossa. Aloitamme muodostamalla yhteyden SqueezeNetwork&reg;-verkkoon. Sen jälkeen autamme sinua löytämään paikalliset musiikkitiedostosi ja aloittamaan niiden kuuntelun.<br/><br/>Jos et ole vielä avannut SqueezeNetwork-tiliä, poistu asennusapuohjelmasta ja avaa tili osoitteessa <a href="http://%s" target="_blank">SqueezeNetwork</a>.
-	FR	Vous venez d'acheter un système musical sans fil Logitech&reg; et nous vous en félicitons.<br><br>Cet assistant va vous guider dans la procédure de configuration de votre nouvelle platine. Vous allez d'abord pouvoir vous connecter à SqueezeNetwork&reg;, puis rechercher et accéder à votre musique locale.<br/><br/>Si vous n'avez pas configuré de compte SqueezeNetwork, quittez l'assistant et rendez-vous sur <a href="http://%s" target="_blank">SqueezeNetwork</a> pour créer un compte.
-	IT	Grazie per avere acquistato il sistema musicale senza fili Logitech&reg;.<br><br>L'Assistente configurazione SqueezeCenter assiste l'utente nella configurazione del nuovo lettore. Dopo avere descritto come connettersi a SqueezeNetwork&reg;, verrà illustrato come accedere alla raccolta musicale locale.<br/><br/>Se non è stato ancora configurato un account in SqueezeNetwork, uscire da questa procedura e visitare il sito Web <a href="http://%s" target="_blank">SqueezeNetwork</a> per creare un account personale.
-	NL	Hartelijk dank voor je aankoop van een draadloos Logitech&reg;-muzieksysteem.<br><br>Deze assistent voor SqueezeCenter-setup leidt je door de stappen om je nieuwe systeem in te stellen. We verbinden je eerst met SqueezeNetwork&reg;, en helpen je dan je lokale muziek te vinden en op te roepen.<br/><br/>Als je nog geen account op SqueezeNetwork hebt, sluit je deze set-upassistent af en ga je naar <a href="http://%s" target="_blank">SqueezeNetwork</a> om je account te maken.
-	NO	Takk for at du kjøpte et trådløst musikkanlegg fra Logitech&reg;.<br><br>Denne konfigurasjonsveiviseren for SqueezeCenter veileder deg gjennom konfigurasjonen av spilleren. Først kopler vi til SqueezeNetwork&reg;, og deretter finner og henter vi musikken du har lagret lokalt.<br/><br/>Hvis du ikke har en konto på SqueezeNetwork, må du avbryte denne veiviseren og gå til <a href="http://%s" target="_blank">SqueezeNetwork</a> for å opprette en konto.
-	SV	Tack för att du valde ett trådlöst musiksystem från Logitech&reg;.<br><br>Den här konfigurationsassistenten för SqueezeCenter hjälper dig att konfigurera din nya spelare. Först ansluter du till SqueezeNetwork&reg;, sedan hjälper vi dig hitta och få tillgång till din lokala musik.<br/><br/>Om du inte har något SqueezeNetwork-konto än, avslutar du konfigurationsassistenten och går till <a href="http://%s" target="_blank">SqueezeNetwork</a> och skapar ett konto.
-
-SETUP_WIZARD_PROXY
-	DA	Proxyindstillinger
-	DE	Proxy-Einstellungen
-	EN	Proxy Settings
-	ES	Configuración de proxy
-	FI	Välityspalvelinasetukset
-	FR	Réglages du proxy
-	IT	Impostazioni proxy
-	NL	Proxy-instellingen
-	NO	Proxy-innstillinger
-	SV	Proxyinställningar
-
-SETUP_WIZARD_PROXY_DESC
-	DA	SqueezeCenter kunne ikke etablere forbindelse til internettet. <br/>Hvis netværket er beskyttet af en webproxy, kan du angive den IP-adresse og det portnummer som SqueezeCenter skal bruge når den etablerer forbindelse til servere uden for det lokale netværk. Du skal angive adressen i formatet xxx.xxx.xxx.xxx:yyyy hvor xxx.xxx.xxx.xxx er proxyserverens IP-adresse og yyyy er portnummeret. Hvis du ikke bruger en webproxy, skal du lade feltet være tomt.
-	DE	SqueezeCenter konnte keine Internetverbindung herstellen. <br/>Ist Ihr Netzwerk durch einen Web-Proxy geschützt, können Sie die IP-Adresse und den Anschluss für den Proxy angeben, den SlimServer verwenden soll, um auf Server außerhalb des lokalen Netzwerks zuzugreifen. Verwenden Sie das Format xx.xx.xx.xx:yyyy, wobei xx.xx.xx.xx die IP-Adresse des Proxy und yyyy die Anschlussnummer ist. Lassen Sie dieses Feld leer, wenn kein HTTP-Web-Proxy genutzt wird.
-	EN	SqueezeCenter wasn't able to connect to the web. <br/>If your network is protected by a web proxy, then you can specify the IP address and port for the proxy to use when SqueezeCenter connects to servers outside your local network.  Use the format xx.xx.xx.xx:yyyy where xx.xx.xx.xx is the IP address of the proxy, and yyyy is the port number.  Leave this field blank if you don't use a HTTP web proxy.
-	ES	SqueezeCenter no se ha podido conectar a la Web. <br/>Si su red está protegida por un proxy Web, puede especificar el puerto y la dirección IP que debe usar el proxy cuando SqueezeCenter se conecta a servidores que se encuentran fuera de la red local. Use el formato xx.xx.xx.xx:yyyy donde xx.xx.xx.xx es la dirección IP del proxy y donde yyyy es el número del puerto. Deje este campo en blanco si no usa un proxy Web HTTP.
-	FI	SqueezeCenter ei voinut luoda yhteyttä internetiin. <br/>Jos WWW-välityspalvelin suojaa verkkosi, voit määrittää IP-osoitteen ja portin, joita välityspalvelin käyttää, kun SqueezeCenter muodostaa yhteyden paikallisverkon ulkopuolella oleviin palvelimiin.  Käytä muotoa xx.xx.xx.xx:yyyy, jossa xx.xx.xx.xx on välityspalvelimen IP-osoite ja yyyy portin numero.  Jätä tämä kenttä tyhjäksi, jos et käytä HTTP-välityspalvelinta.
-	FR	Le SqueezeCenter n'a pas pu se connecter à Internet. <br/>Si le réseau est protégé par un proxy, vous pouvez spécifier l'adresse IP et le port que ce proxy doit utiliser lorsque le SqueezeCenter se connecte à des serveurs ne se trouvant pas sur le réseau. Utilisez le format xx.xx.xx.xx:yyyy où xx.xx.xx.xx représente l'adresse IP et yyyy le numéro de port. Ne renseignez pas ce champ si vous n'utilisez pas de proxy Web.
-	IT	Impossibile connettersi al Web. <br/>Se la rete è protetta da un proxy Web, specificare l'indirizzo IP e la porta da utilizzare per il proxy quando SqueezeCenter si connette a server esterni alla rete locale. Utilizzare il formato xx.xx.xx.xx:yyyy dove xx.xx.xx.xx è l'indirizzo IP del proxy e yyyy è il numero di porta. Lasciare il campo vuoto se non si utilizza un proxy Web HTTP.
-	NL	SqueezeCenter kan geen verbinding met het web maken. <br/>Als je netwerk door een webproxy wordt beveiligd, kun je het IP-adres en de poort voor de proxy opgeven die gebruikt moeten worden wanneer SqueezeCenter een verbinding maakt met servers buiten je lokale netwerk. Gebruik de notatie xx.xx.xx.xx:yyyy waarbij xx.xx.xx.xx het IP-adres van de proxy en yyyy het poortnummer is. Laat dit veld leeg als je geen HTTP-webproxy gebruikt.
-	NO	SqueezeCenter kunne ikke kople til Internett. <br/>Hvis nettverket ditt er beskyttet av en webproxy, kan du angi ip-adresse og port for en proxy som skal brukes når SqueezeCenter kopler til servere utenfor ditt lokale nettverk. Bruk formatet xx.xx.xx.xx:yyyy, der xx.xx.xx.xx er ip-adressen til proxyen, og yyyy er portnummeret. La dette feltet stå tomt hvis du ikke bruker en http-webproxy.
-	SV	SqueezeCenter kunde inte anslutas till webben. <br/>Om ditt nätverk skyddas av en webbproxy kan du ange vilken IP-adress och port proxyn ska använda när SqueezeCenter ansluter till servrar utanför det lokala nätverket.  Använd formatet xx.xx.xx.xx:yyyy, där xx.xx.xx.xx är proxyns IP-adress och yyyy portnumret.  Lämna fältet tomt om du inte använder någon HTTP-proxy.
-
 SETUP_WIZARD_SQN
 	DA	SqueezeNetwork-konto
 	DE	SqueezeNetwork-Konto
@@ -8629,89 +8714,17 @@ SETUP_WIZARD_SQN
 	NO	SqueezeNetwork-konto
 	SV	SqueezeNetwork-konto
 
-SETUP_WIZARD_SQN_DESC
-	DA	SqueezeNetwork giver dig mulighed for at få mere ud af dit nye trådløse musiksystem ved at give dig adgang til musiktjenester og internetbaserede radiostationer.<br/><br/>Hvis du allerede har en SqueezeNetwork-konto, skal du angive kontooplysningerne nedenfor og klikke på Næste. Hvis du ikke har en SqueezeNetwork-konto, skal du klikke på Jeg har brug for en konto.
-	DE	Mit SqueezeNetwork können Sie Ihr neues kabelloses Musiksystem optimal nutzen und auf Musikdienste und Internetradiosender zugreifen.<br/><br/>Wenn Sie bereits ein SqueezeNetwork-Konto haben, geben Sie Ihre Daten unten ein und klicken Sie auf "Weiter". Wenn Sie kein SqueezeNetwork-Konto haben, klicken Sie auf “Ich brauche ein Konto”.
-	EN	SqueezeNetwork allows you to get the most out of your new wireless music system by giving you access to music services and internet radio stations.<br/><br/>If you already have a SqueezeNetwork account please enter your information below and click the "Next" button. If you don't have a SqueezeNetwork account, please click "I need an account".
-	ES	SqueezeNetwork le permite obtener el máximo de su nuevo sistema de música inalámbrico, mediante el acceso a servicios de música y emisoras de radio por Internet.<br/><br/>Si ya tiene una cuenta SqueezeNetwork, introduzca la información pertinente a continuación y haga clic en el botón "Siguiente". Si no tiene una cuenta SqueezeNetwork, haga clic en “Necesito una cuenta”.
-	FI	SqueezeNetwork-verkon avulla saat mahdollisimman paljon irti uudesta langattomasta musiikkijärjestelmästäsi, sillä verkon avulla voit käyttää internetissä olevia musiikkipalveluja ja radiokanavia.<br/><br/>Jos sinulla on jo SqueezeNetwork-tili, kirjoita tietosi alle ja valitse Seuraava. Jos sinulla ei ole vielä SqueezeNetwork-tiliä, valitse Haluan avata tilin.
-	FR	SqueezeNetwork vous permet de tirer pleinement parti de votre système musical sans fil en vous donnant accès à des services musicaux et des stations de radio sur Internet.<br/><br/>Si vous possédez déjà un compte SqueezeNetwork, spécifiez vos informations ci-dessous et cliquez sur le bouton Suivant. Sinon, cliquez sur Je souhaite créer un compte.
-	IT	SqueezeNetwork consente di sfruttare al massimo i nuovi sistemi musicali senza fili fornendo accesso a servizi di musica e alle stazioni radio di Internet.<br/><br/>Se si dispone già di un account SqueezeNetwork, inserire i propri dati in basso e fare clic sul pulsante "Avanti". Se non si dispone di un account SqueezeNetwork, fare clic su Nuovo account.
-	NL	SqueezeNetwork geeft je toegang tot muziekservices en internetradiostations, zodat je je nieuwe draadloze muzieksysteem optimaal kunt benutten.<br/><br/>Als je al een SqueezeNetwork-account hebt, voer je hieronder je gegevens in en klik je op de knop Volgende. Heb je nog geen SqueezeNetwork-account, dan klik je op 'Ik heb een account nodig'.
-	NO	Med SqueezeNetwork kan du få mest mulig ut av det nye trådløse musikkanlegget ditt, gjennom tilgang til musikktjenester og Internett-radio.<br/><br/>Hvis du allerede har en SqueezeNetwork-konto, angir du informasjonen nedenfor og klikker Neste for å fortsette. Hvis du ikke har en SqueezeNetwork-konto, klikker du på «Jeg må åpne en konto».
-	SV	Med SqueezeNetwork får du ut mer av ditt nya trådlösa nätverksmusiksystem genom tillgång till webbradiostationer och musiktjänster.<br/><br/> Om du redan har ett SqueezeNetwork-konto anger du kontoinformationen nedan och klickar sedan på Nästa. Om du inte har något konto klickar du på Jag behöver ett konto.
-
-SETUP_WIZARD_SQN_VERIFY
-	DA	Tilføj
-	DE	Hinzufügen
-	EN	Add
-	ES	Agregar
-	FI	Lisää
-	FR	Ajouter
-	IT	Aggiungi
-	NL	Toevoegen
-	NO	Legg til
-	SV	Lägg till
-
-SETUP_WIZARD_SOURCE
-	DA	Musikkilde
-	DE	Musikquelle
-	EN	Music Source
-	ES	Origen de música
-	FI	Musiikkilähde
-	FR	Source musicale
-	IT	Sorgente musicale
-	NL	Muziekbron
-	NO	Musikkilde
-	SV	Musikkälla
-
-SETUP_WIZARD_SOURCE_DESC
-	DA	Du kan integrere musikfiler på en lokal computer i SqueezeCenter på flere måder. Vælg en mulighed på listen:
-	DE	Es gibt mehrere Möglichkeiten, die lokalen Musikdateien in SqueezeCenter zu importieren. Wählen Sie eine aus der folgenden Liste:
-	EN	You have several ways to integrate your local music files with SqueezeCenter. Please select from the following list:
-	ES	Hay varias formas de integrar archivos de música locales con SqueezeCenter. Seleccione uno de los métodos en la lista siguiente:
-	FI	On useita tapoja integroida paikalliset musiikkitiedostot SqueezeCenteriin. Valitse seuraavasta luettelosta:
-	FR	Vous pouvez intégrer vos fichiers musicaux locaux au SqueezeCenter de diverses manières. Sélectionnez une option dans la liste suivante.
-	IT	Esistono svariati modi di integrare i file musicali locali in SqueezeCenter. Selezionare quello desiderato dall'elenco seguente:
-	NL	Je kunt je lokale muziekbestanden op verschillende manieren met SqueezeCenter integreren. Selecteer een optie in de volgende lijst:
-	NO	Det er flere måter å integrere lokalt lagrede musikkfiler med SqueezeCenter på. Velg fra listen:
-	SV	Det finns flera sätt att integrera SqueezeCenter med musikfilerna du har sparade på datorn. Välj ett av alternativen i listan:
-
-SETUP_WIZARD_SOURCE_AUDIODIR
-	DA	<b>Brug lokale musikfiler.</b> SqueezeCenter kan spille musikfiler på din computer eller på en anden computer på netværket.
-	DE	<b>Lokale Musik verwenden.</b> SqueezeCenter kann auf Musikdateien auf dem lokalen oder einem anderen Computer im Netzwerk zugreifen.
-	EN	<b>Use local music.</b> SqueezeCenter can access music files on your local computer or another computer in your network.
-	ES	<b>Usar música local.</b> SqueezeCenter puede acceder a archivos de música en su ordenador o en otro de la misma red.
-	FI	<b>Käytä paikallista musiikkia.</b> SqueezeCenterin kanssa voidaan käyttää musiikkitiedostoja, jotka ovat paikallisessa tietokoneessa tai jossakin muussa verkkoon kuuluvassa tietokoneessa.
-	FR	<b>Utiliser la musique locale.</b> Le SqueezeCenter peut accéder à des fichiers musicaux se trouvant sur votre ordinateur ou sur un ordinateur en réseau.
-	IT	<b>Utilizza la musica locale.</b> SqueezeCenter consente di accedere ai file musicali memorizzati nel computer locale o in un altro computer della rete.
-	NL	<b>Lokale muziek gebruiken.</b> SqueezeCenter kan muziekbestanden op je lokale computer of een andere computer in je netwerk oproepen.
-	NO	<b>Bruk lokal musikk.</b> SqueezeCenter kan hente musikkfiler fra den lokale datamaskinen, eller fra en annen datamaskin på nettverket.
-	SV	<b>Använd lokal musik.</b> SqueezeCenter kan spela upp musikfilerna på den lokala datorn eller på en annan dator i nätverket.
-
-SETUP_WIZARD_SOURCE_ITUNES
-	DA	<b>Brug iTunes&reg;.</b> SqueezeCenter kan benytte iTunes-biblioteket og -afspilningslisterne. Hvis du ændrer noget i iTunes, bliver det afspejlet i SqueezeCenter.
-	DE	<b>iTunes&reg; verwenden</b>. SqueezeCenter kann auf die Musiksammlung und Wiedergabelisten von iTunes zugreifen. In iTunes vorgenommene Änderungen werden in SqueezeCenter übernommen.
-	EN	<b>Use iTunes&reg;.</b> SqueezeCenter can access your iTunes library and playlists. Changes made in iTunes will be reflected in SqueezeCenter.
-	ES	<b>Usar iTunes&reg;.</b> SqueezeCenter puede acceder a sus listas de reproducción y a la biblioteca de iTunes. Los cambios realizados en iTunes se reflejarán en SqueezeCenter.
-	FI	<b>Käytä iTunesiä&reg;.</b> SqueezeCenter voi käyttää iTunesin kirjastoa ja soittoluetteloita. Muutokset, jotka tehdään iTunesissä, heijastuvat SqueezeCenteriin.
-	FR	<b>Utiliser iTunes&reg;.</b> Le SqueezeCenter peut accéder à la librairie et aux listes de lecture iTunes. Les modifications effectuées dans iTunes seront répercutées au SqueezeCenter.
-	IT	<b>Usa iTunes&reg;.</b> SqueezeCenter consente di accedere alla libreria e agli elenchi di riproduzione di iTunes. Le modifiche eseguite in iTunes vengono estese a SqueezeCenter.
-	NL	<b>iTunes gebruiken&reg;.</b> SqueezeCenter kan je iTunes-collectie en -playlists oproepen. Wijzigingen in iTunes worden in SqueezeCenter weerspiegeld.
-	NO	<b>Bruk iTunes&reg;.</b> SqueezeCenter kan gå inn i iTunes-biblioteket og -spillelistene. Hvis du gjør endringer i iTunes, reflekteres dette i SqueezeCenter.
-	SV	<b>Använd iTunes&reg;.</b> SqueezeCenter kan öppna biblioteket och spellistorna från iTunes. Ändringar du gör i iTunes återspeglas även i SqueezeCenter.
-
-SETUP_WIZARD_SOURCE_MUSICIP
-	DA	<b>Brug MusicIP&trade;.</b> SqueezeCenter kan bruge MusicIP som kilde til at hente oplysninger om titel og genre. Der er flere oplysninger på <a href="http://www.musicip.com/" target="_blank">www.musicip.com</a>.
-	DE	<b>MusicIP verwenden&trade;</b>. SqueezeCenter kann MusicIP als Quelle für Titel- und Stilrichtungsangaben verwenden. Weitere Informationen finden Sie auf <a href="http://www.musicip.com/" target="_blank">www.musicip.com</a>.
-	EN	<b>Use MusicIP&trade;.</b> SqueezeCenter can use MusicIP as your source for title and genre information. For more information visit <a href="http://www.musicip.com/" target="_blank">www.musicip.com</a>
-	ES	<b>Usar MusicIP&trade;.</b> SqueezeCenter puede usar MusicIP como origen para la información de título y de género. Para más información, visite <a href="http://www.musicip.com/" target="_blank">www.musicip.com</a>
-	FI	<b>Käytä MusicIP:tä&trade;.</b> SqueezeCenter voi käyttää MusicIP:tä nimi- ja genretietojen lähteenä. Lisätietoa on osoitteessa <a href="http://www.musicip.com/" target="_blank">www.musicip.com</a>
-	FR	<b>Utiliser MusicIP&trade;.</b> Le SqueezeCenter peut utiliser le logiciel MusicIP comme source pour les titres et les genres. Pour en savoir plus, rendez-vous sur <a href="http://www.musicip.com/" target="_blank">www.musicip.com</a>
-	IT	<b>Usa MusicIP&trade;.</b> SqueezeCenter consente di utilizzare MusicIP come fonte dei titoli e delle informazioni sul genere musicale. Per ulteriori informazioni visitare il sito Web all'indirizzo <a href="http://www.musicip.com/" target="_blank">www.musicip.com</a>
-	NL	<b>MusicIP gebruiken&trade;.</b> SqueezeCenter kan MusicIP als je bron voor titel- en genre-informatie gebruiken. Ga naar <a href="http://www.musicip.com/" target="_blank">www.musicip.com</a> voor meer informatie.
-	NO	<b>Bruk MusicIP&trade;.</b> SqueezeCenter kan bruke MusicIP som kilde for informasjon om titler og sjangere. Hvis du vil vite mer, kan du gå til <a href="http://www.musicip.com/" target="_blank">www.musicip.com</a>.
-	SV	<b>Använd MusicIP&trade;.</b> SqueezeCenter kan använda MusicIP som källa till titel- och genreinformation. Mer information finns på <a href="http://www.musicip.com/" target="_blank">www.musicip.com</a>
+SETUP_WIZARD_SQN_PLEASE
+	DA	Du skal logge på med din e-mail-adresse og adgangskode til SqueezeNetwork for at fortsætte.
+	DE	Melden Sie sich mit Ihrer SqueezeNetwork-E-mail-Adresse und Ihrem SqueezeNetwork-Kennwort an um fortzufahren.
+	EN	Please sign in with your SqueezeNetwork email and password to continue.
+	ES	Inicie sesión con su dirección de correo electrónico y su constraseña de SqueezeNetwork para continuar.
+	FI	Jatka kirjautumalla sisään SqueezeNetwork-verkossa rekisteröimälläsi sähköpostiosoitteella ja salasanalla.
+	FR	Connectez-vous à l'aide de votre adresse électronique et de votre mot de passe SqueezeNetwork pour continuer.
+	IT	Per continuare, accedere con l'indirizzo di posta elettronica e la password di SqueezeNetwork.
+	NL	Meld je aan met je e-mailadres en wachtwoord voor SqueezeNetwork om verder te gaan.
+	NO	Logg på med e-postadressen og passordet du bruker på SqueezeNetwork for å fortsette.
+	SV	Logga in med e-post och lösenord till SqueezeNetwork för att fortsätta.
 
 SETUP_WIZARD_AUDIODIR
 	DA	Lokal musikmappe
@@ -8785,78 +8798,6 @@ SETUP_WIZARD_PLAYLISTDIR_DESC
 	NO	Angi banen til mappen med spillelister.
 	SV	Ange sökväg till mappen med dina spellistor.
 
-SETUP_WIZARD_ITUNES
-	DA	Integration med iTunes
-	DE	iTunes-Integration
-	EN	iTunes Integration
-	ES	Integración de iTunes
-	FI	iTunes-integraatio
-	FR	Intégration iTunes
-	IT	Integrazione di iTunes
-	NL	iTunes-integratie
-	NO	iTunes-integrering
-	SV	iTunes-integration
-
-SETUP_WIZARD_ITUNES_DESC
-	DA	SqueezeCenter kunne ikke finde iTunes-biblioteket. Angiv hvor iTunes XML er placeret.
-	DE	SqueezeCenter konnte Ihre iTunes-Bibliothek nicht automatisch finden. Wählen Sie Ihre iTunes-XML-Datei aus.
-	EN	SqueezeCenter wasn't able to find your iTunes library automatically. Please select your iTunes XML file.
-	ES	SqueezeCenter no ha podido encontrar su biblioteca de iTunes automáticamente. Seleccione su archivo XML de iTunes.
-	FI	SqueezeCenter ei löytänyt iTunes-kirjastoa automaattisesti. Valitse iTunes-XML-tiedosto.
-	FR	Le SqueezeCenter n'a pas pu trouver la bibliothèque iTunes automatiquement. Sélectionnez votre fichier XML iTunes.
-	IT	Impossibile trovare la libreria iTunes. Selezionare il file XML di iTunes.
-	NL	SqueezeCenter kan je iTunes-collectie niet automatisch vinden. Selecteer het XML-bestand van je iTunes.
-	NO	SqueezeCenter kunne ikke finne iTunes-biblioteket automatisk. Velg xml-filen for iTunes.
-	SV	Det gick inte att hitta iTunes biblioteket. Markera XML-filen för iTunes.
-
-SETUP_WIZARD_MUSICIP
-	DA	MusicIP-integration
-	DE	MusicIP-Integration
-	EN	MusicIP Integration
-	ES	Integración de MusicIP
-	FI	MusicIP-integraatio
-	FR	Intégration MusicIP
-	IT	Integrazione di MusicIP
-	NL	MusicIP-integratie
-	NO	MusicIP-integrering
-	SV	MusicIP-integration
-
-SETUP_WIZARD_MUSICIP_DESC
-	DA	SqueezeCenter kunne ikke etablere forbindelse til MusicIP Mixer. Hvis du ikke benytter standardporten (som er 10002) til MusicIP Mixer, skal du angive portnummeret i dette felt.
-	DE	SqueezeCenter konnte keine Verbindung zum MusicIP Mixer herstellen. Wenn Sie nicht den Standardanschluss (10002) für MusicIP Mixer verwenden, geben Sie die Anschlussnummer in dieses Feld ein.
-	EN	SqueezeCenter wasn't able to connect to your MusicIP Mixer. If you're using a non-standard port (default: 10002) for your MusicIP Mixer, please enter the port number in this field.
-	ES	SqueezeCenter no se ha podido conectar a MusicIP Mixer. Si utiliza un puerto no estándar (predeterminado: 10002) para MusicIP Mixer, introduzca el número de puerto en este campo.
-	FI	SqueezeCenter ei voinut luoda yhteyttä MusicIP Mixeriin. Jos käytät standardista poikkeavaa porttia (oletus: 10002) MusicIP Mixerin kanssa, kirjoita portin numero tähän kenttään.
-	FR	Le SqueezeCenter n'a pas pu se connecter à MusicIP Mixer. Si vous utilisez un port non standard (10002 par défaut) pour MusicIP Mixer, spécifiez-le dans ce champ.
-	IT	Impossibile connettersi alla raccolta MusicIP. Se non si utilizza una porta standard (predefinita: 10002) per la raccolta MusicIP, inserire il numero di porta in questo campo.
-	NL	SqueezeCenter kan geen verbinding met je MusicIP Mixer maken. Als je een niet-standaard poort (standaard: 10002) voor je MusicIP Mixer gebruikt, voer je in dit veld het poortnummer in.
-	NO	SqueezeCenter kunne ikke kople til MusicIP Mixer. Hvis du bruker en port som ikke er standard (standard: 10002) for MusicIP Mixer, må du angi portnummeret i dette feltet.
-	SV	SqueezeCenter kunde inte anslutas till MusicIP Mixer. Om du använder en annan port än standardporten (10002) för MusicIP Mixer anger du portnumret i det här fältet.
-
-SETUP_WIZARD_MUSICIP_DESC2
-	DA	MusicIP Mixer skal startes før SqueezeCenter. Hvis du har problemer med at etablere forbindelse til MusicIP, skal du lukke SqueezeCenter, genstarte MusicIP og derefter SqueezeCenter.
-	DE	Sie müssen MusicIP vor SqueezeCenter starten. Sollte es Probleme bei der Verbindung zu MusicIP geben, beenden Sie SqueezeCenter, starten Sie MusicIP neu und starten Sie anschließend SqueezeCenter.
-	EN	MusicIP Mixer must be started before SqueezeCenter. If you have trouble connecting to MusicIP, exit SqueezeCenter, restart MusicIP, and restart SqueezeCenter.
-	ES	MusicIP Mixer debe iniciarse antes que SqueezeCenter. Si tiene problemas para establecer conexión con MusicIP, cierre SqueezeCenter, reinicie MusicIP y, a continuación, reinicie SqueezeCenter.
-	FI	MusicIP Mixer pitää käynnistää ennen SqueezeCenteriä. Jos sinulla on vaikeuksia yhteyden muodostamisessa MusicIP:hen, sulje SqueezeCenter, käynnistä MusicIP uudelleen ja käynnistä sitten SqueezeCenter uudelleen.
-	FR	MusicIP Mixer doit être démarré avant le SqueezeCenter. Si vous rencontrez des problèmes de connexion à MusicIP, quittez le SqueezeCenter, redémarrez MusicIP, puis redémarrez le SqueezeCenter.
-	IT	La raccolta MusicIP deve essere avviata prima di SqueezeCenter. In caso di problemi di connessione a MusicIP, chiudere SqueezeCenter, riavviare MusicIP, quindi riavviare SqueezeCenter.
-	NL	MusicIP Mixer moet vóór SqueezeCenter worden gestart. Als je geen verbinding met MusicIP kunt maken, sluit je SqueezeCenter af, en start je MusicIP en SqueezeCenter opnieuw.
-	NO	MusicIP Mixer må startes før SqueezeCenter. Hvis du har problemer med å kople til MusicIP, kan du prøve å avslutte SqueezeCenter, starte MusicIP på nytt og så starte SqueezeCenter på nytt.
-	SV	MusicIP Mixer måste startas före SqueezeCenter. Om du har problem med att ansluta till MusicIP, avslutar du SqueezeCenter, startar om MusicIP och startar SqueezeCenter igen.
-
-SETUP_WIZARD_MUSICIP_DESC3
-	DA	Der er flere oplysninger om konfiguration af MusicIP Mixer og SqueezeCenter på <a href="http://www.musicip.com/mixer/slimserver.jsp" target="_blank">www.musicip.com</a>.
-	DE	Weitere Informationen zum Konfigurieren von MusicIP Mixer und SqueezeCenter finden Sie unter <a href="http://www.musicip.com/mixer/slimserver.jsp" target="_blank">www.musicip.com</a>.
-	EN	For more information about the MusicIP Mixer configuration and SqueezeCenter please visit <a href="http://www.musicip.com/mixer/slimserver.jsp" target="_blank">www.musicip.com</a>.
-	ES	Para más información sobre la configuración de MusicIP Mixer y SqueezeCenter, visite <a href="http://www.musicip.com/mixer/slimserver.jsp" target="_blank">www.musicip.com</a>.
-	FI	Lisätietoa MusicIP Mixer -kokoonpanosta ja SqueezeCenteristä on osoitteessa <a href="http://www.musicip.com/mixer/slimserver.jsp" target="_blank">www.musicip.com</a>.
-	FR	Pour en savoir plus sur la configuration de MusicIP Mixer et du SqueezeCenter, rendez-vous sur <a href="http://www.musicip.com/mixer/slimserver.jsp" target="_blank">www.musicip.com</a>.
-	IT	Per ulteriori informazioni sulla configurazione della raccolta MusicIP e su SqueezeCenter visitare il sito Web all'indirizzo <a href="http://www.musicip.com/mixer/slimserver.jsp" target="_blank">www.musicip.com</a>.
-	NL	Ga naar <a href="http://www.musicip.com/mixer/slimserver.jsp" target="_blank">www.musicip.com</a> voor meer informatie over de MusicIP Mixer-configuratie en SqueezeCenter.
-	NO	Hvis du vil vite mer om konfigurasjon av MusicIP Mixer og om SqueezeCenter, kan du gå til <a href="http://www.musicip.com/mixer/slimserver.jsp" target="_blank">www.musicip.com</a>.
-	SV	Mer information om MusicIP Mixer-konfigureringen och SqueezeCenter finns på <a href="http://www.musicip.com/mixer/slimserver.jsp" target="_blank">www.musicip.com</a>.
-
 SETUP_WIZARD_SUMMARY
 	DA	Oversigt
 	DE	Zusammenfassung
@@ -8870,16 +8811,16 @@ SETUP_WIZARD_SUMMARY
 	SV	Sammanfattning
 
 SETUP_WIZARD_SUMMARY_DESC
-	DA	Nu er SqueezeCenter konfigureret.
-	DE	Das Einrichten von SqueezeCenter ist abgeschlossen.
-	EN	You've finished setting up SqueezeCenter.
-	ES	Ha completado la configuración de SqueezeCenter.
-	FI	SqueezeCenterin käyttöönotto on suoritettu.
-	FR	La configuration du SqueezeCenter est terminée.
-	IT	La configurazione di SqueezeCenter è completata.
-	NL	Je bent klaar met het instellen van SqueezeCenter.
-	NO	SqueezeCenter er nå konfigurert.
-	SV	Konfigurationen av SqueezeCenter är klar.
+	DA	SqueezeCenter benytter nu følgende indstillinger:
+	DE	SqueezeCenter nutzt jetzt folgende Einstellungen:
+	EN	SqueezeCenter is now using the following settings:
+	ES	SqueezeCenter está usando esta configuración:
+	FI	SqueezeCenter käyttää nyt seuraavia asetuksia:
+	FR	Le SqueezeCenter utilise les paramètres suivants:
+	IT	SqueezeCenter utilizza attualmente le impostazioni seguenti:
+	NL	SqueezeCenter gebruikt nu de volgende instellingen:
+	NO	SqueezeCenter bruker nå følgende innstillinger:
+	SV	SqueezeCenter använder nu följande inställningar:
 
 SETUP_WIZARD_SUMMARY_SQN
 	DA	SqueezeNetwork-konto:
@@ -8904,18 +8845,6 @@ SETUP_WIZARD_SUMMARY_MUSICSOURCE
 	NL	Muziekbron
 	NO	Musikkilde
 	SV	Musikkälla
-
-SETUP_WIZARD_SUMMARY_RESCAN
-	DA	<br/><br/>
-	DE	<br/><br/>
-	EN	<br/><br/>
-	ES	<br/><br/>
-	FI	<br/><br/>
-	FR	<br/><br/>
-	IT	<br/><br/>
-	NL	<br/><br/>
-	NO	<br/><br/>
-	SV	<br/><br/>
 
 SETUP_WIZARD_DONE
 	DA	Konfigurationen af SqueezeCenter er gennemført.
@@ -9681,7 +9610,7 @@ VOLUME
 	DE	Lautstärke
 	EN	Volume
 	ES	Volumen
-	FI	Tilavuus
+	FI	Äänenvoimakkuus
 	FR	Volume
 	HE	עוצמת קול
 	IT	Volume
@@ -10590,15 +10519,16 @@ ALC
 
 MOV
 	DA	AAC- eller Movie-fil
-	DE	AAC oder Film-Datei
+	DE	AAC- oder MOV-Datei
 	EN	AAC or Movie File
-	FI	AAC tai elokuvatiedosto
-	FR	AAC ou film
+	ES	Archivo AAC o MOV
+	FI	AAC- tai .mov-tiedosto
+	FR	Apple AAC ou film
 	HE	קובץ AAC‏,  או סרט
-	IT	File AAC o Movie
+	IT	File AAC o filmato
 	JA	アップルAAC、ロスレスまたはムービーファイル
-	NL	AAC of filmbestand
-	NO	AAC eller film
+	NL	AAC- of .mov-file
+	NO	AAC- eller.mov-fil
 	PT	AAC of Ficheiro Movie
 	SV	AAC- eller Movie-fil
 	ZH_CN	AAC，无损或电影文件
@@ -11491,6 +11421,18 @@ PAGES
 	SV	Sidor
 	ZH_CN	页
 
+PAGEINDEX
+	DA	Sideindeks
+	DE	Seitenindex
+	EN	Page index
+	ES	Índice de páginas
+	FI	Sivuhakemisto
+	FR	Index de page
+	IT	Indice pagine
+	NL	Pagina-index
+	NO	Innholdsfortegnelse
+	SV	Sidindex
+
 ITEMS
 	CS	Položky
 	DA	Elementer
@@ -12246,6 +12188,18 @@ DISPLAY_SETTINGS
 	SV	Display
 	ZH_CN	显示
 
+JIVE_PLAYER_DISPLAY_SETTINGS
+	DA	Afspillerens display
+	DE	Player-Anzeige
+	EN	Player Display
+	ES	Pantalla de reproductor
+	FI	Soittimen näyttö
+	FR	Affichage du lecteur
+	IT	Display del lettore
+	NL	Muzieksysteemweergave
+	NO	Spillerskjerm
+	SV	Spelarardisplay
+
 AUDIO_SETTINGS
 	CS	Audio
 	DA	Lyd
@@ -12563,16 +12517,88 @@ DEBUG_NETWORK_COMETD
 	NO	Cometd protokoll-loggføring
 	SV	Loggning av Cometd-protokoll
 
+DEBUG_RADIO
+	DA	Internetradio
+	DE	Internetradio
+	EN	Internet Radio
+	ES	Radio por Internet
+	FI	Nettiradio
+	FR	Radio Internet
+	IT	Radio Internet
+	NL	Internetradio
+	NO	Internett-radio
+	SV	Webbradio
+
+DEBUG_TRANSCODING
+	DA	Omkodning
+	DE	Transkodierer
+	EN	Transcoder
+	ES	Transcodificador
+	FI	Muunnin
+	FR	Transcodeur
+	IT	Transcoder
+	NL	Transcoder
+	NO	Omkoding
+	SV	Omkodare
+
+DEBUG_SERVER_CHOOSE
+	DA	Server
+	DE	Server
+	EN	Server
+	ES	Servidor
+	FI	Palvelin
+	FR	Serveur
+	IT	Server
+	NL	Server
+	NO	Tjener
+	SV	Server
+
+DEBUG_SCANNER_CHOOSE
+	DA	Musiksøgning
+	DE	Musikscanner
+	EN	Music Scanner
+	ES	Detector de música
+	FI	Musiikkihaku
+	FR	Analyseur de musique
+	IT	Analisi musica
+	NL	Muziekscanner
+	NO	Musikksøk
+	SV	Musiksökare
+
+DEBUG_SELECT_SET
+	DA	Vælg logsæt...
+	DE	Protokollsatz wählen...
+	EN	Please select log set...
+	ES	Seleccione un conjunto de registros...
+	FI	Valitse lokijoukko...
+	FR	Sélectionnez l'ensemble de journaux...
+	IT	Selezionare un gruppo di opzioni di accesso...
+	NL	Selecteer een logboekset...
+	NO	Velg logg-sett ...
+	SV	Välj loggningsuppsättning ...
+
+DEBUG_DEFAULT
+	DA	Nulstil indstillinger for logføring
+	DE	Protokolleinstellungen zurücksetzen
+	EN	Reset logging preferences
+	ES	Restablecer preferencias de registro
+	FI	Palauta kirjausasetukset
+	FR	Réinitialiser les préférences de journalisation
+	IT	Reimposta preferenze di registrazione
+	NL	Registratievoorkeuren opnieuw instellen
+	NO	Tilbakestill logginnstillinger
+	SV	Återställ loggningsinställningar
+
 SETUP_GROUP_DEBUG_DESC
 	DA	SqueezeCenter har en række indstillinger til logføring som kan bruges til at registrere detaljerede oplysninger om SqueezeCenter og musiksøgninger. Hver logføringskategori kan indstilles til at registrere flere eller færre oplysninger. Fejlsøgning giver flest detaljer og Fra ingen.
-	DE	SqueezeCenter enthält eine Reihe von Logging-Einstellungen, mit denen Sie umfangreiche Angaben über den Betrieb des SqueezeCenters aufzeichnen können. Aktivieren Sie die Punkte, die protokolliert werden sollen, und klicken Sie auf 'Ändern', um das Protokollieren der entsprechenden Information zu aktivieren. <a href="/log.txt" target="log">Hier können Sie die aktuellen Protokolleinträge anzeigen</a>.
+	DE	SqueezeCenter enthält eine Reihe von Logging-Einstellungen, mit denen Sie umfangreiche Angaben über den Betrieb des SqueezeCenters aufzeichnen können. Aktivieren Sie die Punkte, die protokolliert werden sollen, und klicken Sie auf 'Ändern', um das Protokollieren der entsprechenden Information zu aktivieren.
 	EN	SqueezeCenter has a number of logging settings that can be used to record detailed information about SqueezeCenter & scanner operation. Each logging category has a severity for logging. With "Debug" being the most verbose, and "Off" being the least.
-	ES	SqueezeCenter tiene diversos parámetros de depuración que se pueden usar para registrar información detallada del funcionamiento del servidor. Marque los elementos que desea que se registren para mostrarlos y haga clic en Cambiar para iniciar el registro de esa información. Las entradas de registro más recientes se pueden ver <a href="/log.txt" target="log">aquí</a>.
+	ES	SqueezeCenter tiene diversos parámetros de depuración que se pueden usar para registrar información detallada del funcionamiento del servidor. Marque los elementos que desea que se registren para mostrarlos y haga clic en Cambiar para iniciar el registro de esa información.
 	FI	SqueezeCenterissä on useita kirjausasetuksia, joilla voidaan kirjata yksityiskohtaisia tietoja SqueezeCenterin toiminnasta ja hauista. Jokaisessa kirjausluokassa voidaan asettaa kirjauksen aste. "Virheenkorjaus" on niistä monisanaisin, "Ei käytössä" vähäsanaisin.
-	FR	Le SqueezeCenter est doté d'un certain nombre de réglages de débogage pouvant enregistrer des informations détaillées sur le fonctionnement du serveur. Sélectionnez les éléments à enregistrer et cliquez sur "Modifier" pour commencer l'enregistrement des informations. Vous pouvez consulter les entrées les plus récentes <a href="/log.txt" target="log">ici</a>.
-	HE	SqueezeCenter כולל מספר הגדרות של איתור באגים שניתן להשתמש בהן לתיעוד מידע מפורט אודות הפעלת השרת. סמן את הפריטים שברצונך לתעד ביומן לצורך הצגה ולחץ על 'שנה' כדי להתחיל לתעד את המידע ביומן. <a href="/log.txt" target="log">כאן</a> באפשרותך להציג את הרשומות האחרונות שתועדו ביומן.
-	IT	In SqueezeCenter sono disponibili numerose impostazioni di debug utilizzabili per registrare informazioni dettagliate sul funzionamento del server. Selezionare le informazioni che si desidera registrare e visualizzare, quindi fare clic su Cambia per avviarne la registrazione. È possibile visualizzare qui <a href="/log.txt" target="log">le registrazioni più recenti</a>.
-	NL	SqueezeCenter heeft een aantal instellingen voor foutopsporing waarmee gedetailleerde informatie over de serverwerking verzameld kan worden. Selecteer de items die je in het logboek wilt zien, en klik op 'Veranderen' om het loggen te starten. Hier kun je de recentste logboekvermeldingen <a href="/log.txt" target="log">bekijken</a>.
+	FR	Le SqueezeCenter est doté d'un certain nombre de réglages de débogage pouvant enregistrer des informations détaillées sur le fonctionnement du serveur. Sélectionnez les éléments à enregistrer et cliquez sur "Modifier" pour commencer l'enregistrement des informations.
+	HE	SqueezeCenter כולל מספר הגדרות של איתור באגים שניתן להשתמש בהן לתיעוד מידע מפורט אודות הפעלת השרת. סמן את הפריטים שברצונך לתעד ביומן לצורך הצגה ולחץ על 'שנה' כדי להתחיל לתעד את המידע ביומן. באפשרותך להציג את הרשומות האחרונות שתועדו ביומן.
+	IT	In SqueezeCenter sono disponibili numerose impostazioni di debug utilizzabili per registrare informazioni dettagliate sul funzionamento del server. Selezionare le informazioni che si desidera registrare e visualizzare, quindi fare clic su Cambia per avviarne la registrazione.
+	NL	SqueezeCenter heeft een aantal instellingen voor foutopsporing waarmee gedetailleerde informatie over de serverwerking verzameld kan worden. Selecteer de items die je in het logboek wilt zien, en klik op 'Veranderen' om het loggen te starten.
 	NO	SqueezeCenter har flere innstillinger for loggføring som kan brukes til å ta opp detaljert informasjon om SqueezeCenter og søk. Hver loggføringskategori har en alvorlighetsgrad for loggføring. «Feilsøking» er mest detaljert, og «Av» er minst.
 	SV	Det finns ett antal loggninginställningar i SqueezeCenter som du kan använda om du vill registrera information om programaktivitet och sökningar. Du kan ange noggrannhetsnivån för varje loggningskategori. Inställningen Felsökning ger den noggrannaste loggningen och Av den minst noggranna.
 
@@ -12587,6 +12613,18 @@ DEBUGGING_SETTINGS
 	NL	Loggen
 	NO	Loggføring
 	SV	Loggning
+
+DEBUGGING_ADVANCED
+	DA	Avancerede logindstillinger
+	DE	Erweiterte Protokolleinstellungen
+	EN	Advanced Log Settings
+	ES	Configuración de registro avanzada
+	FI	Lisälokiasetukset
+	FR	Paramètres avancés des journaux
+	IT	Impostazioni file di registro avanzate
+	NL	Geavanceerde logboekinstellingen
+	NO	Avanserte logginnstillinger
+	SV	Avancerade loggningsinställningar
 
 CHANGE
 	CS	Změnit
@@ -13257,7 +13295,7 @@ NO_PLAYER_DETAILS
 	FI	<b>Jos sinulla on Squeezebox tai Transporter:</b><ul><li>Varmista, että soitin on liitetty ja että sen verkkoasetukset on määritetty oikein. Napsauta Päivitä-painiketta, kun soittimella on verkkoyhteys.</ul><p><b>Jos sinulla ei ole Squeezeboxia tai Transporteria:</b><ul><li>Voit kuunnella musiikkikirjastossasi olevaa musiikkia <a target="_top" href="/html/softsqueeze/index.html">SoftSqueezen</a> avulla. Se on Squeezeboxin ohjelmistoversio.<li>Voit käyttää MP3-soitinohjelmistoa (esim. Winamp tai iTunes) musiikkikirjastossasi olevan musiikin kuunteluun SqueezeCenterin kanssa käymällä tässä URL-osoitteessa: <a target="stream" href="http://localhost:9000/stream.mp3">http://localhost:9000/stream.mp3</a></ul>
 	FR	<b>Si vous possédez une Squeezebox ou Transporter:</b><ul><li>Vérifiez que la platine est branchée et que les réglages du réseau sont corrects. Cliquez sur le bouton Actualiser une fois la platine connectée pour actualiser la page.</ul><p><b>Si vous ne possédez pas de Squeezebox ou Transporter:</b><ul><li>Vous pouvez écouter votre collection musicale à l'aide de <a target="_top" href="html/softsqueeze/index.html">SoftSqueeze</a>, une version logicielle de la Squeezebox.<li>Vous pouvez utiliser un logiciel de lecture de MP3, tel que Winamp ou iTunes, pour écouter votre collection musicale avec le SqueezeCenter en vous connectant à l'URL suivante: http://localhost:9000/stream.mp3.
 	HE	<b>אם יש ברשותך התקן Squeezebox או Transporter:</b><ul><li>ודא שהנגן מחובר לחשמל ושהגדרות העבודה ברשת שלו נכונות. לאחר חיבור הנגן, לחץ על הלחצן 'רענן'.</ul><p><b>אם אין ברשותך התקן Squeezebox או Transporter:</b><ul><li>באפשרותך להאזין לספריית המוסיקה שלך באמצעות <a target="_top" href="/html/softsqueeze/index.html">SoftSqueeze</a>, גרסת תוכנה של Squeezebox.<li>באפשרותך להשתמש בתוכנת נגן של קובצי MP3 (כגון Winamp או iTunes) כדי להאזין לספריית המוסיקה באמצעות SqueezeCenter על-ידי התחברות לכתובת ה-URL הבאה: <a target="stream" href="http://localhost:9000/stream.mp3">http://localhost:9000/stream.mp3</a></ul>
-	IT	<b>e si possiede uno Squeezebox o un Transporter:</b><ul><li>Assicurarsi che il lettore sia collegato e che le relative impostazioni di rete siano corrette. Una volta collegato il lettore, fare clic sul pulsante Aggiorna.</ul><p><b>Se non si possiede uno Squeezebox o un Transporter:</b><ul><li>È possibile ascoltare la libreria musicale mediante<a target="_top" href="html/softsqueeze/index.html">SoftSqueeze</a>, la versione software di Squeezebox.<li>È possibile ascoltare la libreria musicale utilizzando il software del lettore MP3 (quale WinAmp o iTunes) con SqueezeCenter collegandosi al seguente URL: http://localhost:9000/stream.mp3
+	IT	<b>Se si possiede uno Squeezebox o un Transporter:</b><ul><li>Verificare che il lettore sia collegato e che le relative impostazioni di rete siano corrette. Una volta collegato il lettore, fare clic sul pulsante Aggiorna.</ul><p><b>Se non si possiede uno Squeezebox o un Transporter:</b><ul><li>È possibile ascoltare la libreria musicale mediante <a target="_top" href="html/softsqueeze/index.html">SoftSqueeze</a>, la versione software di Squeezebox.<li>È possibile ascoltare la libreria musicale in SqueezeCenter tramite software per lettori MP3 (ad esempio WinAmp o iTunes) accedendo al seguente URL: <a target="stream" href="http://localhost:9000/stream.mp3">http://localhost:9000/stream.mp3</a></ul>
 	JA	プレーヤーがつながれ、ネットワークセッティングが正しいことを確認してください。「更新」を押して、プレーヤへの接続を再度試みてください。
 	NL	<b>Als je een Squeezebox of Transporter hebt:</b><ul><li>Zorg ervoor dat je muzieksysteem op het netwerk is aangesloten en dat de netwerkinstellingen goed zijn. Klik op de knop Vernieuwen wanneer je systeem is aangesloten.</ul><p><b>Als je geen Squeezebox of Transporter hebt:</b><ul><li>Je kunt naar je muziekcollectie luisteren met <a target="_top" href="html/softsqueeze/index.html">SoftSqueeze</a>, een softwareversie van de Squeezebox.<li>Je kunt mp3-spelersoftware (zoals Winamp of iTunes) gebruiken om met SqueezeCenter naar je muziekcollectie te luisteren. Maak hiervoor een verbinding met de volgende URL: http://localhost:9000/stream.mp3
 	NO	<b>Hvis du har en Squeezebox eller en Transporter:</b><ul><li>Kontroller at spilleren er plugget inn, og at nettverksinnstillingene stemmer. Klikk på Oppdater så snart spilleren er koplet til.</ul><p><b>Hvis du ikke har en Squeezebox eller en Transporter:</b><ul><li>Du kan lytte til musikkbiblioteket ditt med <a target="_top" href="/html/softsqueeze/index.html">SoftSqueeze</a>, en programvareversjon av Squeezebox.<li>Du kan bruke mp3-spiller-programvare (som Winamp eller iTunes) til å lytte til musikkbiblioteket ditt med SqueezeCenter ved å gå til denne url-en: <a target="stream" href="http://localhost:9000/stream.mp3">http://localhost:9000/stream.mp3</a></ul>
@@ -14029,6 +14067,30 @@ SYNC_WITH
 	SV	Synkronisera med:
 	ZH_CN	请按右方向键来同步：
 
+SYNC_X_TO
+	DA	Synkroniser %s med:
+	DE	Synchronisieren %s mit:
+	EN	Sync %s to:
+	ES	Sincronizar %s a:
+	FI	Synkronoi %s ja
+	FR	Synchroniser %s avec:
+	IT	Sincronizza %s in:
+	NL	Synchronisatie %s naar:
+	NO	Synkroniser %s til:
+	SV	Synkronisera %s tíll:
+
+DO_NOT_SYNC
+	DA	Ingen synkronisering
+	DE	Keine Synchronisierung
+	EN	No Sync
+	ES	No sincronizar
+	FI	Epäsynkronissa
+	FR	Pas de synchronisation
+	IT	Nessuna sincronizzazione
+	NL	Geen synchronisatie
+	NO	Ingen synkronisering
+	SV	Ingen synkronisering
+
 UNSYNC_WITH
 	CS	Stiskněte 'DOPRAVA' pro zrušení synchronizace
 	DA	Afslut synkronisering med:
@@ -14045,6 +14107,30 @@ UNSYNC_WITH
 	PT	Prima DIREITA outra vez para dessincronizar com
 	SV	Avbryt synkroniseringen med:
 	ZH_CN	请按右方向键来撤销同步：
+
+SYNCING_WITH
+	DA	Synkroniserer med: %s
+	DE	Synchronisieren mit: %s
+	EN	Syncing with: %s
+	ES	Sincronizando con: %s
+	FI	Synkronoidaan kohteen %s kanssa
+	FR	Synchronisation avec: %s
+	IT	Sincronizzazione in corso con: %s
+	NL	Synchronisatie met: %s
+	NO	Synkroniserer med: %s
+	SV	Synkroniserar med: %s
+
+UNSYNCING_FROM
+	DA	Ophæver synkroniseringen fra: %s
+	DE	Synchronisierung aufheben ab: %s
+	EN	Unsyncing from: %s
+	ES	Desincronizando de: %s
+	FI	Puretaan synkronointi kohteen %s kanssa
+	FR	Désynchronisation de: %s
+	IT	Rimozione sincronizzazione in corso da: %s
+	NL	Synchronisatie opheffen van: %s
+	NO	Fjerner synkronisering fra: %s
+	SV	Synkronisering från %s avbryts
 
 CREATE_MIX
 	DA	Opret miks
@@ -14488,6 +14574,18 @@ INFORMATION_MENU_SERVER
 	SV	Server-information
 	ZH_CN	伺服器信息
 
+INFORMATION_MENU_SCAN
+	DA	Detaljer om musiksøgning
+	DE	Details zum Musik-Scan
+	EN	Music Scan Details
+	ES	Detalles de examen de música
+	FI	Musiikkihaun tiedot
+	FR	Détails de l'analyse de la musique
+	IT	Dettagli analisi musica
+	NL	Details van muziekscan
+	NO	Detaljer om søk etter musikk
+	SV	Information om musiksökning
+
 INFORMATION_MENU_LIBRARY
 	CS	Statistiky archivu
 	DA	Statistik for musikbibliotek
@@ -14774,6 +14872,18 @@ INFORMATION_ARCHITECTURE
 	NO	Plattformarkitektur
 	SV	Plattformsarkitektur
 
+INFORMATION_ARCHITECTURE_ABBR
+	DA	Platform
+	DE	Plattform
+	EN	Platform
+	ES	Plataforma
+	FI	Järjestelmä
+	FR	Plate-forme
+	IT	Piattaforma
+	NL	Platform
+	NO	Plattform
+	SV	Plattform
+
 INFORMATION_SERVER_IP
 	CS	IP adresa serveru
 	DA	Serverens IP-adresse
@@ -14789,6 +14899,18 @@ INFORMATION_SERVER_IP
 	NO	Serverens ip-adresse
 	SV	Serverns IP-adress
 	ZH_CN	服务器IP地址
+
+INFORMATION_SERVER_IP_ABBR
+	DA	IP
+	DE	IP
+	EN	IP
+	ES	IP
+	FI	IP
+	FR	IP
+	IT	IP
+	NL	IP
+	NO	Ip
+	SV	IP
 
 INFORMATION_SERVER_PORT
 	CS	Číslo portu serveru
@@ -14820,6 +14942,18 @@ INFORMATION_SERVER_HTTP
 	NO	HTTP-serverens portnummer
 	SV	HTTP-serverns portnummer
 	ZH_CN	服务器HTTP端口号
+
+INFORMATION_SERVER_HTTP_ABBR
+	DA	HTTP-port
+	DE	HTTP-Port
+	EN	HTTP Port
+	ES	Puerto HTTP
+	FI	HTTP-portti
+	FR	Port HTTP
+	IT	Porta HTTP
+	NL	HTTP-poort
+	NO	HTTP-port
+	SV	HTTP-port
 
 INFORMATION_ALBUMS
 	CS	Celkem alb
@@ -14944,6 +15078,30 @@ INFORMATION_HOSTNAME
 	NO	Vertsnavn
 	SV	Värdnamn
 	ZH_CN	主机名字
+
+INFORMATION_OPERATINGSYSTEM
+	DA	Styresystem
+	DE	Betriebssystem
+	EN	Operating system
+	ES	Sistema operativo
+	FI	Käyttöjärjestelmä
+	FR	Système d'exploitation
+	IT	Sistema operativo
+	NL	Besturingssysteem
+	NO	Operativsystem
+	SV	Operativsystem
+
+INFORMATION_OPERATINGSYSTEM_ABBR
+	DA	Operativsystem
+	DE	BS
+	EN	OS
+	ES	Sistema operativo
+	FI	Käyttöjärjestelmä
+	FR	SE
+	IT	Sistema operativo
+	NL	Besturingssysteem
+	NO	OS
+	SV	Operativsystem
 
 INFORMATION_HOSTIP
 	DA	Værtens IP-adresse
@@ -16838,16 +16996,16 @@ SETUP_ANALOGOUTMODE
 	SV	Utgång
 
 SETUP_ANALOGOUTMODE_DESC
-	DA	Vælg hvad der skal ske når noget sluttes til udgangsstikket til hovedtelefoner/subwoofer på Boom. Når der tilsluttes hovedtelefoner, bliver de indbyggede højtalere slået fra.
-	DE	Wählen Sie die Funktion des Kopfhörer/Sub Out-Anschlusses von Boom. 'Kopfhörer' deaktiviert die internen Lautsprecher.
-	EN	Choose the function of Boom headphone/sub out port.  Headphone option will shut off the internal speakers.
-	ES	Elija la función del puerto de salida de auriculares o subwoofer de Boom. La opción de auriculares desactivará los altavoces internos.
-	FI	Valitse Boomin lähtöportin toiminto (kuulokkeet/subwoofer).  Jos valitset kuulokkeet, sisäiset kaiuttimet mykistyvät.
-	FR	Sélectionnez la fonction du port de sortie du casque/sub Boom. L'option casque va désactiver les haut-parleurs internes.
-	IT	Scegliere la funzione della porta di uscita per cuffia/subwoofer di Boom. L'opzione Cuffia disattiva gli altoparlanti interni.
-	NL	Kies de functie van de koptelefoon-/subwooferuitgang voor de Boom. Met de koptelefoonoptie worden de interne speakers uitgeschakeld.
-	NO	Velg funksjonen til utgangen for hodetelefoner/basshøyttaler på Boom. Hvis du velger hodetelefoner, slås de interne høyttalerne av.
-	SV	Välj funktion för utgången för hörlurar/baselement på Boom.  Om du väljer hörlursalternativet stängs de inbyggda högtalarna av.
+	DA	Vælg hvad der skal ske når noget sluttes til udgangsstikket til hovedtelefoner/subwoofer på Boom. Når der tilsluttes hovedtelefoner, bliver de indbyggede højtalere slået fra. Hvis du vælger Altid slået til, forbliver de indbyggede højtalere slået til, også selvom der tilsluttes hovedtelefoner.
+	DE	Wählen Sie die Funktion des Kopfhörer/Sub Out-Anschlusses von Boom. 'Kopfhörer' deaktiviert die internen Lautsprecher. Mit 'Immer Aktiv' bleiben die internen Lautsprecher aktiv, auch wenn Kopfhörer angeschlossen sind.
+	EN	Choose the function of Boom headphone/sub out port.  Headphone option will shut off the internal speakers. "Always On" will keep the internal speakers enabled, even while headphones are plugged in.
+	ES	Elija la función del puerto de salida de auriculares o subwoofer de Boom. La opción de auriculares apagará los altavoces integrados. "Activado siempre" mantendrá activados los altavoces integrados, incluso cuando los auriculares estén conectados.
+	FI	Valitse Boomin lähtöportin toiminto (kuulokkeet/subwoofer).  Jos valitset kuulokkeet, sisäiset kaiuttimet mykistyvät. "Aina käytössä" pitää sisäisen kaiuttimen käytössä silloinkin, kun kuulokkeet on liitetty.
+	FR	Sélectionnez la fonction du port de sortie du casque/sub Boom. L'option Toujours activé garde les haut-parleurs internes activés, même si un casque est branché.
+	IT	Scegliere la funzione della porta di uscita per cuffia/subwoofer del radioregistratore. L'opzione Cuffia disattiva gli altoparlanti interni. Con l'opzione Sempre attivato, gli altoparlanti interni saranno sempre attivati, anche quando sono collegate le cuffie.
+	NL	Kies de functie van de koptelefoon-/subwooferuitgang voor de Boom. Met de koptelefoonoptie worden de interne speakers uitgeschakeld. Met 'Altijd aan' blijven de interne speakers ingeschakeld, zelfs wanneer er een koptelefoon is aangesloten.
+	NO	Velg funksjonen til utgangen for hodetelefoner/basshøyttaler på Boom. Hvis du velger hodetelefoner, slås de interne høyttalerne av. Hvis du velger "Alltid på", beholdes de interne høyttalerne på, selv om hodetelefonene er koplet til.
+	SV	Välj funktion för utgången för hörlurar/baselement på Boom. Om du väljer hörlursalternativet stängs de inbyggda högtalarna av. Med alternativet Alltid på är de inbyggda högtalarna alltid påslagna, även om hörlurarna är anslutna.
 
 ANALOGOUTMODE_SUBOUT
 	DA	Subwoofer
@@ -16872,6 +17030,30 @@ ANALOGOUTMODE_HEADPHONE
 	NL	Koptelefoon
 	NO	Hodetelefoner
 	SV	Hörlurar
+
+ANALOGOUTMODE_ALWAYS_ON
+	DA	Altid slået til
+	DE	Immer aktiv
+	EN	Always On
+	ES	Activado siempre
+	FI	Aina käytössä
+	FR	Toujours activé
+	IT	Sempre attivata
+	NL	Altijd aan
+	NO	Alltid på
+	SV	Alltid på
+
+ANALOGOUTMODE_ALWAYS_OFF
+	DA	Altid slået fra
+	DE	Immer aus
+	EN	Always Off
+	ES	Desactivado siempre
+	FI	Ei koskaan käytössä
+	FR	Toujours éteint
+	IT	Sempre disattivata
+	NL	Altijd uit
+	NO	Alltid av
+	SV	Alltid av
 
 SETUP_POLARITYINVERSION
 	DA	Inverter polaritet
@@ -17262,6 +17444,18 @@ DEBUG_FORMATS_XML
 	NL	XML-parseringsinformatie (aanraders, SHOUTcast, enz.)
 	NO	XML-analyseinformasjon (utvalg, SHOUTcast, osv.)
 	SV	XML-tolkningsinformation (Picks, SHOUTcast, o.s.v.)
+
+DEBUG_FORMATS_METADATA
+	DA	Metadataoplysninger om ekstern stream
+	DE	Datenstrom- und Metadateninformationen
+	EN	Remote stream metadata information
+	ES	Información de metadatos de secuencia remota
+	FI	Etävirran metatiedot
+	FR	Informations de métadonnées du flux distant
+	IT	Informazioni metadati streaming remoto
+	NL	Metagegevensinformatie over streaming op afstand
+	NO	Metadatainformasjon om ekstern strømming
+	SV	Metadatainformation om fjärruppspelning.
 
 DEBUG_DATABASE_MYSQL
 	DA	Information om MySQL-initialisering og -processer
@@ -18211,11 +18405,11 @@ JIVE_SEARCHFOR_HELP
 	EN	Use the scroll wheel to change letters, then press the center button to select that letter. Press the center button again to start your search.
 	ES	Cambie de letra con la rueda de desplazamiento y pulse el botón central para seleccionar la letra deseada. Pulse de nuevo el botón central para iniciar la búsqueda.
 	FI	Voit vaihtaa kirjainta vierityskiekolla ja valita kirjaimen keskipainikkeella. Käynnistä haku painamalla keskipainiketta uudelleen.
-	FR	Utiliser le bidule pour choisir une lettre, plus appuyer sur le bouton central afin de la sélectionner. Appuyer à nouveau sur le bouton central pour démarrer la recherche.
+	FR	Utiliser la molette pour choisir une lettre, puis appuyer sur le bouton central afin de la sélectionner. Appuyer à nouveau sur le bouton central pour démarrer la recherche.
 	IT	Utilizzare la rotellina per cambiare le lettere, quindi premere il pulsante centrale per selezionarle. Premere nuovamente il pulsante centrale per avviare la ricerca.
 	NL	Gebruik het scrollwiel om naar een andere letter te gaan. Druk dan op de middelste knop om die letter te selecteren. Druk nogmaals op de middelste knop om je zoekopdracht te starten.
 	NO	Du kan endre bokstav med rullehjulet, og velge bokstav med midtknappen. Trykk på midtknappen på nytt for å starte søket.
-	SV	Markera en bokstav med rullningshjulet och tryck sedan på mittknappen för att välja bokstaven. Tryck på mittknappen igen när du vill börja söka.
+	SV	Markera en bokstav med rullningshjulet och tryck sedan på mittenknappen för att välja bokstaven. Tryck på mittenknappen igen när du vill börja söka.
 
 JIVE_CHANGEPLAYERNAME_HELP
 	DA	Brug drejeknappen til at skifte bogstav, og tryk på midterknappen for at vælge det. Tryk på midterknappen igen for at ændre navnet på afspilleren.
@@ -18227,7 +18421,7 @@ JIVE_CHANGEPLAYERNAME_HELP
 	IT	Utilizzare la rotellina per cambiare le lettere, quindi premere il pulsante centrale per selezionarle. Premere nuovamente il pulsante centrale per cambiare il nome del lettore.
 	NL	Gebruik het scrollwiel om naar een andere letter te gaan. Druk dan op de middelste knop om die letter te selecteren. Druk nogmaals op de middelste knop om de naam van het muzieksysteem te wijzigen.
 	NO	Du kan endre bokstav med rullehjulet, og velge bokstav med midtknappen. Trykk på midtknappen igjen for å endre navnet på spilleren.
-	SV	Markera en bokstav med rullningshjulet och tryck sedan på mittknappen för att välja bokstaven. Tryck på mittknappen igen när du vill ändra spelarens namn.
+	SV	Markera en bokstav med rullningshjulet och tryck sedan på mittenknappen för att välja bokstaven. Tryck på mittenknappen igen när du vill ändra spelarens namn.
 
 JIVE_SAVEPLAYLIST_HELP
 	DA	Brug drejeknappen til at skifte bogstav, og tryk på midterknappen for at vælge det. Tryk på midterknappen igen for at gemme afspilningslisten.
@@ -18239,7 +18433,7 @@ JIVE_SAVEPLAYLIST_HELP
 	IT	Utilizzare la rotellina per cambiare le lettere, quindi premere il pulsante centrale per selezionarle. Premere nuovamente il pulsante centrale per salvare l'elenco di riproduzione.
 	NL	Gebruik het scrollwiel om naar een andere letter te gaan. Druk dan op de middelste knop om die letter te selecteren. Druk nogmaals op de middelste knop om de playlist op te slaan.
 	NO	Du kan endre bokstav med rullehjulet, og velge bokstav med midtknappen. Trykk på midtknappen på nytt for å lagre spillelisten.
-	SV	Markera en bokstav med rullningshjulet och tryck sedan på mittknappen för att välja bokstaven. Tryck på mittknappen igen när du vill spara spellistan.
+	SV	Markera en bokstav med rullningshjulet och tryck sedan på mittenknappen för att välja bokstaven. Tryck på mittenknappen igen när du vill spara spellistan.
 
 JIVE_ALLOWEDCHARS_WITHCAPS
 	DA	 abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+{}|:\"'<>?-=,./~`[];0123456789
@@ -18275,7 +18469,7 @@ JIVE_ALARMSET_HELP
 	IT	Utilizzare la rotellina per cambiare le cifre dell'orario, quindi premere il pulsante centrale per selezionarle. Per impostare la sveglia, premere il pulsante centrale dopo avere inserito l'ora.
 	NL	Gebruik het scrollwiel om klokcijfers te wijzigen. Druk dan op de middelste knop om dat cijfer te selecteren. Nadat de tijd is ingevoerd, druk je op de middelste knop om de alarmtijd in te stellen.
 	NO	Du kan endre klokkesifrene med rullehjulet, og velge tall med midtknappen. Når du har angitt alarmtid, trykker du på midtknappen for å bekrefte den.
-	SV	Markera en klocksiffra med rullningshjulet och tryck sedan på mittknappen för att välja siffran. När du har angett tiden trycker du på mittknappen för att ställa in tiden för alarmet.
+	SV	Markera en siffra för klockslaget med rullningshjulet och tryck sedan på mittenknappen för att välja siffran. När du har angett tiden trycker du på mittenknappen för att ställa in tiden för alarmet.
 
 JIVE_POPUP_ADDING_TO_PLAYLIST
 	DA	Føjer\n%s\ntil afspilningsliste...
@@ -18662,9 +18856,16 @@ UNMIXABLE
 	SV	%s är inte tillgängligt för det här objektet
 
 NO_MIXERS_AVAILABLE
-	DE	Es stehen keine Mixer zur Verfügung
+	DA	Der er ingen miksere
+	DE	Keine Mixer verfügbar
 	EN	No mixers available
+	ES	No hay mezcladores disponibles
+	FI	Miksereitä ei ole käytettävissä
+	FR	Aucun mixeur disponible
+	IT	Nessuna raccolta disponibile
+	NL	Geen mixers beschikbaar
 	NO	Ingen miksere tilgjengelig
+	SV	Inga mixrar tillgängliga
 
 PLAYER_BRIGHTNESS
 	DA	Afspillerens lysstyrke
@@ -18776,7 +18977,520 @@ SQUEEZECENTER_CONNECT_ABBR
 	SV	SqueezeCenter
 
 CLOCK
+	DA	Ur
+	DE	Uhr
 	EN	Clock
+	ES	Reloj
+	FI	Kello
+	FR	Horloge
+	IT	Orologio
+	NL	Klok
+	NO	Klokke
+	SV	Klocka
 
 BACKUP_ALARM
+	DA	Reservevækkeur
+	DE	Backup-Alarm
 	EN	Backup Alarm
+	ES	Alarma de emergencia
+	FI	Varahälytys
+	FR	Alarme de secours
+	IT	Sveglia di backup
+	NL	Back-upwekker
+	NO	Ekstravekking
+	SV	Reservalarm
+
+CLEANUP_TITLE
+	DA	Oprydning i SqueezeCenter
+	DE	SqueezeCenter-Bereinigung
+	EN	SqueezeCenter Cleanup
+	ES	Limpieza de SqueezeCenter
+	FI	SqueezeCenterin puhdistus
+	FR	Nettoyage SqueezeCenter
+	IT	Pulizia di SqueezeCenter
+	NL	SqueezeCenter opschonen
+	NO	Opprydding av SqueezeCenter
+	SV	Rensning i SqueezeCenter
+
+CLEANUP_DESC
+	DA	Vælg de filer og mapper der skal nulstilles:
+	DE	Markieren Sie die Dateien und Ordner, die zurückgesetzt werden sollen:
+	EN	Please select the files and folders you'd like to reset:
+	ES	Seleccione los archivos y carpetas que desee restablecer:
+	FI	Valitse tiedostot ja kansiot, jotka haluat palauttaa:
+	FR	Sélectionnez les fichiers et les dossiers à réinitialiser:
+	IT	Selezionare i file e le cartelle che si desidera reimpostare:
+	NL	Selecteer de bestanden en mappen die je opnieuw wilt instellen:
+	NO	Velg filene og mappene du vil tilbakestille:
+	SV	Välj de filer och mappar som du vill återställa:
+
+CLEANUP_DO
+	DA	Foretag oprydning
+	DE	Bereinigung durchführen
+	EN	Run Cleanup
+	ES	Ejecutar limpieza
+	FI	Suorita puhdistus
+	FR	Lancer le nettoyage
+	IT	Esegui pulizia
+	NL	Opschoning uitvoeren
+	NO	Kjør opprydding
+	SV	Kör rensning
+
+CLEANUP_SUCCESS
+	DA	Oprydningen er gennemført
+	DE	Bereinigung erfolgreich abgeschlossen
+	EN	Cleanup finished successfully
+	ES	La limpieza finalizó correctamente
+	FI	Puhdistus on suoritettu
+	FR	Le nettoyage a été effectué
+	IT	Pulizia eseguita correttamente
+	NL	Opschoning voltooid
+	NO	Opprydding fullført
+	SV	Rensningen slutfördes utan problem
+
+CLEANUP_PLEASE_RESTART_SC
+	DA	Du skal genstarte SqueezeCenter for at ændringerne kan træde i kraft.
+	DE	SqueezeCenter muss neu gestartet werden, damit die Änderungen in Kraft treten.
+	EN	Please restart SqueezeCenter for the changes to take effect.
+	ES	Reinicie SqueezeCenter para que los cambios entren en vigor.
+	FI	Käynnistä SqueezeCenter uudelleen, jotta muutokset tulevat voimaan.
+	FR	Redémarrez le SqueezeCenter pour appliquer les modifications.
+	IT	Per applicare le modifiche, è necessario riavviare SqueezeCenter.
+	NL	Start SqueezeCenter opnieuw om de wijzigingen door te voeren.
+	NO	Du må starte SqueezeCenter på nytt for at endringene skal tre i kraft.
+	SV	Starta om SqueezeCenter om du vill att ändringarna ska träda i kraft.
+
+CLEANUP_PLEASE_STOP_SC
+	DA	Du skal stoppe SqueezeCenter før du foretager oprydningen.
+	DE	Vor der Bereinigung muss SqueezeCenter beendet werden.
+	EN	Please Stop SqueezeCenter before running the cleanup.
+	ES	Detenga SqueezeCenter antes de ejecutar la limpieza.
+	FI	Sulje SqueezeCenter ennen puhdistuksen suorittamista.
+	FR	Arrêtez le SqueezeCenter avant de lancer le nettoyage.
+	IT	Prima di eseguire la pulizia, arrestare SqueezeCenter.
+	NL	Stop SqueezeCenter voordat je de opschoning uitvoert.
+	NO	Stopp SqueezeCenter før du kjører oppryddingen.
+	SV	Stoppa SqueezeCenter innan du börjar med rensningen.
+
+CLEANUP_USAGE
+	DA	Brug
+	DE	Einsatz
+	EN	Usage
+	ES	Uso
+	FI	Käyttö
+	FR	Utilisation
+	IT	Uso
+	NL	Gebruik
+	NO	Anvendelse
+	SV	Användning
+
+CLEANUP_COMMAND_LINE
+	DA	Kommandolinjemuligheder:
+	DE	Befehlszeilenoptionen:
+	EN	Command line options:
+	ES	Opciones de línea de comandos:
+	FI	Komentorivivalitsimet:
+	FR	Options de ligne de commande:
+	IT	Opzioni della riga di comando:
+	NL	Opdrachtregelopties:
+	NO	Kommandolinjevalg:
+	SV	Alternativ för kommandoraden:
+
+CLEANUP_MYSQL
+	DA	Slet MySQL-data (database med oplysninger om musikken)
+	DE	MySQL-Daten löschen (Musikdatenbank)
+	EN	Delete MySQL data (music information database)
+	ES	Eliminar datos de MySQL (base de datos de información de música)
+	FI	Poista MySQL-tiedot (musiikkitietokanta)
+	FR	Supprimer les données MySQL (base de données musicale)
+	IT	Elimina dati MySQL (database di informazioni sulla musica)
+	NL	MySQL-gegevens (database met muziekinformatie) verwijderen
+	NO	Slett MySQL-data (musikkinformasjonsdatabase)
+	SV	Ta bort MySQL-data (databasen med musikinformation)
+
+CLEANUP_FILECACHE
+	DA	Slet filcache med coverbilleder, skabeloner osv.
+	DE	Datei-Zwischenspeicher für Plattenhüllen, Vorlagen usw. löschen.
+	EN	Delete file cache for artwork, templates etc.
+	ES	Eliminar archivo de caché para carátulas, plantillas, etc.
+	FI	Poista kansitaiteen, mallien ym. tiedostovälimuisti
+	FR	Supprimer le cache des pochettes, modèles, etc.
+	IT	Elimina cache per copertine, modelli e così via
+	NL	Bestandscache voor hoesafbeeldingen, sjablonen, enz. verwijderen
+	NO	Slett filhurtigbuffer for omslag, maler osv.
+	SV	Ta bort filcache (innehåller bla. albumomslag och mallar)
+
+CLEANUP_PREFS
+	DA	Slet filer med indstillinger
+	DE	Einstellungsdateien löschen
+	EN	Delete preference files
+	ES	Eliminar archivos de preferencias
+	FI	Poista asetustiedostot
+	FR	Supprimer les fichiers de préférence
+	IT	Elimina file delle preferenze
+	NL	Voorkeurenbestanden verwijderen
+	NO	Slett innstillingsfiler
+	SV	Ta bort inställningsfiler
+
+CLEANUP_LOGS
+	DA	Slet logfiler
+	DE	Logdateien löschen
+	EN	Delete log files
+	ES	Eliminar archivos de registro
+	FI	Poista lokitiedostot
+	FR	Supprimer les fichiers journaux
+	IT	Elimina file di registro
+	NL	Logboekbestanden verwijderen
+	NO	Slett loggfiler
+	SV	Ta bort loggfiler
+
+CLEANUP_CACHE
+	DA	Ryd op i cachemappen, herunder musikdatabasen, cachelagrede coverbilleder osv.
+	DE	Zwischenspeicher-Ordner mit Musikdatenbank, Plattenhüllen-Zwischenspeicher usw. bereinigen.
+	EN	Clean cache folder, including music database, artwork cache etc.
+	ES	Limpiar carpeta de caché, incluidos base de datos de música, caché de carátulas, etc.
+	FI	Tyhjennä välimuistikansio, mukaan luettuna musiikkitietokanta, kansitaiteen välimuisti jne.
+	FR	Nettoyer le dossier cache, y compris la base de données musicale, le cache des pochettes, etc.
+	IT	Pulisci cartella della cache, inclusi database musicale, cache delle copertine e così via.
+	NL	Schoon de cachemap op, inclusief de muziekdatabase, hoesafbeeldingencache, enz.
+	NO	Tøm hurtigbuffermappen, inkludert musikkdatabasen, hurtigbufrede omslag osv.
+	SV	Rensa cachemappen (innehåller bland annat musikdatabasen och cacheminnet med albumomslag)
+
+CLEANUP_ALL
+	DA	Slet det hele - det skal du kun gøre hvis du ved hvad du er i gang med...!
+	DE	Alles löschen - Sind Sie sich auch wirklich sicher?
+	EN	Wipe'em all - don't do this unless you know what you're doing!
+	ES	Borrar todo. No lo haga a menos que sepa lo que está haciendo.
+	FI	Poista kaikki - älä tee, jos et ole varma, että tiedät mitä teet!
+	FR	Tout supprimer. Sélectionnez cette option si vous êtes sûr de vouloir tout supprimer.
+	IT	Elimina tutto (in caso di dubbi, non eseguire l'operazione)
+	NL	Wis alles - doe dit alleen als je weet wat je doet!
+	NO	Slett alt ‒ Ikke gjør dette med mindre du vet hva du driver med!
+	SV	Utplåna allt – Gör inte detta om du inte är helt säker på vad du gör!
+
+CLEANUP_DELETING
+	DA	Sletter
+	DE	Löschen
+	EN	Deleting
+	ES	Eliminando
+	FI	Poistetaan
+	FR	Suppression en cours
+	IT	Eliminazione in corso
+	NL	wordt verwijderd
+	NO	Sletter
+	SV	Raderar
+
+PLAYLIST_MODE
+	DA	Brug afspilningslister
+	DE	Wiedergabelisten-Modus
+	EN	Playlist Mode (Beta)
+	ES	Modo de lista de reproducción
+	FI	Soittoluettelotila
+	FR	Mode liste de lecture
+	IT	Modalità Elenco di riproduzione
+	NL	Playlistmodus
+	NO	Spillelistemodus
+	SV	Spellistläge
+
+JIVE_PLAYLIST_MODE_HELP
+	DA	Når du har valgt at bruge afspilningslister, indsættes det valgte nummer i den næste position på den nuværende liste når du trykker på controllerens afspilningsknap. Hvis funktionen er slået fra, ryddes den nuværende afspilningsliste, og det valgte nummer bliver afspillet straks.
+	DE	Wenn der Wiedergabelisten-Modus aktiviert ist, kann mithilfe der Controller-Wiedergabetaste das aktuelle Element an die nächste Stelle in der Wiedergabeliste gesetzt werden. Ist dieser Modus deaktiviert, wird die aktuelle Wiedergabeliste durch die Wiedergabetaste gelöscht und das aktuelle Element sofort wiedergegeben.
+	EN	With playlist mode enabled, the controller's play button will add the current item to the next position in the current playlist. When disabled, the play button will clear the current playlist and immediately begin playback of the item.
+	ES	Con el modo de lista de reproducción activado, el botón de reproducción del controlador agregará el elemento actual a la siguiente posición en la lista de reproducción actual. Cuando se desactive, el botón de reproducción borrará la lista de reproducción actual e inmediatamente iniciará la reproducción del elemento.
+	FI	Kun soittoluettelotila on käytössä, ohjaimen toistopainike lisää valitun kohdan seuraavaan paikkaan nykyisessä soittoluettelossa. Kun tila ei ole käytössä, toistopainike tyhjentää nykyisen soittoluettelon ja käynnistää valitun kohteen toiston.
+	FR	Lorsque le mode de liste de lecture est activé, le bouton Lecture de la télécommande ajoute l'élément en cours à la suite de la liste en cours. Lorsque ce mode est désactivé, le bouton Lecture efface la liste en cours et lance la lecture du morceau sélectionné.
+	IT	Se la modalità Elenco di riproduzione è attivata, il pulsante di riproduzione del controller consente di aggiungere l'elemento corrente nella posizione successiva dell'elenco di riproduzione corrente. Se la modalità è disattivata, il pulsante di riproduzione consente di svuotare l'elenco di riproduzione corrente e di riprodurre immediatamente l'elemento.
+	NL	Wanneer de playlistmodus is ingeschakeld, wordt met de afspeelknop van de controller het huidige item aan de volgende positie in de huidige playlist toegevoegd. Wanneer deze modus is uitgeschakeld, wordt met de afspeelknop de huidige playlist gewist en wordt het item onmiddellijk afgespeeld.
+	NO	Når spillelistemodus er aktivert, legger spill-knappen på kontrollen til det gjeldende elementet på neste plass på gjeldende spilleliste. Når denne modusen er deaktivert, tømmer spill-knappen gjeldende spilleliste og begynner øyeblikkelig avspilling av elementet.
+	SV	Om spellistan är aktiverad hamnar det aktuella objektet i nästa position i spellistan om du trycker på play. Om den däremot inte är aktiverad rensas spellistan samtidigt som objektet spelas upp direkt när du trycker på play.
+
+PLAYLIST_MODE_ON
+	DA	Brug afspilningslister til
+	DE	Wiedergabelisten-Modus aktiv
+	EN	Playlist Mode On
+	ES	Modo de lista de reproducción activado
+	FI	Soittoluettelotila käytössä
+	FR	Mode liste de lecture activé
+	IT	Modalità Elenco di riproduzione attivata
+	NL	Playlistmodus aan
+	NO	Spillelistemodus på
+	SV	Spellista på
+
+PLAYLIST_MODE_OFF
+	DA	Brug afspilningslister fra
+	DE	Wiedergabelisten-Modus aus
+	EN	Playlist Mode Off
+	ES	Modo de lista de reproducción desactivado
+	FI	Soittoluettelotila ei käytössä
+	FR	Mode liste de lecture désactivé
+	IT	Modalità Elenco di riproduzione disattivata
+	NL	Playlistmodus uit
+	NO	Spillelistemodus av
+	SV	Spellista av
+
+PLAYLIST_MODE_ENABLED
+	DA	Brug afspilningslister er slået til
+	DE	Wiedergabelisten-Modus aktiviert
+	EN	Playlist Mode Enabled
+	ES	Modo de lista de reproducción activado
+	FI	Soittoluettelotila käytössä
+	FR	Mode liste de lecture activé
+	IT	Modalità Elenco di riproduzione attivata
+	NL	Playlistmodus ingeschakeld
+	NO	Spillelistemodus aktivert
+	SV	Spellista aktiverad
+
+PLAYLIST_MODE_DISABLED
+	DA	Brug afspilningslister er slået fra
+	DE	Wiedergabelisten-Modus deaktiviert
+	EN	Playlist Mode Disabled
+	ES	Modo de lista de reproducción desactivado
+	FI	Soittoluettelotila poistettu käytöstä
+	FR	Mode liste de lecture désactivé
+	IT	Modalità Elenco di riproduzione disattivata
+	NL	Playlistmodus uitgeschakeld
+	NO	Spillelistemodus deaktivert
+	SV	Spellista avaktiverad
+
+PARTY_MODE
+	DA	Partyfunktion
+	DE	Party-Modus
+	EN	Party Mode
+	ES	Modo de fiesta
+	FI	Juhlatila
+	FR	Mode fête
+	IT	Modalità Mix
+	NL	Feestmodus
+	NO	Festmodus
+	SV	Festläge
+
+PARTY
+	DA	Party
+	DE	Party
+	EN	Party
+	ES	Fiesta
+	FI	Juhlat
+	FR	Fête
+	IT	Mix
+	NL	Feest
+	NO	Fest
+	SV	Fest
+
+PARTY_MODE_ON
+	DA	Partyfunktion til
+	DE	Party-Modus aktiv
+	EN	Party Mode On
+	ES	Modo de fiesta activado
+	FI	Juhlatila käytössä
+	FR	Mode fête activé
+	IT	Modalità Mix attivata
+	NL	Feestmodus aan
+	NO	Festmodus på
+	SV	Festläge på
+
+PARTY_MODE_OFF
+	DA	Partyfunktion fra
+	DE	Party-Modus aus
+	EN	Party Mode Off
+	ES	Modo de fiesta desactivado
+	FI	Juhlatila ei käytössä
+	FR	Mode fête désactivé
+	IT	Modalità Mix disattivata
+	NL	Feestmodus uit
+	NO	Festmodus av
+	SV	Festläge Av
+
+SIGNUP_LISTEN
+	DA	Lyt til noget musik!
+	DE	Hören Sie Musik!
+	EN	Listen to some music!
+	ES	Escuchar un poco de música.
+	FI	Kuuntele musiikkia!
+	FR	Ecouter de la musique
+	IT	Ascolta un po' di musica!
+	NL	Luister eens naar muziek!
+	NO	Lytt til musikk!
+	SV	Lyssna på musik!
+
+HOWTO_HOME
+	DA	Kig på din Squeezebox, og tryk på venstrepilen på fjernbetjeningen indtil du kan se Nu spiller.
+	DE	Zeigen Sie mit der Fernbedienung auf die Squeezebox und drücken Sie LINKS auf der Fernbedienung, bis die Option 'Aktuelle Wiedergabe' zu sehen ist.
+	EN	Facing your Squeezebox, press the LEFT arrow on the remote until you see the Now Playing option.
+	ES	De cara a Squeezebox, pulse la flecha IZQUIERDA del mando a distancia hasta que vea la opción Reproduciendo.
+	FI	Asetu Squeezeboxin eteen ja paina kaukosäätimen vasenta nuolta, kunnes Nyt soi -ruutu tulee näyttöön.
+	FR	Appuyez sur la flèche gauche de la télécommande en la pointant vers la Squeezebox, jusqu'à ce que l'option Lecture s'affiche.
+	IT	Puntare il telecomando verso lo Squeezebox e premere freccia SINISTRA fino a quando non viene visualizzata l'opzione Riproduzione in corso.
+	NL	Richt de afstandsbediening naar de Squeezebox, en druk op de pijl naar LINKS tot je de optie Speelt nu ziet.
+	NO	Gå til VENSTRE på fjernkontrollen mens du står vendt mot Squeezebox, og hold knappen nede til du ser alternativet Spiller av nå.
+	SV	Rikta fjärrkontrollen mot Squeezebox och tryck på vänsterpilen på fjärrkontrollen för att visa alternativet Aktuellt spår.
+
+HOWTO_HOME_BOOM
+	DA	Se på din Squeezebox, og tryk på Hovedmenu/Hjem på fjernbetjeningen.
+	DE	Zeigen Sie mit der Fernbedienung auf die Squeezebox und drücken Sie HOME.
+	EN	Facing your Squeezebox, press HOME on the remote.
+	ES	De cara a Squeezebox, pulse HOME en el mando a distancia.
+	FI	Asetu Squeezeboxin eteen ja paina kaukosäätimen kotipainiketta.
+	FR	Appuyez sur Home sur la télécommande en la pointant vers la Squeezebox.
+	IT	Puntare il telecomando verso lo Squeezebox e premere HOME.
+	NL	Richt de afstandsbediening op de Squeezebox en druk op HOME.
+	NO	Trykk på HOME på fjernkontrollen mens du står vendt mot Squeezebox.
+	SV	Rikta fjärrkontrollen mot Squeezebox och tryck på HOME.
+
+HOWTO_HOME_CONTROLLER
+	DA	Tryk på Hovedmenu/Hjem på fjernbetjeningen.
+	DE	Drücken Sie HOME auf der Fernbedienung.
+	EN	Press HOME on the remote.
+	ES	Pulse HOME en el mando a distancia.
+	FI	Paina kaukosäätimen kotipainiketta.
+	FR	Appuyez sur Home sur la télécommande.
+	IT	Premere HOME sul telecomando.
+	NL	Druk op HOME op de afstandsbediening.
+	NO	Trykk på HOME på fjernkontrollen.
+	SV	Tryck på HOME på fjärrkontrollen.
+
+HOWTO_DOWN
+	DA	Tryk på nedpilen på fjernbetjeningen for at finde Internetradio, og tryk så på højrepilen for at vælge.
+	DE	Drücken Sie UNTEN auf der Fernbedienung, um 'Internetradio' aufzurufen. Drücken Sie RECHTS, um die Funktion zu aktivieren.
+	EN	Press DOWN on the remote to scroll to Internet Radio, and press RIGHT to select.
+	ES	Pulse ABAJO en el mando a distancia para desplazarse a Radio por Internet y pulse DERECHA para seleccionar.
+	FI	Siirry nettiradioon kaukosäätimen alapainikkeella ja valitse kanava oikealla painikkeella.
+	FR	Appuyez sur bas pour accéder aux radios Internet puis sur le bouton droit pour effectuer la sélection.
+	IT	Premere la freccia GIÙ sul telecomando per scorrere fino a Radio Internet, quindi premere la freccia DESTRA per eseguire una selezione.
+	NL	Druk OMLAAG op de afstandsbediening om naar 'Internetradio' te scrollen, en druk dan RECHTS om te selecteren.
+	NO	Gå NED på fjernkontrollen for å gå til Internett-radio, og gå til HØYRE for å velge.
+	SV	Bläddra till webbradio genom att trycka på nerknappen på fjärrkontrollen. Tryck därefter på högerknappen för att välja.
+
+HOWTO_DOWN_BOOM
+	DA	Tryk på nedpilen på fjernbetjeningen (eller drej drejeknappen til højre) for at finde Internetradio, og tryk så på højrepilen for at vælge.
+	DE	Drücken Sie UNTEN auf der Fernbedienung (oder drehen Sie den Regler nach rechts), um 'Internetradio' aufzurufen. Drücken Sie zum Aktivieren der Funktion RECHTS.
+	EN	Press DOWN on the remote (or spin the knob to the right) to scroll to Internet Radio, and press RIGHT to select.
+	ES	Pulse ABAJO en el mando a distancia (o gire la rueda central a la derecha) para desplazarse a Radio por Internet y pulse DERECHA para seleccionar.
+	FI	Siirry nettiradioon kaukosäätimen alapainikkeella (tai pyörittämällä kiekkoa oikealle) ja valitse se oikealla painikkeella.
+	FR	Appuyez sur Bas ou tournez la molette vers la droite pour faire défiler vers les radios Internet, puis appuyez sur le bouton droit pour effectuer la sélection.
+	IT	Premere la freccia GIÙ sul telecomando (o spingere il pulsante centrale verso destra) per scorrere fino a Radio Internet, quindi premere la freccia DESTRA per eseguire una selezione.
+	NL	Druk OMLAAG op de afstandsbediening (of draai de regelaar naar rechts) om naar 'Internetradio' te scrollen, en druk dan RECHTS om te selecteren.
+	NO	Gå ned på fjernkontrollen (eller rull mot høyre med midtknappen) for å gå til Internett-radio, og gå til høyre  for å velge.
+	SV	Bläddra till webbradion genom att trycka på nerknappen på fjärrkontrollen (eller vrid mittenknappen åt höger). Tryck på högerknappen för att göra ditt val.
+
+HOWTO_DOWN_CONTROLLER
+	DA	Drej knappen til højre for at markere Internetradio, og tryk på den for at vælge.
+	DE	Drehen Sie den Regler nach rechts, um Internetradio zu wählen. Drücken Sie die mittlere Taste, um die Funktion zu aktivieren.
+	EN	Spin the wheel to the right to scroll to Internet Radio, and press the center button to select.
+	ES	Gire la rueda a la derecha para desplazarse a Radio por Internet y pulse el botón central para seleccionar.
+	FI	Pyöritä kiekkoa oikealle, kunnes löydät nettiradion, ja valitse se keskipainikkeella.
+	FR	Tournez la molette vers la droite pour faire défiler vers les radios Internet et appuyez sur le bouton central pour effectuer la sélection.
+	IT	Spostare la rotellina verso destra per scorrere fino a Radio Internet, quindi premere il pulsante centrale per eseguire una selezione.
+	NL	Draai het wiel naar rechts om naar 'Internetradio' te scrollen, en druk op de middelste knop om te selecteren.
+	NO	Rull hjulet mot høyre for å gå til Internett-radio, og trykk på midtknappen for å velge.
+	SV	Rulla med hjulet för att bläddra till webbradion. Använd mittenknappen för att välja.
+
+HOWTO_STAFF_PICKS
+	DA	Rul til Vi anbefaler, og tryk på højrepilen.
+	DE	Markieren Sie 'Unsere Empfehlungen' und drücken Sie RECHTS.
+	EN	Scroll to STAFF PICKS and press RIGHT.
+	ES	Desplácese hasta NUESTRAS SELECCIONES y pulse DERECHA.
+	FI	Selaa suosituksiin ja paina oikeaa näppäintä.
+	FR	Faites défiler vers SELECTIONS et appuyez sur le bouton droit.
+	IT	Scorrere fino a SCELTI DALLO STAFF e premere DESTRA.
+	NL	Scrol naar AANRADERS en druk RECHTS.
+	NO	Gå til UTVALGTE STASJONER og gå til høyre.
+	SV	Bläddra till VÅRA FAVORITER och tryck på högerknappen.
+
+HOWTO_STAFF_PICKS_CONTROLLER
+	DA	Rul til Vi anbefaler, og tryk på midterknappen.
+	DE	Markieren Sie 'Unsere Empfehlungen' und drücken Sie die mittlere Taste.
+	EN	Scroll to STAFF PICKS and press the center button.
+	ES	Desplácese hasta NUESTRAS SELECCIONES y pulse el botón central.
+	FI	Selaa kohtaan SUOSITUKSET ja paina keskipainiketta.
+	FR	Faites défiler vers SELECTIONS et appuyez sur le bouton central.
+	IT	Scorrere fino a SCELTI DALLO STAFF e premere il pulsante centrale.
+	NL	Scrol naar AANRADERS en druk op de middelste knop.
+	NO	Gå til UTVALGTE STASJONER og trykk på midtknappen.
+	SV	Bläddra till Våra favoriter och tryck på mittenknappen.
+
+HOWTO_INTERNET_RADIO
+	DA	Find Det bedste fra internetradio, og tryk på højrepilen.
+	DE	Markieren Sie die Option 'Die besten Internetradiosender' und drücken Sie RECHTS.
+	EN	Scroll to "Best of Internet Radio" and press RIGHT.
+	ES	Desplácese hasta "Lo mejor en radio por Internet" y pulse DERECHA.
+	FI	Siirry kohtaan "internet-radion parhaat" ja paina oikeaa painiketta.
+	FR	Faites défiler vers Le meilleur des radios Internet et appuyez sur le bouton droit.
+	IT	Scorrere fino a "Il meglio della radio su Internet" e premere DESTRA.
+	NL	Scrol naar 'De beste internetradio' en druk RECHTS.
+	NO	Gå til "Beste stasjoner" og gå til høyre.
+	SV	Bläddra till Webbradiofavoriter och tryck på högerknappen.
+
+HOWTO_INTERNET_RADIO_CONTROLLER
+	DA	Find Det bedste fra internetradio, og tryk på midterknappen.
+	DE	Markieren Sie 'Die besten Internetradiosender' und drücken Sie die mittlere Taste.
+	EN	Scroll to "Best of Internet Radio" and press the center button.
+	ES	Desplácese hasta "Lo mejor en radio por Internet" y pulse el botón central.
+	FI	Siirry internet-radion parhaisiin ja paina keskipainiketta.
+	FR	Faites défiler vers Le meilleur des radios Internet et appuyez sur le bouton central.
+	IT	Scorrere fino a "Il meglio della radio su Internet" e premere il pulsante centrale.
+	NL	Scrol naar 'De beste internetradio' en druk op de middelste knop.
+	NO	Gå til "Beste stasjoner" og trykk på midtknappen.
+	SV	Bläddra till Webbradiofavoriter och tryck på mittenknappen.
+
+HOWTO_SHOWCASE
+	DA	Find Demonstration af Slim: Miles Davis, og tryk på Afspil.
+	DE	Markieren Sie den Eintrag 'Slim Showcase: Miles Davis' und drücken Sie PLAY.
+	EN	Scroll to Slim Showcase: Miles Davis and press PLAY.
+	ES	Desplácese hasta Slim Showcase: Miles Davis y pulse el botón de reproducción.
+	FI	Siirry kohtaan Esittely: Miles Davis ja paina toistopainiketta.
+	FR	Faites défiler vers Slim Showcase: Miles Davis et appuyez sur Lecture.
+	IT	Scorrere fino a Slim Showcase: Miles Davis e premere PLAY.
+	NL	Scrol naar 'Slim Showcase: Miles Davis' en druk op PLAY.
+	NO	Gå til Slim-scenen: Miles Davis og trykk på PLAY.
+	SV	Bläddra till Demonstration: Miles Davis och tryck på PLAY.
+
+HOWTO_VOLUME
+	DA	Juster lydstyrken.
+	DE	Regeln Sie die Lautstärke.
+	EN	Adjust the volume.
+	ES	Ajuste el volumen.
+	FI	Säädä äänenvoimakkuus.
+	FR	Ajustement du volume.
+	IT	Regolare il volume.
+	NL	Pas het volume aan.
+	NO	Juster volumet.
+	SV	Justera volymen.
+
+HOWTO_PAUSE
+	DA	Du kan afbryde afspilningen af nummeret midlertidigt ved at trykke på Pause. Hvis du vil stoppe afspilningen helt, skal du holde pauseknappen nede.
+	DE	Drücken Sie PAUSE, um den Titel anzuhalten. Halten Sie PAUSE gedrückt, um die Wiedergabe des Titels zu beenden.
+	EN	To pause the track, tap PAUSE. To stop the track, press and hold the PAUSE button.
+	ES	Para poner la pista en pausa, toque PAUSE. Para detener la pista, mantenga pulsado el botón PAUSE.
+	FI	Voit keskeyttää raidan toiston napauttamalla taukopainiketta. Voit lopettaa raidan toiston kokonaan pitämällä taukopainikkeen pohjassa.
+	FR	Appuyez sur Pause pour mettre la lecture en pause. Pour arrêter la lecture, maintenez le bouton Pause enfoncé.
+	IT	Per sospendere la riproduzione del brano, premere leggermente il pulsante di PAUSA. Per interrompere il brano, tenere premuto tale pulsante.
+	NL	Tik op PAUSE om het nummer te pauzeren. Houd de knop PAUSE ingedrukt om het nummer te stoppen.
+	NO	Hvis du vil sette sporet på pause, trykker du lett på PAUSE. Hvis du vil stoppe sporet, holder du nede PAUSE-knappen.
+	SV	Tryck på paus om du vill pausa spåret. Håll ner paus för att stoppa spåret.
+
+WHATS_NEXT
+	DA	Jeg er klar, hvad nu?
+	DE	Alles eingerichtet - wie gehts weiter?
+	EN	I'm all set up - what's next?
+	ES	Todo listo. ¿Qué más?
+	FI	Kaikki on valmista - mitä seuraavaksi?
+	FR	Passer à la suite.
+	IT	La configurazione è completa. Quali sono i passaggi successivi?
+	NL	Ik heb alles ingesteld - wat nu?
+	NO	Jeg er klar ‒ hva skjer nå?
+	SV	Jag är klar. Vad gör jag nu?
+
+CONTINUE_TO_SQUEEZECENTER
+	DA	Fortsæt til SqueezeCenter hvor du kan konfigurere indstillinger og afspille dine musikfiler.
+	DE	Weiter zu SqueezeCenter, um Einstellungen zur Wiedergabe Ihrer Musiksammlung zu verwalten.
+	EN	Continue to SqueezeCenter to manage settings for playing your personal music collection.
+	ES	Continuar a SqueezeCenter para administrar la configuración de reproducción de su colección de música.
+	FI	Jatka SqueezeCenteriin. Siellä voit hallita henkilökohtaisen musiikkikokoelmasi soittoasetuksia.
+	FR	Continuez vers le SqueezeCenter pour gérer les paramètres de lecture de votre musique.
+	IT	Passare a SqueezeCenter per gestire le impostazioni per la riproduzione della raccolta di musica personale.
+	NL	Ga door naar SqueezeCenter om instellingen te beheren voor het afspelen van je persoonlijke muziekcollectie.
+	NO	Gå til SqueezeCenter for å håndtere innstillingene for avspilling av musikksamlingen din.
+	SV	Gå vidare till SqueezeCenter för att hantera inställningarna för hur din musiksamling spelas upp.
+
+REDUCED_TO_PREVENT_CLIPPING
+	EN	%s to prevent clipping

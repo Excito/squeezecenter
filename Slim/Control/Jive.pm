@@ -16,9 +16,6 @@ use URI;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Player::Playlist;
-use Slim::Buttons::Information;
-use Slim::Buttons::Synchronize;
-use Slim::Player::Sync;
 use Slim::Player::Client;
 #use Data::Dump;
 
@@ -73,9 +70,6 @@ sub init {
 	Slim::Control::Request::addDispatch(['jiveupdatealarmdays', '_index', '_quantity'], 
 		[1, 1, 1, \&alarmUpdateDays]);
 
-	Slim::Control::Request::addDispatch(['jiveupdateplaylist', '_index', '_quantity'], 
-		[1, 1, 1, \&alarmUpdatePlaylistQuery]);
-
 	Slim::Control::Request::addDispatch(['syncsettings', '_index', '_quantity'],
 		[1, 1, 1, \&syncSettingsQuery]);
 
@@ -85,20 +79,11 @@ sub init {
 	Slim::Control::Request::addDispatch(['jivetonesettings', '_index', '_quantity'],
 		[1, 1, 1, \&toneSettingsQuery]);
 
-	Slim::Control::Request::addDispatch(['jivetoneadjust'],
-		[1, 0, 1, \&toneAdjustCommand]);
-
 	Slim::Control::Request::addDispatch(['jivestereoxl', '_index', '_quantity'],
 		[1, 1, 1, \&stereoXLQuery]);
 
-	Slim::Control::Request::addDispatch(['jivesetstereoxl'],
-		[1, 0, 1, \&stereoXLCommand]);
-
 	Slim::Control::Request::addDispatch(['jivelineout', '_index', '_quantity'],
 		[1, 1, 1, \&lineOutQuery]);
-
-	Slim::Control::Request::addDispatch(['jivesetlineout'],
-		[1, 0, 1, \&lineOutCommand]);
 
 	Slim::Control::Request::addDispatch(['crossfadesettings', '_index', '_quantity'],
 		[1, 1, 1, \&crossfadeSettingsQuery]);
@@ -106,11 +91,11 @@ sub init {
 	Slim::Control::Request::addDispatch(['replaygainsettings', '_index', '_quantity'],
 		[1, 1, 1, \&replaygainSettingsQuery]);
 
-	Slim::Control::Request::addDispatch(['playerinformation', '_index', '_quantity'],
-		[1, 1, 1, \&playerInformationQuery]);
-
 	Slim::Control::Request::addDispatch(['jivedummycommand', '_index', '_quantity'],
 		[1, 1, 1, \&jiveDummyCommand]);
+
+	Slim::Control::Request::addDispatch(['jiveendoftracksleep', '_index', '_quantity' ],
+		[1, 1, 1, \&endOfTrackSleepCommand]);
 
 	Slim::Control::Request::addDispatch(['jivefavorites', '_cmd' ],
 		[1, 0, 1, \&jiveFavoritesCommand]);
@@ -118,14 +103,8 @@ sub init {
 	Slim::Control::Request::addDispatch(['jiveplayerbrightnesssettings', '_index', '_quantity'],
 		[1, 1, 0, \&playerBrightnessMenu]);
 
-	Slim::Control::Request::addDispatch(['jivebrightnessadjust'],
-		[1, 0, 1, \&playerBrightnessAdjustCommand]);
-
-	Slim::Control::Request::addDispatch(['jiveplayertextsettings', '_index', '_quantity'],
+	Slim::Control::Request::addDispatch(['jiveplayertextsettings', '_whatFont', '_index', '_quantity'],
 		[1, 1, 0, \&playerTextMenu]);
-
-	Slim::Control::Request::addDispatch(['jivetextadjust'],
-		[1, 0, 1, \&playerTextAdjustCommand]);
 
 	Slim::Control::Request::addDispatch(['jiveunmixable'],
 		[1, 1, 1, \&jiveUnmixableMessage]);
@@ -135,6 +114,9 @@ sub init {
 
 	Slim::Control::Request::addDispatch(['jivesetalbumsort'],
 		[1, 0, 1, \&jiveSetAlbumSort]);
+
+	Slim::Control::Request::addDispatch(['jivesync' ],
+		[1, 0, 1, \&jiveSyncCommand]);
 
 	Slim::Control::Request::addDispatch(['jiveplaylists', '_cmd' ],
 		[1, 0, 1, \&jivePlaylistsCommand]);
@@ -146,24 +128,20 @@ sub init {
 		[1, 0, 1, \&jivePlayTrackAlbumCommand]);
 
 	Slim::Control::Request::addDispatch(['date'],
-		[0, 1, 0, \&dateQuery]);
+		[0, 1, 1, \&dateQuery]);
 
 	Slim::Control::Request::addDispatch(['firmwareupgrade'],
 		[0, 1, 1, \&firmwareUpgradeQuery]);
 
 	Slim::Control::Request::addDispatch(['jiveapplets'],
-		[0, 1, 0, \&downloadQuery]);
+		[0, 1, 1, \&extensionsQuery]);
 
 	Slim::Control::Request::addDispatch(['jivewallpapers'],
-		[0, 1, 0, \&downloadQuery]);
+		[0, 1, 1, \&extensionsQuery]);
 
 	Slim::Control::Request::addDispatch(['jivesounds'],
-		[0, 1, 0, \&downloadQuery]);
+		[0, 1, 1, \&extensionsQuery]);
 	
-	if ( !main::SLIM_SERVICE ) {
-		Slim::Web::HTTP::addRawDownload('^jive(applet|wallpaper|sound)/', \&downloadFile, 'binary');
-	}
-
 	# setup the menustatus dispatch and subscription
 	Slim::Control::Request::addDispatch( ['menustatus', '_data', '_action'],
 		[0, 0, 0, sub { warn "menustatus query\n" }]);
@@ -183,26 +161,30 @@ sub init {
 }
 
 sub buildCaches {
-	$log->info("Begin function");
-	my $sort    = $prefs->get('jivealbumsort') || 'artistalbum';
-	# Pre-cache albums query
-	if ( my $numAlbums = Slim::Schema->rs('Album')->count ) {
-		$log->debug( "Pre-caching $numAlbums album items." );
-		Slim::Control::Request::executeRequest( undef, [ 'albums', 0, $numAlbums, "sort:$sort", 'menu:track', 'cache:1' ] );
-	}
-	
-	# Artists
-	if ( my $numArtists = Slim::Schema->rs('Contributor')->browse->search( {}, { distinct => 'me.id' } )->count ) {
-		# Add one since we may have a VA item
-		$numArtists++;
-		$log->debug( "Pre-caching $numArtists artist items." );
-		Slim::Control::Request::executeRequest( undef, [ 'artists', 0, $numArtists, 'menu:album', 'cache:1' ] );
-	}
-	
-	# Genres
-	if ( my $numGenres = Slim::Schema->rs('Genre')->browse->search( {}, { distinct => 'me.id' } )->count ) {
-		$log->debug( "Pre-caching $numGenres genre items." );
-		Slim::Control::Request::executeRequest( undef, [ 'genres', 0, $numGenres, 'menu:artist', 'cache:1' ] );
+	$log->debug("Begin function");
+
+	my $sort    = $prefs->get('jivealbumsort') || 'album';
+
+	for my $partymode ( 0..1 ) {
+		# Pre-cache albums query
+		if ( my $numAlbums = Slim::Schema->rs('Album')->count ) {
+			$log->debug( "Pre-caching $numAlbums album items for partymode:$partymode" );
+			Slim::Control::Request::executeRequest( undef, [ 'albums', 0, $numAlbums, "sort:$sort", 'menu:track', 'cache:1', "party:$partymode" ] );
+		}
+		
+		# Artists
+		if ( my $numArtists = Slim::Schema->rs('Contributor')->browse->search( {}, { distinct => 'me.id' } )->count ) {
+			# Add one since we may have a VA item
+			$numArtists++;
+			$log->debug( "Pre-caching $numArtists artist items for partymode:$partymode." );
+			Slim::Control::Request::executeRequest( undef, [ 'artists', 0, $numArtists, 'menu:album', 'cache:1', "party:$partymode" ] );
+		}
+		
+		# Genres
+		if ( my $numGenres = Slim::Schema->rs('Genre')->browse->search( {}, { distinct => 'me.id' } )->count ) {
+			$log->debug( "Pre-caching $numGenres genre items for partymode:$partymode." );
+			Slim::Control::Request::executeRequest( undef, [ 'genres', 0, $numGenres, 'menu:artist', 'cache:1', "party:$partymode" ] );
+		}
 	}
 }
 
@@ -321,8 +303,17 @@ sub mainMenu {
 				[];
 			}
 		},
+		@{
+			# The Audioscrobbler plugin could be disabled
+			if( Slim::Utils::PluginManager->isEnabled('Slim::Plugin::AudioScrobbler::Plugin')) {
+				Slim::Plugin::AudioScrobbler::Plugin::jiveSettings($client);
+			} else {
+				[];
+			}
+		},
 		@{internetRadioMenu($client)},
 		@{musicServicesMenu($client)},
+		@{musicStoresMenu($client)},
 		@{albumSortSettingsItem($client, 1)},
 		@{myMusicMenu(1, $client)},
 		@{recentSearchMenu($client, 1)},
@@ -359,9 +350,9 @@ sub mainMenu {
 				weight         => 20,
 				actions        => {
 					go => {
-						cmd => ['radios'],
+						cmd => ['internetradio', 'items'],
 						params => {
-							menu => 'radio',
+							menu => 'internetradio',
 						},
 					},
 				},
@@ -411,6 +402,27 @@ sub mainMenu {
 			@{Slim::Plugin::LineIn::Plugin::lineInItem($client)},
 			@{playerSettingsMenu($client, 1)},
 		);
+		
+		# Add Music Stores menu if in an Amazon country
+		if ( $client->playerData->userid->isAllowedService('Amazon') ) {
+			splice @menu, 3, 0, ( {
+				text           => $client->string('MUSIC_STORES'),
+				id             => 'music_stores',
+				node           => 'home',
+				weight         => 35,
+				actions => {
+					go => {
+						cmd => ['music_stores'],
+						params => {
+							menu => 'music_stores',
+						},
+					},
+				},
+				window        => {
+					titleStyle => 'internetradio',
+				},
+			} );
+		}
 	}
 
 	_notifyJive(\@menu, $client);
@@ -425,6 +437,65 @@ sub jiveSetAlbumSort {
 	myMusicMenu(0, $client);
 	$request->setStatusDone();
 }
+
+sub playlistModeSettings {
+	$log->info("Begin function");
+
+	my $client       = shift;
+	my $batch        = shift;
+	my $playlistmode = Slim::Player::Playlist::playlistMode($client);
+
+	my @menu = ();
+
+	my @modeStrings = ('DISABLED', 'OFF', 'ON', 'PARTY');
+	my @translatedModeStrings = map { ucfirst($client->string($_)) } @modeStrings;
+	my %modes = (
+		disabled => 1,
+		off      => 2,
+		on       => 3,
+		party    => 4,
+	);
+
+	my $choice = {
+		text          => $client->string('PLAYLIST_MODE'),
+		choiceStrings => [ @translatedModeStrings ] ,
+		selectedIndex => $modes{$playlistmode},
+		id            => 'settingsPlaylistMode',
+		node          => 'advancedSettings',
+		weight        => 100,
+		actions       => {
+			do => { 
+				choices => [ 
+					{
+						player => 0,
+						cmd    => [ 'playlistmode', 'set', 'disabled' ],
+					},
+					{
+						player => 0,
+						cmd    => [ 'playlistmode', 'set', 'off' ],
+					},
+					{
+						player => 0,
+						cmd    => [ 'playlistmode', 'set', 'on' ],
+					},
+					{
+						player => 0,
+						cmd    => [ 'playlistmode', 'set', 'party' ],
+					},
+				], 
+			},
+		},
+	};
+
+	if ($batch) {
+		return $choice;
+	} else {
+		_notifyJive( [ $choice ], $client);
+	}
+
+}
+
+
 
 sub albumSortSettingsMenu {
 	$log->info("Begin function");
@@ -773,9 +844,10 @@ sub alarmUpdateMenu {
 		actions   => {
 			go => {
 				player => 0,
-				cmd    => [ 'jiveupdateplaylist' ],
+				cmd    => [ 'alarm', 'playlists' ],
 				params => {
-					id => $params->{id},
+					id   => $params->{id},
+					menu => 1
 				},
 			},
 		},
@@ -784,12 +856,12 @@ sub alarmUpdateMenu {
 	push @menu, $playlistChoice;
 
 	my $repeat = $alarm->repeat();
-	my $repeatOnOff = {
+	my $repeatOn = {
 		window   => { titleStyle => 'settings' },
 		text     => $client->string("ALARM_ALARM_REPEAT"),
-		checkbox => ($repeat == 1) + 0,
+		radio    => ($repeat == 1) + 0,
 		actions  => {
-			on  => {
+			do  => {
 				player => 0,
 				cmd    => [ 'alarm', 'update' ],
 				params => {
@@ -797,7 +869,17 @@ sub alarmUpdateMenu {
 					repeat => 1,
 				},
 			},
-			off => {
+		},		
+		nextWindow => 'refresh',
+	};
+	push @menu, $repeatOn;
+
+	my $repeatOff = {
+		window   => { titleStyle => 'settings' },
+		text     => $client->string("ALARM_ALARM_ONETIME"),
+		radio    => ($repeat == 0) + 0,
+		actions  => {
+			do => {
 				player => 0,
 				cmd    => [ 'alarm', 'update' ],
 				params => {
@@ -805,11 +887,10 @@ sub alarmUpdateMenu {
 					repeat => 0,
 				},
 			},
-		},		
+		},
 		nextWindow => 'refresh',
 	};
-	push @menu, $repeatOnOff;
-
+	push @menu, $repeatOff;
 
 	my @delete_menu= (
 		{
@@ -859,34 +940,7 @@ sub alarmUpdateDays {
 	}
 	my $alarm = Slim::Utils::Alarm->getAlarm($client, $params->{id});
 
-	my @days_menu = (
-		{
-			text => $client->string('ALARM_EVERY_DAY'),
-			actions => {
-				go => {
-					cmd => [ 'alarm', 'update' ],
-					params => {
-						id => $params->{id},
-						dow => '0,1,2,3,4,5,6',
-					},
-				},
-			},
-			nextWindow => 'refresh',
-		},
-		{
-			text => $client->string('ALARM_WEEKDAYS'),
-			actions => {
-				go => {
-					cmd => [ 'alarm', 'update' ],
-					params => {
-						id => $params->{id},
-						dow => '1,2,3,4,5',
-					},
-				},
-			},
-			nextWindow => 'refresh',
-		},
-	);
+	my @days_menu = ();
 
 	for my $day (0..6) {
 		my $dayActive = $alarm->day($day);
@@ -922,73 +976,6 @@ sub alarmUpdateDays {
 	sliceAndShip($request, $client, \@days_menu);
 
 	$request->setStatusDone();
-}
-
-sub alarmUpdatePlaylistQuery {
-
-	my $request = shift;
-	my $client  = $request->client;
-	my @tags  = qw/ id /;
-	my $params;
-	for my $tag (@tags) {
-		$params->{$tag} = $request->getParam($tag);
-	}
-
-	my $playlists      = Slim::Utils::Alarm->getPlaylists($client);
-	my $alarm          = Slim::Utils::Alarm->getAlarm($client, $params->{id});
-	my $currentSetting = $alarm->playlist();
-
-	my @playlistChoices;
-	for my $typeRef (@$playlists) {
-		my $type = $typeRef->{type};
-		my @choices = ();
-		my $aref = $typeRef->{items};
-		for my $choice (@$aref) {
-
-			my $radio = 0;
-			if ( 
-				( $currentSetting eq $choice->{url} ) || 
-				( ! defined $choice->{url} && ! defined $currentSetting )
-			) { 
-				$radio = 1;				
-			}
-			my $subitem = {
-				text    => $choice->{title},
-				radio   => $radio,
-				nextWindow => 'refreshOrigin',
-				actions => {
-					do => {
-						cmd    => [ 'alarm', 'update' ],
-						params => {
-							id          => $params->{id},
-							playlisturl => $choice->{url} || 0, # send 0 for "current playlist"
-						},
-					},
-				},
-			};
-
-			if ( defined($choice->{url}) ) {
-				push @choices, $subitem;
-			# use current playlist doesn't need a submenu
-			} else {
-				$subitem->{'nextWindow'} = 'refresh';
-				push @playlistChoices, $subitem;
-			}
-		}
-
-		if ( scalar(@choices) ) {
-			my $item = {
-				text      => $type,
-				offset    => 0,
-				count     => scalar(@choices),
-				item_loop => \@choices,
-			};
-			push @playlistChoices, $item;
-		}
-	}
-
-	sliceAndShip($request, $client, \@playlistChoices);
-	$request->setStatusDone;
 }
 
 sub getCurrentAlarms {
@@ -1065,39 +1052,6 @@ sub alarmVolumeSettings {
 	return $return;
 }
 
-sub playerInformationQuery {
-	my $request = shift;
-	my $client  = $request->client();
-
-	# information, always display
-	my $playerInfoText = $client->string( 'INFORMATION_SPECIFIC_PLAYER', $client->name() );
-	my $playerInfoTextArea = 
-			$client->string("INFORMATION_PLAYER_NAME_ABBR") . ": " . 
-			$client->name() . "\n\n" . 
-			$client->string("INFORMATION_PLAYER_MODEL_ABBR") . ": " .
-			Slim::Buttons::Information::playerModel($client) . "\n\n" .
-			$client->string("INFORMATION_FIRMWARE_ABBR") . ": " . 
-			$client->revision() . "\n\n" .
-			$client->string("INFORMATION_PLAYER_IP_ABBR") . ": " .
-			$client->ipport() . "\n\n" .
-			$client->string("INFORMATION_PLAYER_MAC_ABBR") . ": " .
-			uc($client->macaddress()) . "\n\n" .
-			($client->signalStrength ? $client->string("INFORMATION_PLAYER_SIGNAL_STRENGTH") . ": " . 	 
-			$client->signalStrength . "\n\n" : '') .
-			($client->voltage ? $client->string("INFORMATION_PLAYER_VOLTAGE") . ": " .
-			$client->voltage . "\n\n" : '');
-	my @menu = (
-		{
-			textArea => $playerInfoTextArea,
-		},
-	);
-	sliceAndShip($request, $client, \@menu);
-
-	$request->setStatusDone();
-
-	#return;
-}
-
 sub syncSettingsQuery {
 
 	$log->info("Begin function");
@@ -1111,6 +1065,41 @@ sub syncSettingsQuery {
 
 }
 
+sub endOfTrackSleepCommand {
+
+	my $request = shift;
+	my $client  = $request->client();
+
+	if ($client->isPlaying()) {
+
+		# calculate the time remaining in seconds 
+		my $dur = $client->controller()->playingSongDuration();
+		my $remaining = $dur - Slim::Player::Source::songTime($client);
+		$client->execute( ['sleep', $remaining ] );
+		# an intentional showBriefly stomp of SLEEPING_IN_X_MINUTES with SLEEPING_AT_END_OF_SONG
+		$request->client->showBriefly(
+			{ 
+			'jive' =>
+				{
+					'type'    => 'popupplay',
+					'text'    => [ $request->string('SLEEPING_AT_END_OF_SONG') ],
+				},
+			}
+		);
+	} else {
+		$request->client->showBriefly(
+			{ 
+			'jive' =>
+				{
+					'type'    => 'popupplay',
+					'text'    => [ $request->string('NOTHING_CURRENTLY_PLAYING') ],
+				},
+			}
+		);
+	}
+}
+
+
 sub sleepSettingsQuery {
 
 	$log->info("Begin function");
@@ -1118,6 +1107,12 @@ sub sleepSettingsQuery {
 	my $client  = $request->client();
 	my $val     = $client->currentSleepTime();
 	my @menu;
+
+	# Bug: 2151 some extra stuff to add the option to sleep after the current song.
+	# first make sure we're playing, and its a valid song.
+	my $remaining = 0;
+
+	
 
 	if ($val > 0) {
 		my $now = Time::HiRes::time();
@@ -1127,6 +1122,21 @@ sub sleepSettingsQuery {
 		push @menu, { text => $sleepString, style => 'itemNoAction' };
 		push @menu, sleepInXHash($client, $val, 0);
 	}
+
+	if ($client->isPlaying()) {
+
+		push @menu, {
+			text    => $client->string('SLEEP_AT_END_OF_SONG'),
+			actions => {
+				go => {
+					player => 0,
+					cmd => [ 'jiveendoftracksleep' ],
+				},
+			},
+			nextWindow => 'refresh',
+		};
+	}
+
 	push @menu, sleepInXHash($client, $val, 15);
 	push @menu, sleepInXHash($client, $val, 30);
 	push @menu, sleepInXHash($client, $val, 45);
@@ -1151,10 +1161,7 @@ sub stereoXLQuery {
 			actions => {
 				do => {
 					player => 0,
-					cmd    => [ 'jivesetstereoxl' ],
-					params => {
-						value  => $i,
-					},
+					cmd    => [ 'playerpref', 'stereoxl', $i ],
 				},
 			},
 		};
@@ -1167,36 +1174,22 @@ sub stereoXLQuery {
 
 }
 
-sub stereoXLCommand {
-
-	my $request = shift;
-	my $client  = $request->client();
-	my $value   = $request->getParam('value');
-
-	$client->stereoxl($value);
-
-	$request->setStatusDone();
-}
-
 sub lineOutQuery {
 
 	$log->info("Begin function");
 	my $request        = shift;
 	my $client         = $request->client();
 	my $currentSetting = $prefs->client($client)->get('analogOutMode');
-	my @strings = qw/ ANALOGOUTMODE_HEADPHONE ANALOGOUTMODE_SUBOUT /;
+	my @strings = qw/ ANALOGOUTMODE_HEADPHONE ANALOGOUTMODE_SUBOUT ANALOGOUTMODE_ALWAYS_ON ANALOGOUTMODE_ALWAYS_OFF /;
 	my @menu = ();
-	for my $i (0..1) {
+	for my $i (0..3) {
 		my $lineOutSetting = {
 			text    => $client->string($strings[$i]),
 			radio   => ($i == $currentSetting) + 0,
 			actions => {
 				do => {
 					player => 0,
-					cmd    => [ 'jivesetlineout' ],
-					params => {
-						value  => $i,
-					},
+					cmd    => [ 'playerpref', 'analogOutMode', $i ],
 				},
 			},
 		};
@@ -1207,17 +1200,6 @@ sub lineOutQuery {
 
 	$request->setStatusDone();
 
-}
-
-sub lineOutCommand {
-
-	my $request = shift;
-	my $client  = $request->client();
-	my $value   = $request->getParam('value');
-
-	$client->setAnalogOutMode($value);
-
-	$request->setStatusDone();
 }
 
 sub toneSettingsQuery {
@@ -1240,9 +1222,8 @@ sub toneSettingsQuery {
 		actions => {
 			do => {
 				player => 0,
-				cmd    => [ 'jivetoneadjust' ],
+				cmd    => [ 'playerpref', $tone ],
 				params => {
-					tone   => $tone,
 					valtag => 'value',
 				},
 			},
@@ -1252,33 +1233,6 @@ sub toneSettingsQuery {
 	push @menu, $slider;
 
 	sliceAndShip($request, $client, \@menu);
-
-	$request->setStatusDone();
-}
-
-sub toneAdjustCommand {
-
-	my $request = shift;
-	my $client  = $request->client();
-	my $tone    = $request->getParam('tone');
-	my $delta   = $request->getParam('delta');
-	my $newVal  = $request->getParam('value');
-
-	my $val     = $client->$tone();
-
-	if (!defined $newVal) {
-		$newVal  = $val + $delta;
-	}
-
-	$val = $client->$tone($newVal);
-
-	my $string = $client->string($tone) . ": " . $val;
-	$client->showBriefly({
-		'jive' => {
-			type    => 'popupplay',
-			text    => [ $string ],
-		}
-	});
 
 	$request->setStatusDone();
 }
@@ -1359,7 +1313,7 @@ sub internetRadioMenu {
 
 	my @menu = ();
 	
-	if ($validQuery) {
+	if ($validQuery && $test_request->getResult('count')) {
 		push @menu,
 		{
 			text           => $client->string('RADIO'),
@@ -1396,7 +1350,7 @@ sub musicServicesMenu {
 
 	my @menu = ();
 	
-	if ($validQuery) {
+	if ($validQuery && $test_request->getResult('count')) {
 		push @menu, 
 		{
 			text           => $client->string('MUSIC_SERVICES'),
@@ -1422,6 +1376,42 @@ sub musicServicesMenu {
 
 }
 
+# returns a single item for the homeMenu if music_stores is a valid command
+sub musicStoresMenu {
+	$log->info("Begin function");
+	my $client = shift;
+	my @command = ('music_stores', 0, 200, 'menu:music_stores');
+
+	my $test_request = Slim::Control::Request::executeRequest($client, \@command);
+	my $validQuery = $test_request->isValidQuery();
+
+	my @menu = ();
+	
+	if ($validQuery && $test_request->getResult('count')) {
+		push @menu, 
+		{
+			text           => $client->string('MUSIC_STORES'),
+			id             => 'music_stores',
+			node           => 'home',
+			weight         => 35,
+			actions => {
+				go => {
+					cmd => ['music_stores'],
+					params => {
+						menu => 'music_stores',
+					},
+				},
+			},
+			window        => {
+					menuStyle => 'album',
+					titleStyle => 'internetradio',
+			},
+		};
+	}
+
+	return \@menu;
+}
+
 sub playerSettingsMenu {
 
 	$log->info("Begin function");
@@ -1445,6 +1435,9 @@ sub playerSettingsMenu {
 
 	# always add shuffle
 	push @menu, shuffleSettings($client, 1);
+
+	# always add playlist mode
+	push @menu, playlistModeSettings($client, 1);
 
 	# add alarm only if this is a slimproto player
 	if ($client->isPlayer()) {
@@ -1521,8 +1514,7 @@ sub playerSettingsMenu {
 	}
 
 	# lineOut, if available
-	my $lineOutCapable = $prefs->client($client)->get('analogOutMode');
-	if ( defined $lineOutCapable ) {
+	if ( $client->hasHeadSubOut() ) {
 		push @menu, {
 			text           => $client->string("SETUP_ANALOGOUTMODE"),
 			id             => 'settingsLineOut',
@@ -1573,18 +1565,18 @@ sub playerSettingsMenu {
 	}
 
 	# information, always display
-	my $playerInfoText = $client->string( 'INFORMATION_SPECIFIC_PLAYER', $client->name() );
 	push @menu, {
-		text           => $playerInfoText,
-		id             => 'settingsPlayerInformation',
+		text           => $client->string( 'INFORMATION' ),
+		id             => 'settingsInformation',
 		node           => 'advancedSettings',
 		weight         => 4,
 		window         => { titleStyle => 'settings' },
 		actions        => {
 				go =>	{
-						# this is a dummy command...doesn't do anything but is required
-						cmd    => ['playerinformation'],
-						player => 0,
+						cmd    => ['systeminfo', 'items'],
+						params => {
+							menu => 1
+						}
 					},
 				},
 	};
@@ -1655,7 +1647,7 @@ sub playerSettingsMenu {
 	if ( $client->isPlayer() && !$client->display->isa('Slim::Display::NoDisplay') ) {
 		push @menu, 
 		{
-			stringToken    => 'DISPLAY_SETTINGS',
+			stringToken    => 'JIVE_PLAYER_DISPLAY_SETTINGS',
 			weight         => 52,
 			id             => 'playerDisplaySettings',
 			isANode        => 1,
@@ -1674,13 +1666,30 @@ sub playerSettingsMenu {
 			},
 			window         => { titleStyle => 'settings' },
 		},
+	}
+
+	# text size settings for players with graphical displays 
+	if ( $client->isPlayer() && $client->display->isa('Slim::Display::Graphics') ) {
+		push @menu, 
 		{
 			text           => $client->string("TEXTSIZE"),
 			id             => 'settingsPlayerTextsize',
 			node           => 'playerDisplaySettings',
 			actions        => {
 				  go => {
-					cmd    => [ 'jiveplayertextsettings' ],
+					cmd    => [ 'jiveplayertextsettings', 'activeFont' ],
+					player => 0,
+				  },
+			},
+			window         => { titleStyle => 'settings' },
+		},
+		{
+			text           => $client->string("OFFDISPLAYSIZE"),
+			id             => 'settingsPlayerOffTextsize',
+			node           => 'playerDisplaySettings',
+			actions        => {
+				  go => {
+					cmd    => [ 'jiveplayertextsettings', 'idleFont' ],
 					player => 0,
 				  },
 			},
@@ -1706,6 +1715,74 @@ sub playerSettingsMenu {
 	} else {
 		_notifyJive(\@menu, $client);
 	}
+}
+
+sub minAutoBrightness {
+	my $current_setting = shift;
+	my $string          = shift;
+
+	my @brightness_settings;
+
+	my $slider = {
+		slider      => 1,
+		min         => 1,
+		max         => 5,
+		initial     => $current_setting + 0,
+		#help    => NO_HELP_STRING_YET,
+		actions => {
+			do => {
+				player => 0,
+				cmd    => [ 'playerpref', 'minAutoBrightness' ],
+				params => {
+					valtag => 'value',
+				},
+			},
+		},
+	};
+
+	push @brightness_settings, $slider;
+
+	my $return = { 
+		text      => $string,
+		count     => scalar(@brightness_settings),
+		offset    => 0,
+		item_loop => \@brightness_settings,
+	};
+	return $return;
+}
+
+sub sensAutoBrightness {
+	my $current_setting = shift;
+	my $string          = shift;
+
+	my @brightness_settings;
+
+	my $slider = {
+		slider      => 1,
+		min         => 1,
+		max         => 20,
+		initial     => $current_setting + 0,
+		#help    => NO_HELP_STRING_YET,
+		actions => {
+			do => {
+				player => 0,
+				cmd    => [ 'playerpref', 'sensAutoBrightness' ],
+				params => {
+					valtag => 'value',
+				},
+			},
+		},
+	};
+
+	push @brightness_settings, $slider;
+
+	my $return = { 
+		text      => $string,
+		count     => scalar(@brightness_settings),
+		offset    => 0,
+		item_loop => \@brightness_settings,
+	};
+	return $return;
 }
 
 sub playerBrightnessMenu {
@@ -1743,12 +1820,8 @@ sub playerBrightnessMenu {
 				radio => ($currentSetting == $setting) + 0,
 				actions => {
 					do    => {
-						cmd    => [ 'jivebrightnessadjust' ],
+						cmd    => [ 'playerpref', $href->{pref}, $setting ],
 						player => 0,
-						params => {
-							value => "$setting",
-							mode  => $href->{pref},
-						},
 					},
 				},
 			};
@@ -1763,20 +1836,16 @@ sub playerBrightnessMenu {
 		};
 		push @menu, $item;
 	}
+
+	if( $client->isa( 'Slim::Player::Boom')) {
+		my $mab = minAutoBrightness( $prefs->client( $client)->get( 'minAutoBrightness'), $client->string( 'SETUP_MINAUTOBRIGHTNESS'));
+		push @menu, $mab;
+
+		my $sab = sensAutoBrightness( $prefs->client( $client)->get( 'sensAutoBrightness'), $client->string( 'SETUP_SENSAUTOBRIGHTNESS'));
+		push @menu, $sab;
+	}
+
 	sliceAndShip($request, $client, \@menu);
-
-	$request->setStatusDone();
-
-}
-
-sub playerBrightnessAdjustCommand {
-
-	my $request = shift;
-	my $client  = $request->client();
-	my $mode    = $request->getParam('mode');
-	my $newVal  = $request->getParam('value');
-
-	my $val = preferences('server')->client($client)->set($mode,$newVal);
 
 	$request->setStatusDone();
 
@@ -1786,30 +1855,29 @@ sub playerTextMenu {
 
 	my $request    = shift;
 	my $client     = $request->client();
+	my $whatFont   = $request->getParam('_whatFont');
 
 	my @menu = ();
 
 	my @fonts = ();
 	my $i = 0;
-	for my $font ( @{ $prefs->client($client)->get('activeFont') } ) {
+
+	for my $font ( @{ $prefs->client($client)->get($whatFont) } ) {
 		push @fonts, {
-				name  => $client->string($font),
-				value => $i++,
+			name  => $client->string($font),
+			value => $i++,
 		};
 	}
 
-	my $currentSetting = $prefs->client($client)->get('activeFont_curr');
+	my $currentSetting = $prefs->client($client)->get($whatFont . '_curr');
 	for my $font (@fonts) {
 		my $item = {
 			text => $font->{name},
 			radio => ($font->{value} == $currentSetting) + 0,
 			actions => {
 				do    => {
-					cmd    => [ 'jivetextadjust' ],
+					cmd    => [ 'playerpref', $whatFont . '_curr', $font->{value} ],
 					player => 0,
-					params => {
-						value => "$font->{value}",
-					},
 				},
 			},
 		};
@@ -1817,18 +1885,6 @@ sub playerTextMenu {
 	}
 
 	sliceAndShip($request, $client, \@menu);
-
-	$request->setStatusDone();
-
-}
-
-sub playerTextAdjustCommand {
-
-	my $request = shift;
-	my $client  = $request->client();
-	my $newVal  = $request->getParam('value');
-
-	my $val = $client->textSize($newVal);
 
 	$request->setStatusDone();
 
@@ -2007,7 +2063,6 @@ sub howManyPlayersToSyncWith {
 
 sub getPlayersToSyncWith() {
 	my $client = shift;
-	my @playerSyncList = Slim::Player::Client::clients();
 	my @return = ();
 	
 	# Restrict based on players with same userid on SN
@@ -2016,44 +2071,151 @@ sub getPlayersToSyncWith() {
 		$userid = $client->playerData->userid;
 	}
 	
-	for my $player (@playerSyncList) {
-		# skip ourself
-		next if ($client eq $player);
-		# we only sync slimproto devices
-		next if (!$player->isPlayer());
-		
-		# On SN, only sync with players on the current account
-		if ( main::SLIM_SERVICE ) {
-			next if $userid == 1;
-			next if $userid != $player->playerData->userid;
-			
-			# Skip players with old firmware
-			if (
-				( $player->model eq 'squeezebox2' && $player->revision < 82 )
-				||
-				( $player->model eq 'transporter' && $player->revision < 32 )
-			) {
-				next;
+	# first add a descriptive line for this player
+	push @return, {
+		text  => $client->string('SYNC_X_TO', $client->name()),
+		style => 'itemNoAction',
+	};
+
+	# come up with a list of players and/or sync groups to sync with
+	# callback command also has to remove player from whatever it was previously synced to, if anything
+	my $cnt      = 0;
+	my @players  = Slim::Player::Client::clients();
+
+	# construct the list
+	my $syncList;
+	my $currentlySyncedWith = 0;
+	
+	# the logic is a little tricky here...first make a pass at any sync groups that include $client
+	if ($client->isSynced()) {
+		my $snCheckOk = _syncSNCheck($userid, $client);
+		if ($snCheckOk) {
+			$syncList->[$cnt]->{'id'}           = $client->id();
+			$syncList->[$cnt]->{'name'}         = $client->syncedWithNames(0);
+			$currentlySyncedWith                = $client->syncedWithNames(0);
+			$syncList->[$cnt]->{'isSyncedWith'} = 1;
+			$cnt++;
+		}
+	}
+
+	# then grab groups or players that are not currently synced with $client
+        if (scalar(@players) > 0) {
+		for my $eachclient (@players) {
+			next if !$eachclient->isPlayer();
+			next if $eachclient->isSyncedWith($client);
+			my $snCheckOk = _syncSNCheck($userid, $eachclient);
+			next unless $snCheckOk;
+
+			if ($eachclient->isSynced() && Slim::Player::Sync::isMaster($eachclient)) {
+				$syncList->[$cnt]->{'id'}           = $eachclient->id();
+				$syncList->[$cnt]->{'name'}         = $eachclient->syncedWithNames(1);
+				$syncList->[$cnt]->{'isSyncedWith'} = 0;
+				$cnt++;
+
+			# then players which are not synced
+			} elsif (! $eachclient->isSynced && $eachclient != $client ) {
+				$syncList->[$cnt]->{'id'}           = $eachclient->id();
+				$syncList->[$cnt]->{'name'}         = $eachclient->name();
+				$syncList->[$cnt]->{'isSyncedWith'} = 0;
+				$cnt++;
+
 			}
 		}
-		
-		my $val = Slim::Player::Sync::isSyncedWith($client, $player); 
+	}
+
+	for my $syncOption (sort { $a->{name} cmp $b->{name} } @$syncList) {
 		push @return, { 
-			text => $player->name(), 
-			checkbox => ($val == 1) + 0,
+			text  => $syncOption->{name},
+			radio => ($syncOption->{isSyncedWith} == 1) + 0,
 			actions  => {
-				on  => {
+				do  => {
 					player => 0,
-					cmd    => ['sync', $player->id()],
-				},
-				off => {
-					player => $player->id(),
-					cmd    => ['sync', '-'],
+					cmd    => [ 'jivesync' ],
+					params => {
+						syncWith              => $syncOption->{id},
+						syncWithString        => $syncOption->{name},
+						unsyncWith            => $currentlySyncedWith,
+					},
 				},
 			},		
-		};
+			nextWindow => 'refresh',
+		};	
 	}
+	
+	if ( $client->isSynced() ) {
+		push @return, { 
+			text  => $client->string('DO_NOT_SYNC'),
+			radio => 0,
+			actions  => {
+				do  => {
+					player => 0,
+					cmd    => ['jivesync' ],
+					params => {
+						syncWith              => 0,
+						syncWithString        => 0,
+						unsyncWith            => $currentlySyncedWith,
+					},
+				},
+			},		
+			nextWindow => 'refresh',
+		};	
+	}
+
 	return \@return;
+}
+
+sub _syncSNCheck {
+	my ($userid, $player) = @_;
+	# On SN, only sync with players on the current account
+	if ( main::SLIM_SERVICE ) {
+		return undef if $userid == 1;
+		return undef if $userid != $player->playerData->userid;
+		
+		# Skip players with old firmware
+		if (
+			( $player->model eq 'squeezebox2' && $player->revision < 82 )
+			||
+			( $player->model eq 'transporter' && $player->revision < 32 )
+		) {
+			return undef;
+		}
+	}
+	return 1;
+}
+	
+sub jiveSyncCommand {
+	my $request = shift;
+	my $client  = $request->client();
+
+	my $syncWith         = $request->getParam('syncWith');
+	my $syncWithString   = $request->getParam('syncWithString');
+	my $unsyncWith       = $request->getParam('unsyncWith') || undef;
+
+	# first unsync if necessary
+	my @messages = ();
+	if ($unsyncWith) {
+		$client->execute( [ 'sync', '-' ] );
+		push @messages, $request->string('UNSYNCING_FROM', $unsyncWith);
+	}
+	# then sync if requested
+	if ($syncWith) {
+		my $otherClient = Slim::Player::Client::getClient($syncWith);
+		$otherClient->execute( [ 'sync', $client->id ] );
+			
+		push @messages, $request->string('SYNCING_WITH', $syncWithString);
+	}
+	my $message = join("\n", @messages);
+
+	$client->showBriefly(
+		{ 'jive' =>
+			{
+				'type'    => 'popupplay',
+				'text'    => [ $message ],
+			},
+		}
+	);
+
+	$request->setStatusDone();
 }
 
 sub dateQuery {
@@ -2127,6 +2289,11 @@ sub dateQuery {
 
 	# Return time in http://www.w3.org/TR/NOTE-datetime format
 	$request->addResult( 'date', strftime("%Y-%m-%dT%H:%M:%S", localtime) . $tzoff );
+
+	# manage the subscription
+	if (defined(my $timeout = $request->getParam('subscribe'))) {
+		$request->registerAutoExecute($timeout, \&dateQuery);
+	}
 
 	$request->setStatusDone();
 }
@@ -2267,8 +2434,9 @@ sub replayGainHash {
 sub myMusicMenu {
 	$log->info("Begin function");
 	my $batch = shift;
-	my $client = shift || undef;
-	my $sort   = $prefs->get('jivealbumsort') || 'artistalbum';
+	my $client = shift;
+	my $sort   = $prefs->get('jivealbumsort') || 'album';
+	my $party  = (Slim::Player::Playlist::playlistMode($client) eq 'party');
 	my @myMusicMenu = (
 			{
 				text           => $client->string('BROWSE_BY_ARTIST'),
@@ -2280,7 +2448,8 @@ sub myMusicMenu {
 					go => {
 						cmd    => ['artists'],
 						params => {
-							menu => 'album',
+							menu  => 'album',
+							party => $party,
 						},
 					},
 				},
@@ -2300,6 +2469,7 @@ sub myMusicMenu {
 						params => {
 							menu     => 'track',
 							sort     => $sort,
+							party    => $party,
 						},
 					},
 				},
@@ -2319,7 +2489,8 @@ sub myMusicMenu {
 					go => {
 						cmd    => ['genres'],
 						params => {
-							menu => 'artist',
+							menu  => 'artist',
+							party => $party,
 						},
 					},
 				},
@@ -2337,7 +2508,8 @@ sub myMusicMenu {
 					go => {
 						cmd    => ['years'],
 						params => {
-							menu => 'album',
+							menu  => 'album',
+							party => $party,
 						},
 					},
 				},
@@ -2354,8 +2526,9 @@ sub myMusicMenu {
 					go => {
 						cmd    => ['albums'],
 						params => {
-							menu => 'track',
-							sort => 'new',
+							menu  => 'track',
+							sort  => 'new',
+							party => $party,
 						},
 					},
 				},
@@ -2373,7 +2546,8 @@ sub myMusicMenu {
 					go => {
 						cmd    => ['playlists'],
 						params => {
-							menu => 'track',
+							menu  => 'track',
+							party => $party,
 						},
 					},
 				},
@@ -2410,6 +2584,7 @@ sub searchMenu {
 	$log->info("Begin function");
 	my $batch = shift;
 	my $client = shift || undef;
+	my $party = ( $client && Slim::Player::Playlist::playlistMode($client) eq 'party' );
 	my @searchMenu = (
 		{
 		text           => $client->string('ARTISTS'),
@@ -2433,6 +2608,7 @@ sub searchMenu {
 					menu     => 'album',
 					menu_all => '1',
 					search   => '__TAGGEDINPUT__',
+					party    => $party,
 					_searchType => 'artists',
 				},
                         },
@@ -2465,6 +2641,7 @@ sub searchMenu {
 					menu_all => '1',
 					search   => '__TAGGEDINPUT__',
 					_searchType => 'albums',
+					party    => $party,
 				},
 			},
 		},
@@ -2529,6 +2706,7 @@ sub searchMenu {
 					menu     => 'track',
 					menu_all => '1',
 					search   => '__TAGGEDINPUT__',
+					party    => $party,
 				},
                         },
 		},
@@ -2565,9 +2743,16 @@ sub jivePlayTrackAlbumCommand {
 	my $request    = shift;
 	my $client     = $request->client || return;
 	my $albumID    = $request->getParam('album_id');
+	my $trackID    = $request->getParam('track_id');
 	my $folder     = $request->getParam('folder')|| undef;
 	my $listIndex  = $request->getParam('list_index');
+ 	my $mode       = Slim::Player::Playlist::playlistMode($client);
 	
+	if ( ( $mode eq 'on' || $mode eq 'party' ) && $trackID ) {
+		# send the track with cmd of 'load' so playlistcontrol doesn't turn off playlistmode
+		$client->execute( ['playlistcontrol', 'cmd:load', "track_id:$trackID" ] );
+		return;
+	}
 	$client->execute( ["playlist", "clear"] );
 
 	# Database album browse is the simple case
@@ -2841,247 +3026,97 @@ sub jiveRecentSearchQuery {
 	$request->setStatusDone();
 }
 
-# The following allow download of applets, wallpaper and sounds from SC to jive
-# Files may be packaged in a plugin or can be added individually via the api below.
-#
-# In the case of downloads packaged as a plugin, each downloadable file should be 
-# available in the 'jive' folder of a plugin and the plugin install.xml file should refer
-# to it in the following format:
-#
-# <jive>
-#    <applet>
-#       <version>0.1</version>
-#       <name>Applet1</name>
-#       <file>Applet1.zip</file>
-#    </applet>
-#    <wallpaper>
-#       <name>Wallpaper1</name>
-#       <file>Wallpaper1.png</file>
-#    </wallpaper>			
-#    <wallpaper>
-#       <name>Wallpaper2</name>
-#       <file>Wallpaper2.png</file>
-#    </wallpaper>	
-#    <sound>
-#       <name>Sound1</name>
-#       <file>Sound1.wav</file>
-#    </sound>	
-# </jive>
-#
-# Alternatively individual wallpaper and sound files may be registered by the 
-# registerDownload and deleteDownload api calls.
+sub jiveDummyCommand {
+	return;
+}
 
-# file types allowed for downloading to jive
-my %filetypes = (
-	applet    => qr/\.zip$/,
-	wallpaper => qr/\.(bmp|jpg|jpeg|png|BMP|JPG|JPEG|PNG)$|^http:\/\//,
-	sound     => qr/\.wav$/,
-);
 
-# addditional downloads
-my %extras = (
-	wallpaper => {},
-	sound     => {},
-	applet    => {},
-);
+# The following allow download of extensions (applets, wallpaper and sounds) from SC to jive
 
-=head2 registerDownload()
+# hash of providers for extension information
+my %extensionProviders = ();
 
-Register a local file or url for downloading to jive as a wallpaper, sound file or applet
-$type : either 'wallpaper', 'sound' or 'applet'
-$name : description to show on jive
-$path : fullpath for file on server or http:// url
-$key  : (optional) unique key for this type to avoid using file's basename
-$vers : version (applets only)
+sub registerExtensionProvider {
+	my $name     = shift;
+	my $provider = shift;
 
-=cut
+	$log->info("adding extension provider $name $provider");
 
-sub registerDownload {
-	my $type = shift;
+	$extensionProviders{ $name } = $provider;
+}
+
+sub removeExtensionProvider {
 	my $name = shift;
-	my $path = shift;
-	my $key  = shift;
-	my $vers = shift;
 
-	my $file = $key || ($path ? basename($path) : '');
+	$log->info("deleting extension provider $name");
 
-	if ($type =~ /wallpaper|sound|applet/ && $path =~ $filetypes{$type} && (-r $path || $path =~ /^http:\/\//)) {
-
-		$log->info("registering download for $type $name $file $path");
-
-		$extras{$type}->{$file} = {
-			'name'    => $name,
-			'path'    => $path,
-			'file'    => $file,
-		};
-
-		if ($type eq 'applet') {
-			$extras{$type}->{$file}->{'version'} = $vers;
-		}
-
-	} else {
-		$log->warn("unable to register download for $name $type $file");
-	}
+	delete $extensionProviders{ $name };
 }
 
-=head2 deleteDownload()
-
-Remove previously registered download entry.
-$type : either 'wallpaper', 'sound' or 'applet'
-$path : fullpath for file on server or http:// url
-$key  : (optional) unique key for this type to avoid using file's basename
-
-=cut
-
-sub deleteDownload {
-	my $type = shift;
-	my $path = shift;
-	my $key  = shift;
-
-	my $file = $key || basename($path);
-
-	if ($type =~ /wallpaper|sound|applet/ && $extras{$type}->{$file}) {
-
-		$log->info("removing download for $type $file");
-		delete $extras{$type}->{$file};
-
-	} else {
-		$log->warn("unable remove download for $type $file");
-	}
-}
-
-# downloadable file info from the plugin instal.xml and any registered additions
-sub _downloadInfo {
-	my $type = shift;
-
-	my $plugins = Slim::Utils::PluginManager::allPlugins();
-	my $ret = {};
-
-	for my $key (keys %$plugins) {
-
-		if ($plugins->{$key}->{'jive'} && $plugins->{$key}->{'jive'}->{$type}) {
-
-			my $info = $plugins->{$key}->{'jive'}->{$type};
-			my $dir  = $plugins->{$key}->{'basedir'};
-
-			if ($info->{'name'}) {
-
-				my $file = $info->{'file'};
-
-				if ( $file =~ $filetypes{$type} && -r catdir($dir, 'jive', $file) ) {
-
-					if ($ret->{$file}) {
-						$log->warn("duplicate filename for download: $file");
-					}
-
-					$ret->{$file} = {
-						'name'    => $info->{'name'},
-						'path'    => catdir($dir, 'jive', $file),
-						'file'    => $file,
-						'version' => $info->{'version'},
-					};
-
-				} else {
-					$log->warn("unable to make $key:$file available for download");
-				}
-
-			} elsif (ref $info eq 'HASH') {
-
-				for my $name (keys %$info) {
-
-					my $file = $info->{$name}->{'file'};
-
-					if ( $file =~ $filetypes{$type} && -r catdir($dir, 'jive', $file) ) {
-
-						if ($ret->{$file}) {
-							$log->warn("duplicate filename for download: $file [$key]");
-						}
-
-						$ret->{$file} = {
-							'name'    => $name,
-							'path'    => catdir($dir, 'jive', $file),
-							'file'    => $file,
-							'version' => $info->{$name}->{'version'},
-						};
-
-					} else {
-						$log->warn("unable to make $key:$file available for download");
-					}
-				}
-			}
-		}
-	}
-
-	# add extra downloads as registered via api
-	for my $key (keys %{$extras{$type}}) {
-		$ret->{$key} = $extras{$type}->{$key};
-	}
-
-	return $ret;
-}
-
-# return all files available for download based on query type
-sub downloadQuery {
+# return all extensions available for a specific type, version and target
+# uses extension providers to provide a list of extensions available for the query criteria
+# these are async so they can fetch and parse data to build a list of extensions
+sub extensionsQuery {
 	my $request = shift;
  
-	my $client = $request->client;
 	my ($type) = $request->getRequest(0) =~ /jive(applet|wallpaper|sound)s/;
+	my $version= $request->getParam('version');
+	my $target = $request->getParam('target');
 
 	if (!defined $type) {
 		$request->setStatusBadDispatch();
 		return;
 	}
 
+	my @providers = keys %extensionProviders;
+	my $language  = $Slim::Utils::Strings::currentLang;
 
-	my $cnt = 0;
-	my $urlBase = 'http://' . Slim::Utils::Network::serverAddr() . ':' . $prefs->get('httpport') . "/jive$type/";
+	if (scalar @providers) {
 
-	for my $val ( sort { $a->{'name'} cmp $b->{'name'} } values %{_downloadInfo($type)} ) {
+		$request->privateData( { remaining => scalar @providers, results => [] } );
 
-		my $url = $val->{'path'} =~ /^http:\/\// ? $val->{'path'} : $urlBase . $val->{'file'};
+		$request->setStatusProcessing;
 
-		my $entry = {
-			$type     => $val->{'name'},
-			'name'    => Slim::Utils::Strings::getString($val->{'name'}),
-			'url'     => $url,
-			'file'    => $val->{'file'},
-		};
+		for my $provider (@providers) {
 
-		if ($val->{'path'} !~ /^http:\/\//) {
-			$entry->{'relurl'} = URI->new($url)->path;
+			$extensionProviders{$provider}->( {
+				'name'   => $provider, 
+				'type'   => $type, 
+				'target' => $target,
+				'version'=> $version, 
+				'lang'   => $language,
+				'cb'     => \&_extensionsQueryCB,
+				'pt'     => [ $request ]
+			});
 		}
-
-		if ($type eq 'applet') {
-			$entry->{'version'} = $val->{'version'};
-		}
-
-		$request->setResultLoopHash('item_loop', $cnt++, $entry);
-	}	
-
-	$request->addResult("count", $cnt);
-
-	$request->setStatusDone();
-}
-
-sub jiveDummyCommand {
-	return;
-}
-
-# convert path to location for download
-sub downloadFile {
-	my $path = shift;
-
-	my ($type, $file) = $path =~ /^jive(applet|wallpaper|sound)\/(.*)/;
-
-	my $info = _downloadInfo($type);
-
-	if ($info->{$file}) {
-
-		return $info->{$file}->{'path'};
 
 	} else {
 
-		$log->warn("unable to find file: $file for type: $type");
+		$request->addResult("count", 0);
+
+		$request->setStatusDone();
+	}
+}
+
+sub _extensionsQueryCB {
+	my $request= shift;
+	my $res    = shift;
+	my $data   = $request->privateData;
+
+	splice @{$data->{'results'}}, 0, 0, @$res;
+
+	if ( ! --$data->{'remaining'} ) {
+
+		my $cnt = 0;
+
+		for my $entry ( sort { $a->{'title'} cmp $b->{'title'} } @{$data->{'results'}} ) {
+
+			$request->setResultLoopHash('item_loop', $cnt++, $entry);
+		}
+
+		$request->addResult("count", $cnt);
+
+		$request->setStatusDone();
 	}
 }
 

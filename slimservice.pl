@@ -27,6 +27,7 @@ use FindBin qw($Bin);
 
 # Enable SlimService mode
 use constant SLIM_SERVICE => 1;
+use constant SCANNER => 0;
 
 my $sn_config;
 our $SN_PATH; # path to squeezenetwork directory
@@ -71,6 +72,9 @@ BEGIN {
 	);
 
 	unshift @INC, @SlimINC;
+
+	require Slim::Utils::OSDetect;
+	Slim::Utils::OSDetect::init();
 
 	# Pull in DeploymentDefaults
 	require SDI::Util::SNConfig;
@@ -140,11 +144,11 @@ use Slim::Display::Lib::Fonts;
 #use Slim::Web::HTTP;
 use Slim::Hardware::IR;
 use Slim::Menu::TrackInfo;
+use Slim::Menu::SystemInfo;
 use Slim::Music::Info;
 #use Slim::Music::Import;
 #use Slim::Music::MusicFolderScan;
 #use Slim::Music::PlaylistFolderScan;
-use Slim::Utils::OSDetect;
 use Slim::Player::Playlist;
 use Slim::Player::Sync;
 use Slim::Player::Source;
@@ -164,6 +168,7 @@ use Slim::Networking::SimpleAsyncHTTP;
 #use Slim::Utils::Firmware;
 #use Slim::Utils::UPnPMediaServer;
 use Slim::Control::Jive;
+use Slim::Formats::RemoteMetadata;
 
 our @AUTHORS = (
 	'Sean Adams',
@@ -189,7 +194,7 @@ our @AUTHORS = (
 );
 my $prefs        = preferences('server');
 
-our $VERSION     = '7.2-sn';
+our $VERSION     = '7.3.2-sn';
 our $REVISION    = undef;
 our $audiodir    = undef
 our $playlistdir = undef;
@@ -247,9 +252,6 @@ sub init {
 		eval "use diagnostics";
 	}
 
-	msg("SlimServer OSDetect init...\n");
-	Slim::Utils::OSDetect::init();
-
 	# open the log files
 	Slim::Utils::Log->init({
 		'logconf' => $logconf,
@@ -270,7 +272,7 @@ sub init {
 
 	$log->info("SlimServer OS Specific init...");
 
-	if (Slim::Utils::OSDetect::OS() ne 'win') {
+	unless (Slim::Utils::OSDetect::isWindows()) {
 		$SIG{'HUP'} = \&initSettings;
 	}		
 
@@ -332,11 +334,15 @@ sub init {
 	$log->info("Async DNS init...");
 	Slim::Networking::Async::DNS->init;
 
+	$log->info("Async HTTP init...");
+	Slim::Networking::SimpleAsyncHTTP->init;
+
 	$log->info("Source conversion init..");
 	Slim::Player::Source::init();
 	
 	$log->info('Menu init...');
 	Slim::Menu::TrackInfo->init();
+	Slim::Menu::SystemInfo->init();
 	
 	$log->info('SqueezeCenter Alarms init...');
 	Slim::Utils::Alarm->init();
@@ -346,6 +352,9 @@ sub init {
 	
 	$log->info("SqueezeCenter Jive init...");
 	Slim::Control::Jive->init();
+	
+	$log->info("Remote Metadata init...");
+	Slim::Formats::RemoteMetadata->init();
 
 	if ( SLIM_SERVICE ) {
 		# start SlimService specific stuff
@@ -393,12 +402,17 @@ sub idle {
 	my $now = Time::HiRes::time();
 
 	# check for time travel (i.e. If time skips backwards for DST or clock drift adjustments)
-	if ($now < $lastlooptime) {
+	if ( $now < $lastlooptime || ( $now - $lastlooptime > 300 ) ) {
 
 		Slim::Utils::Timers::adjustAllTimers($now - $lastlooptime);
-
-		logger('server.timers')->debug("Finished adjustAllTimers: " . Time::HiRes::time());
-	} 
+		
+		# For all clients that support RTC, we need to adjust their clocks
+		for my $client ( Slim::Player::Client::clients() ) {
+			if ( $client->hasRTCAlarm ) {
+				$client->setRTCTime;
+			}
+		}
+	}
 
 	$lastlooptime = $now;
 

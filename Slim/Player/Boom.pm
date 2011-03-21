@@ -27,7 +27,6 @@ BEGIN {
 use Slim::Hardware::BacklightLED;
 use Slim::Networking::Slimproto;
 use Slim::Player::ProtocolHandlers;
-use Slim::Player::Transporter;
 use Slim::Utils::Prefs;
 use Slim::Utils::Misc;
 use Slim::Utils::Log;
@@ -50,6 +49,7 @@ our $defaultPrefs = {
 		BROWSE_MUSIC
 		RADIO
 		MUSIC_SERVICES
+		MUSIC_STORES
 		FAVORITES
 		PLUGIN_LINE_IN
 		PLUGINS
@@ -57,16 +57,16 @@ our $defaultPrefs = {
 		SETTINGS
 		SQUEEZENETWORK_CONNECT
 	)],
-	'titleFormatCurr'      => 4,
 	'lineInAlwaysOn'       => 0, 
 	'lineInLevel'          => 50, 
+	'minAutoBrightness'    => 2,	# Minimal brightness (automatic brightness mode)
+	'sensAutoBrightness'    => 10,	# Sensitivity (automatic brightness mode)
 };
 
 $prefs->setValidate({ 'validator' => 'intlimit', 'low' => 0, 'high' => 100 }, 'lineInLevel');
+$prefs->setValidate({ 'validator' => 'intlimit', 'low' => 1, 'high' => 7 }, 'minAutoBrightness');
+$prefs->setValidate({ 'validator' => 'intlimit', 'low' => 1, 'high' => 20 }, 'sensAutoBrightness');
 $prefs->setChange(\&setLineInLevel, 'lineInLevel');
-# TODO: these should probably move to Client.pm when fixing bug 9253
-$prefs->setChange( sub { $_[2]->bass($_[1]); }, 'bass');
-$prefs->setChange( sub { $_[2]->treble($_[1]); }, 'treble');
 $prefs->setChange( sub { $_[2]->stereoxl($_[1]); }, 'stereoxl');
 
 $prefs->setChange(sub {
@@ -81,21 +81,23 @@ $prefs->setChange(sub {
 	
 }, 'lineInAlwaysOn');
 
+$prefs->setChange(sub {
+	my ($name, $enabled, $client) = @_;
 
-if ( main::SLIM_SERVICE ) {
-	$defaultPrefs->{menuItem} = [ qw(
-		NOW_PLAYING
-		MY_MUSIC
-		RADIO
-		MUSIC_SERVICES
-		FAVORITES
-		PLUGIN_LINE_IN
-		PLUGINS
-		ALARM
-		SETTINGS
-		SQUEEZECENTER_CONNECT
-	) ];
-}
+	my $b = $client->display->brightness();
+	# Setting the brightness again loads the brightnessMap with
+	#  the correct minimal automatic brightness (offset)
+	$client->display->brightness( $b);
+}, 'minAutoBrightness');
+
+$prefs->setChange(sub {
+	my ($name, $enabled, $client) = @_;
+
+	my $b = $client->display->brightness();
+	# Setting the brightness again loads the brightnessMap with
+	#  the correct automatic brightness sensitivity (divisor)
+	$client->display->brightness( $b);
+}, 'sensAutoBrightness');
 
 sub new {
 	my $class = shift;
@@ -218,6 +220,10 @@ sub hasDisableDac {
 
 sub hasDigitalOut {
 	return 0;
+}
+
+sub hasHeadSubOut() {
+	return 1;
 }
 
 sub hasPowerControl {
@@ -436,10 +442,10 @@ sub setRTCTime {
 	my $client = shift;
 	my $data;
 
-	my $dateTimeFormat = preferences('plugin.datetime')->client($client)->get('timeformat') || $prefs->get('timeFormat');
+	my $dateTimeFormat = preferences('plugin.datetime')->client($client)->get('timeFormat') || $prefs->get('timeFormat');
 	
 	if ( main::SLIM_SERVICE ) {
-		$dateTimeFormat = $prefs->client($client)->get('timeFormat');
+		$dateTimeFormat = $prefs->client($client)->get('timeFormat') || $prefs->get('timeFormat');
 	}
 
 	# Set 12h / 24h display mode accordingly; mark time as being valid (i.e. set)

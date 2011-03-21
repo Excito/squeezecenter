@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::UserInterface;
 
-# $Id: UserInterface.pm 20888 2008-06-18 15:16:12Z andy $
+# $Id: UserInterface.pm 20892 2008-06-18 15:21:37Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

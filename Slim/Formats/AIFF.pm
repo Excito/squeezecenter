@@ -1,6 +1,6 @@
 package Slim::Formats::AIFF;
 
-# $Id: AIFF.pm 20515 2008-06-08 17:16:55Z andy $
+# $Id: AIFF.pm 22943 2008-08-28 17:56:34Z andy $
 #
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -292,5 +292,6 @@ sub getCoverArt {
 	return undef;
 }
 
+sub canSeek {1}	
 
 1;

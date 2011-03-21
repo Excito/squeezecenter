@@ -66,7 +66,7 @@ sub processCoverArtRequest {
 	
 	my $actualPathToImage;
 	my $requestedContentType = "image/" . $suffix;
-	$requestedContentType =~ s/jpg/jpeg/;
+	$requestedContentType =~ s/jpg/jpeg/i;
 	$requestedContentType =~ s/\.//;
 	$actualContentType = $requestedContentType;
 
@@ -78,6 +78,14 @@ sub processCoverArtRequest {
 		$actualPathToImage = $path;
 		$actualPathToImage =~ s/$imgName/$imgBasename$suffix/;
 	}
+	
+	# If path begins with "plugins/cache" it is a special path
+	# meaning we need to lookup the actual path in our cache directory
+	if ( $actualPathToImage && $actualPathToImage =~ m{^plugins/cache} ) {
+		my $cachedir = $prefs->get('cachedir');
+		$cachedir =~ s{/$}{};
+		$actualPathToImage =~ s{^plugins/cache}{$cachedir};
+	}
 
 	# typical cover art request would come across as something like cover_300x300_c_000000.jpg
 	# delimiter on "fields" is an underscore '_'
@@ -86,7 +94,7 @@ sub processCoverArtRequest {
 			(?:_([sSfFpco]))?        # resizeMode, given by a single character
 			(?:_([\da-fA-F]+))?      # background color, optional
 			(?:\.(jpg|png|gif|gd))?$ # optional file suffixes allowed are jpg png gif gd [libgd uncompressed]
-			/x;	
+			/ix;	
 
 	my $image               = $1;
 	my $requestedWidth      = $2; # it's ok if it didn't match and we get undef
@@ -327,7 +335,7 @@ sub processCoverArtRequest {
 
 			# Bug 6458, filter JPEGs on win32 through Imager to handle any corrupt files
 			# XXX: Remove this when we get a newer build of GD
-			if ( $actualContentType eq 'image/jpeg' && Slim::Utils::OSDetect::OS() eq 'win' ) {
+			if ( $actualContentType eq 'image/jpeg' && Slim::Utils::OSDetect::isWindows() ) {
 				require Imager;
 				my $img = Imager->new;
 				eval {
@@ -348,7 +356,7 @@ sub processCoverArtRequest {
 				
 				
 				# If no extension was given optimize for the common case: square JPEG cover art
-				if ( $autoType && $actualContentType eq 'image/jpeg' && $origImage->width == $origImage->height ) {
+				if ( $autoType && $actualContentType eq 'image/jpeg' && ($origImage->width == $origImage->height || $resizeMode eq "original") ) {
 					$log->info( "  No file type requested, returning jpeg for square image" );
 					$requestedContentType = 'image/jpeg';
 					$transparentRequest   = 0;
@@ -358,7 +366,7 @@ sub processCoverArtRequest {
 				my $returnedWidth;
 				my $returnedHeight;
 				my ($returnedType) = $requestedContentType =~ /\/(\w+)/;
-				$returnedType =~ s/jpg/jpeg/;
+				$returnedType =~ s/jpg/jpeg/i;
 
 				# if an X is supplied for the width (height) then the returned image's width (height)
 				# is chosen to maintain the aspect ratio of the original.  This only makes sense with 
@@ -596,7 +604,7 @@ sub processCoverArtRequest {
 			# Cache the path to a non-cover icon image
 			my $skin = $params->{'skinOverride'} || $prefs->get('skin');
 			
-			$imageFilePath = Slim::Web::HTTP::fixHttpPath($skin, $actualPathToImage);
+			$imageFilePath = Slim::Web::HTTP::fixHttpPath($skin, $actualPathToImage) || $actualPathToImage;
 		}
 		
 		my $cached = {

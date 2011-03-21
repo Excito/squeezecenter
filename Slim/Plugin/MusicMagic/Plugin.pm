@@ -10,9 +10,9 @@ package Slim::Plugin::MusicMagic::Plugin;
 use strict;
 
 use Scalar::Util qw(blessed);
+use LWP::UserAgent;
 
 use Slim::Player::ProtocolHandlers;
-use Slim::Player::Protocols::HTTP;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Utils::OSDetect;
@@ -32,7 +32,7 @@ my $MMSHost;
 my $MMSport;
 my $canPowerSearch;
 
-my $OS  = Slim::Utils::OSDetect::OS();
+my $isWin = Slim::Utils::OSDetect::isWindows();
 
 my $log = Slim::Utils::Log->addLogCategory({
 	'category'     => 'plugin.musicip',
@@ -112,7 +112,7 @@ sub shutdownPlugin {
 	Slim::Utils::Timers::killTimers(undef, \&checker);
 
 	# disable protocol handler?
-	Slim::Player::ProtocolHandlers->registerHandler('musicmagicplaylist', 0);
+	Slim::Player::ProtocolHandlers->registerHandler('musicipplaylist', 0);
 
 	$initialized = 0;
 
@@ -126,54 +126,49 @@ sub initPlugin {
 	my $class = shift;
 
 	return 1 if $initialized;
+
+	# read enabled status before checkDefaults to ensure a first time initialization
+	my $enabled = $prefs->get('musicip');
 	
 	Slim::Plugin::MusicMagic::Common::checkDefaults();
-	
-	$MMSport = $prefs->get('port');
-	$MMSHost = $prefs->get('host');
-
 	Slim::Plugin::MusicMagic::Settings->new;
 
 	# don't test the connection if MIP integration is disabled
-	return unless $prefs->get('musicip'); 
+	# but continue if it had never been initialized
+	return unless $enabled || !defined $enabled;
+
+	my $response = _syncHTTPRequest("/api/version");
 
 	$log->info("Testing for API on $MMSHost:$MMSport");
 
-	my $http = Slim::Player::Protocols::HTTP->new({
-		'url'     => "http://$MMSHost:$MMSport/api/version",
-		'create'  => 0,
-		'timeout' => 5,
-	});
-
-	if (!$http) {
+	if ($response->is_error) {
 
 		$initialized = 0;
+		
+		$prefs->set('musicip', 0) if !defined $enabled;
 
 		$log->error("Can't connect to port $MMSport - MusicIP disabled.");
 
 	} else {
 
-		my $content = $http->content;
+		my $content = $response->content;
 
 		if ( $log->is_info ) {
 			$log->info($content);
 		}
 
-		$http->close;
+		# if this is the first time MIP is initialized, have it use
+		# - faster mixable status only scan (2) if a music folder is defined
+		# - slower full metadata import (1) if no music folder is defined
+		$prefs->set('musicip', preferences('server')->get('audiodir') ? 2 : 1)  if !defined $enabled;
 
 		# this query should return an API error if Power Search is not available
-		$http = Slim::Player::Protocols::HTTP->new({
-			'url'    => "http://$MMSHost:$MMSport/api/mix?filter=?length>120&length=1",
-			'create' => 0,
-			'timeout' => 5,
-		});
+		$response = _syncHTTPRequest("/api/mix?filter=?length>120&length=1");
 
-		if ($http && $http->content !~ /MusicIP API error/i) {
+		if ($response->is_success && $response->content !~ /MusicIP API error/i) {
 			$canPowerSearch = 1;
 
 			$log->info('Power Search enabled');
-
-			$http->close;		
 		}
 
 		Slim::Plugin::MusicMagic::PlayerSettings::init();
@@ -199,8 +194,11 @@ sub initPlugin {
 			'contextToken' => 'MUSICMAGIC_MIX',
 		});
 
-		Slim::Player::ProtocolHandlers->registerHandler('musicmagicplaylist', 0);
+		Slim::Player::ProtocolHandlers->registerHandler('musicipplaylist', 0);
 
+		# initialize the filter list
+		Slim::Plugin::MusicMagic::Settings->grabFilters();
+		
 		Slim::Plugin::MusicMagic::ClientSettings->new;
 
 		Slim::Control::Request::addDispatch(['musicip', 'mix'],
@@ -358,6 +356,14 @@ sub _statusOK {
 			return 0;
 		}
 
+		if ($content !~ /idle/i) {
+
+			# only scan if MIP is idle, not while it's analyzing
+			$log->info("MusicIP is busy analyzing your music, skipping rescan");
+
+			return 0;
+		}
+
 		if ((time - $lastScanTime) > $scanInterval) {
 
 			Slim::Control::Request::executeRequest(undef, ['rescan']);
@@ -451,20 +457,11 @@ sub grabMoods {
 		return;
 	}
 
-	$MMSport = $prefs->get('port') unless $MMSport;
-	$MMSHost = $prefs->get('host') unless $MMSHost;
+	my $response = _syncHTTPRequest('/api/moods');
 
-	$log->debug("Get moods list");
+	if ($response->is_success) {
 
-	my $http = Slim::Player::Protocols::HTTP->new({
-		'url'    => "http://$MMSHost:$MMSport/api/moods",
-		'create' => 0,
-	});
-
-	if ($http) {
-
-		@moods = split(/\n/, $http->content);
-		$http->close;
+		@moods = split(/\n/, Slim::Utils::Unicode::utf8encode_locale($response->content));
 
 		if ($log->is_debug && scalar @moods) {
 
@@ -599,7 +596,7 @@ sub mixerFunction {
 
 	} elsif ($levels[$level] eq 'contributor') {
 		
-		# MusicMagic uses artist instead of contributor.
+		# MusicIP uses artist instead of contributor.
 		$levels[$level] = 'artist';
 		$mixSeed = $currentItem->name;
 	
@@ -760,9 +757,11 @@ sub getMix {
 
 	if ($filter) {
 
+		$filter = Slim::Utils::Unicode::utf8decode_locale($filter);
+
 		$log->debug("Filter $filter in use.");
 
-		$args{'filter'} = Slim::Utils::Misc::escape($filter);
+		$args{'filter'} = Slim::Plugin::MusicMagic::Common::escape($filter);
 	}
 
 	my $argString = join( '&', map { "$_=$args{$_}" } keys %args );
@@ -774,43 +773,54 @@ sub getMix {
 		return undef;
 	}
 
-	# Not sure if this is correct yet.
-	if ($validMixTypes{$for} ne 'song' && $validMixTypes{$for} ne 'album') {
-
-		$id = Slim::Utils::Unicode::utf8encode_locale($id);
-	}
-
 	$log->debug("Creating mix for: $validMixTypes{$for} using: $id as seed.");
+
+	if (!$isWin && ($validMixTypes{$for} eq 'song' || $validMixTypes{$for} eq 'album') ) {
+
+		# need to decode the file path when a file is used as seed
+		$id = Slim::Utils::Unicode::utf8decode_locale($id);
+	}
 
 	my $mixArgs = "$validMixTypes{$for}=$id";
 
 	# url encode the request, but not the argstring
-	# Bug: 1938 - Don't encode to UTF-8 before escaping on Mac & Win
-	$mixArgs = URI::Escape::uri_escape($mixArgs);
+	$mixArgs = Slim::Plugin::MusicMagic::Common::escape($mixArgs);
 	
 	$log->debug("Request http://$MMSHost:$MMSport/api/mix?$mixArgs\&$argString");
 
-	my $http = Slim::Player::Protocols::HTTP->new({
-		'url'    => "http://$MMSHost:$MMSport/api/mix?$mixArgs\&$argString",
-		'create' => 0,
-	});
+	my $response = _syncHTTPRequest("/api/mix?$mixArgs\&$argString");
 
-	if (!$http) {
-		# NYI
-		$log->warn("Warning: Couldn't get mix: $mixArgs\&$argString");
+	if ($response->is_error) {
 
-		return @mix;
+		if ($response->code == 500 && $filter) {
+			
+			::idleStreams();
+
+			# try again without the filter
+
+			$log->warn("No mix returned with filter involved - we might want to try without it");
+			$argString =~ s/filter=/xfilter=/;
+			$response = _syncHTTPRequest("/api/mix?$mixArgs\&$argString");
+
+			Slim::Plugin::MusicMagic::Settings->grabFilters();
+		}
+
+		if ($response->is_error) {
+			
+			$log->warn("Warning: Couldn't get mix: $mixArgs\&$argString");
+			$log->debug($response->as_string);
+	
+			return \@mix;
+		}
 	}
 
-	my @songs = split(/\n/, $http->content);
+	my @songs = split(/\n/, $response->content);
 	my $count = scalar @songs;
-
-	$http->close;
 
 	for (my $j = 0; $j < $count; $j++) {
 
 		# Bug 4281 - need to convert from UTF-8 on Windows.
-		if ($OS eq 'win') {
+		if ($isWin) {
 
 			my $enc = Slim::Utils::Unicode::encodingFromString($songs[$j]);
 
@@ -852,7 +862,7 @@ sub musicmagic_mix {
 
 	my $itemnumber = 0;
 	$params->{'browse_items'} = [];
-	$params->{'levelName'} = "track";
+	$params->{'levelName'} = "playlisttrack";
 
 	$params->{'pwd_list'} .= ${Slim::Web::HTTP::filltemplatefile("plugins/MusicMagic/musicmagic_pwdlist.html", $params)};
 
@@ -860,7 +870,7 @@ sub musicmagic_mix {
 
 		push @{$params->{'browse_items'}}, {
 
-			'text'         => Slim::Utils::Strings::string('THIS_ENTIRE_PLAYLIST'),
+			'text'         => Slim::Utils::Strings::string('ALL_SONGS'),
 			'attributes'   => "&listRef=musicmagic_mix",
 			'odd'          => ($itemnumber + 1) % 2,
 			'webroot'      => $params->{'webroot'},
@@ -977,7 +987,7 @@ sub cliMix {
 		my $base = {
 			actions => {
 				go => {
-					cmd => ['songinfo'],
+					cmd => ['trackinfo', 'items'],
 					params => {
 						menu => 'nowhere',
 					},
@@ -1111,7 +1121,7 @@ sub _prepare_mix {
 			if ($obj->musicmagic_mixable) {
 
 				my $playlist = $obj->path;
-				if ($obj->url =~ /musicmagicplaylist:(.*?)$/) {
+				if ($obj->url =~ /musicipplaylist:(.*?)$/) {
 					$playlist = Slim::Utils::Misc::unescape($1);
 				}
 
@@ -1260,6 +1270,19 @@ sub trackInfoHandler {
 
 	return;
 
+}
+
+sub _syncHTTPRequest {
+	my $url = shift;
+	
+	$MMSport = $prefs->get('port') unless $MMSport;
+	$MMSHost = $prefs->get('host') unless $MMSHost;
+	
+	my $http = LWP::UserAgent->new;
+
+	$http->timeout(5);
+
+	return $http->get("http://$MMSHost:$MMSport$url");
 }
 
 1;

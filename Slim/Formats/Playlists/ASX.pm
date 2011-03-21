@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists::ASX;
 
-# $Id: ASX.pm 23467 2008-10-08 16:33:09Z andy $
+# $Id: ASX.pm 24453 2008-12-31 14:49:52Z balton $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -108,7 +108,8 @@ sub read {
 				}
 			}
 		}
-		
+
+		my %seenhref = ();
 		for my $entry ( @entries ) {
 		
 			my $title = $entry->{title};
@@ -127,6 +128,8 @@ sub read {
 			# 'ref' tags should refer to audio content, so we need to force
 			# the use of the MMS protocol handler by making sure the URI starts with mms
 			$href =~ s/^http/mms/;
+			next if defined ($seenhref{$href}) ;
+			$seenhref{$href} = 1;
 
 			$log->info("Found an entry: $href, title $title");
 
@@ -155,7 +158,7 @@ sub read {
 	}
 
 	# Next is version 2.0 ASX
-	elsif ($content =~ /[Reference]/) {
+	elsif ($content =~ /\[Reference\]/i) {
 
 		$log->info("Parsing ASX 2.0: $file url: [$url]");
 

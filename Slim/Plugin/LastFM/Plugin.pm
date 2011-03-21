@@ -1,6 +1,6 @@
 package Slim::Plugin::LastFM::Plugin;
 
-# $Id: Plugin.pm 21788 2008-07-15 20:01:58Z andy $
+# $Id: Plugin.pm 24564 2009-01-08 15:01:38Z mherger $
 
 # Play Last.fm Radio via SqueezeNetwork
 
@@ -49,9 +49,9 @@ sub initPlugin {
 		[0, 1, 1, \&skipTrack]);
 	
 	$class->SUPER::initPlugin(
-		feed => undef, # handled in feed() below
-		tag  => 'lfm',
-		menu => 'music_services',
+		tag    => 'lfm',
+		menu   => 'music_services',
+		weight => 40,
 	);
 	
 	if ( main::SLIM_SERVICE ) {
@@ -116,8 +116,10 @@ sub rateTrack {
 	
 	return unless defined $client;
 	
+	my $song = $client->playingSong() || return;
+	
 	# ignore if user is not using Last.fm
-	my $url = Slim::Player::Playlist::url($client) || return;
+	my $url = $song->currentTrack()->url;
 	return unless $url =~ /^lfm/;
 	
 	my $rating = $request->getParam('_rating');
@@ -128,8 +130,7 @@ sub rateTrack {
 	}
 	
 	# Get the current track
-	my $currentTrack = $client->pluginData('prevTrack') || $client->pluginData('currentTrack');
-	return unless $currentTrack;
+	my $currentTrack = $song->{'pluginData'} || return;
 	
 	my ($station) = $url =~ m{^lfm://(.+)};
 	
@@ -184,8 +185,8 @@ sub _rateTrackOK {
 		$client->execute( [ 'audioscrobbler', 'loveTrack', $url ] );
 	}
 	
-	# Parse the text out of the OPML
-	my ($text) = $http->content =~ m/text="([^"]+)/;	
+	# Parse the text out of the JSON
+	my ($text) = $http->content =~ m/"text":"([^"]+)/;	
 	$request->addResult( text => Slim::Utils::Unicode::utf8on($text) );
 	
 	$request->setStatusDone();
@@ -210,24 +211,23 @@ sub skipTrack {
 	return unless defined $client;
 	
 	# ignore if user is not using Last.fm
-	my $url = Slim::Player::Playlist::url($client) || return;
+	my $song = $client->playingSong() || return;
+	my $url = $song->currentTrack()->url;
 	return unless $url =~ /^lfm/;
 		
 	$log->debug("Last.fm: Skip requested");
-	
-	# Tell onJump not to display buffering info, so we don't
-	# mess up the showBriefly message
-	$client->pluginData( banMode => 1 );
-	
+		
 	$client->execute( [ "playlist", "jump", "+1" ] );
 }
 
 sub trackInfoMenu {
 	my ( $client, $url, $track, $remoteMeta ) = @_;
 	
-	if ( !Slim::Networking::SqueezeNetwork->hasAccount( $client, 'lfm' ) ) {
-		return;
-	}
+	return unless $client;
+	
+	return unless Slim::Networking::SqueezeNetwork->isServiceEnabled( $client, 'LFM' );
+	
+	return unless Slim::Networking::SqueezeNetwork->hasAccount( $client, 'lfm' );
 	
 	my $artist = $track->remote ? $remoteMeta->{artist} : ( $track->artist ? $track->artist->name : undef );
 	

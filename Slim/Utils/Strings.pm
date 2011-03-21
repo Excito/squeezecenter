@@ -1,6 +1,6 @@
 package Slim::Utils::Strings;
 
-# $Id: Strings.pm 21788 2008-07-15 20:01:58Z andy $
+# $Id: Strings.pm 23462 2008-10-08 12:43:12Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -376,9 +376,9 @@ sub storeString {
 		return;
 	}
 
-	if (defined $strings->{$currentLang}->{$name} && defined $curString->{$currentLang} && 
+	if ($log->is_info && defined $strings->{$currentLang}->{$name} && defined $curString->{$currentLang} && 
 			$strings->{$currentLang}->{$name} ne $curString->{$currentLang}) {
-		$log->warn("redefined string: $name in $file");
+		$log->info("redefined string: $name in $file");
 	}
 
 	if (defined $curString->{$currentLang}) {
@@ -581,7 +581,7 @@ sub checkChangedStrings {
 }
 
 sub setLocale {
-	my $locale = string('LOCALE' . (Slim::Utils::OSDetect::OS() eq 'win' ? '_WIN' : '') );
+	my $locale = string('LOCALE' . (Slim::Utils::OSDetect::isWindows() ? '_WIN' : '') );
 	$locale .= Slim::Utils::Unicode::currentLocale() =~ /utf8/i ? '.UTF-8' : '';
 
 	setlocale( LC_TIME, $locale );

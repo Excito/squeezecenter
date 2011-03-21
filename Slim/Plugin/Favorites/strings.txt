@@ -1,6 +1,6 @@
 # String file for Favorites plugin
 
-# $Id: strings.txt 23192 2008-09-16 09:24:33Z mherger $
+# $Id: strings.txt 23194 2008-09-16 13:08:06Z andy $
 
 FAVORITES
 	DA	Favoritter

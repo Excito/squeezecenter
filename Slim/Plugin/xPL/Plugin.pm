@@ -287,7 +287,7 @@ sub sendXplHBeatMsg {
 	my $msg;
 	my $client = $_[0];
 	my $clientName = validInstance($client->name);
-	my $playmode = $client->playmode;
+	my $playmode;
 	my $song = $client->currentplayingsong();
 	my $prevline1 = $client->prevline1();
 	my $prevline2 = $client->prevline2();
@@ -301,7 +301,7 @@ sub sendXplHBeatMsg {
 		$power = $client->power();
 	}
 
-	if ($playmode eq 'play') {
+	if ($client->isPlaying()) {
 		$playmode = "playing";
 
 		my $track = Slim::Schema->rs('Track')->objectForUrl({
@@ -333,9 +333,9 @@ sub sendXplHBeatMsg {
 		$trackname =~ s/^[0-9]*\.//g;
 		$trackname =~ s/^ //g;
 
-	} elsif ($playmode eq 'stop') {
+	} elsif ($client->isStopped()) {
 		$playmode = "stopped";
-	} elsif ($playmode eq 'pause') {
+	} elsif ($client->isPaused()) {
 		$playmode = "paused";
 	}
 
@@ -367,7 +367,7 @@ sub sendXplStatusMsg {
 	my $client = $_[0];
 	my $status = $_[1];
 	my $clientName = validInstance($client->name);
-	my $playmode = $client->playmode;
+	my $playmode = Slim::Player::Source::playmode($client);
         $msg = "status=$playmode";
         $msg = "$msg\nupdate=$status";
 

@@ -1,6 +1,6 @@
 package Slim::Utils::Errno;
 
-# $Id: Errno.pm 15258 2007-12-13 15:29:14Z mherger $
+# $Id: Errno.pm 23205 2008-09-17 15:23:29Z awy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -27,6 +27,8 @@ Platform correct error constants.
 
 =item * ECHILD
 
+=item * EBADF
+
 =back
 
 =cut
@@ -34,17 +36,18 @@ Platform correct error constants.
 use strict;
 use Exporter::Lite;
 
-our @EXPORT = qw(EWOULDBLOCK EINPROGRESS EINTR ECHILD);
+our @EXPORT = qw(EWOULDBLOCK EINPROGRESS EINTR ECHILD EBADF);
 
 BEGIN {
         if ($^O =~ /Win32/) {
                 *EINTR       = sub () { 10004 };
+                *EBADF       = sub () { 10009 };
                 *ECHILD      = sub () { 10010 };
                 *EWOULDBLOCK = sub () { 10035 };
                 *EINPROGRESS = sub () { 10036 };
         } else {
                 require Errno;
-                import Errno qw(EWOULDBLOCK EINPROGRESS EINTR ECHILD);
+                import Errno qw(EWOULDBLOCK EINPROGRESS EINTR ECHILD EBADF);
         }
 }
 

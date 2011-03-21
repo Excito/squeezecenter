@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::FileTypes;
 
-# $Id: FileTypes.pm 18299 2008-04-02 20:01:23Z andy $
+# $Id: FileTypes.pm 18301 2008-04-02 20:02:05Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

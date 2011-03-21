@@ -1,3 +1,18 @@
+// XXX - remove this override once an update to ExtJS 2.2 is released
+// fixes the disappearing time input controls in IE
+// http://extjs.com/forum/showthread.php?t=43231
+Ext.form.TriggerField.override({
+	afterRender : function(){
+		Ext.form.TriggerField.superclass.afterRender.call(this);
+		var y;
+		if(Ext.isIE && !this.hideTrigger && this.el.getY() != (y = this.trigger.getY())){
+			this.el.position();
+			this.el.setY(y);
+		}
+	}
+});
+
+
 Settings = {
 	background : null,
 	body : null,
@@ -239,8 +254,11 @@ Settings.Page = function(){
 			SqueezeJS.UI.FilesystemBrowser.init();
 			SqueezeJS.UI.ScrollPanel.init();
 
-			this.onResize(0, Ext.lib.Dom.getViewHeight());
-			Ext.EventManager.onWindowResize(this.onResize);
+			// bug 9754 - don't resize drop-down, IE6/7 don't know max-height anyway
+			if (! (Ext.isIE6 || Ext.isIE7)) {
+				this.onResize(0, Ext.lib.Dom.getViewHeight());
+				Ext.EventManager.onWindowResize(this.onResize);
+			}
 
 			var items = Ext.query('input');
 			for (var i = 0; i < items.length; i++) {
@@ -298,7 +316,7 @@ Settings.Page = function(){
 									html: desc,
 									title: title,
 									dismissDelay: 0,
-									hideDelay: 500,
+									hideDelay: 3000,
 									maxWidth: 300
 								})
 						});
@@ -342,7 +360,7 @@ Settings.Page = function(){
 						text: playerList[x].name,
 						value: playerList[x].id,
 						checked: playerList[x].current,
-						cls: 'playerList',
+						cls: playerList[x].model,
 						group: 'playerList',
 						handler: function(ev) {
 							this._confirmPageChange(
@@ -584,19 +602,10 @@ Settings.Alarm = function() {
 
 				new Ext.form.TimeField({
 					applyTo: items[i],
-					altFormats: "g:ia|g:iA|g:i a|g:i A|h:i|g:i|H:i|ga|ha|gA|h a|g a|g A|gi|hi|gia|hia|g|H" + (altFormats ? '|' + altFormats : ''),
+					altFormats: (altFormats ? '|' + altFormats : '') + "g:iA|g:ia|g:i A|g:i a|h:i|g:i|H:i|ga|ha|gA|h a|g a|g A|gi|hi|gia|hia|g|H",
 					increment: 5,
 					format: timeFormat,
-					hideTrigger: true,
-					// overwriting the original code to make it case insensitive
-					// XXX - replace Ext.form.DateField with fixed version when available
-					// see http://extjs.com/forum/showthread.php?t=35353
-					beforeBlur : function(){
-						var v = this.parseDate(this.getRawValue().toUpperCase());
-						if(v){
-							this.setValue(v.dateFormat(this.format));
-						}
-					}
+					hideTrigger: true
 				});
 			}
 		}

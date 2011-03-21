@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Debugging;
 
-# $Id: Debugging.pm 18299 2008-04-02 20:01:23Z andy $
+# $Id: Debugging.pm 23246 2008-09-23 13:33:50Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -29,11 +29,27 @@ sub handler {
 
 		my $categories = Slim::Utils::Log->allCategories;
 
-		for my $category (keys %{$categories}) {
+		if ($paramRef->{'logging_group'}) {
 
-			Slim::Utils::Log->setLogLevelForCategory(
-				$category, $paramRef->{$category}
-			);
+			my $levels = Slim::Utils::Log->logLevels($paramRef->{'logging_group'});
+			
+			for my $category (keys %{$categories}) {
+				
+				Slim::Utils::Log->setLogLevelForCategory(
+					$category, $levels->{$category} || 'ERROR'
+				);
+			}
+			
+		}
+
+		else {
+
+			for my $category (keys %{$categories}) {
+	
+				Slim::Utils::Log->setLogLevelForCategory(
+					$category, $paramRef->{$category}
+				);
+			}
 		}
 
 		Slim::Utils::Log->persist($paramRef->{'persist'} ? 1 : 0);
@@ -57,8 +73,9 @@ sub handler {
 			'current' => $debugCategories->{$debugCategory},
 		};
 	}
+	
+	$paramRef->{'logging_groups'} = Slim::Utils::Log->logGroups();
 
-	#$paramRef->{'categories'} = [ sort { $a->{'label'} cmp $b->{'label'} } @categories ];
 	$paramRef->{'categories'} = \@categories;
 	$paramRef->{'logLevels'}  = \@validLogLevels;
 	$paramRef->{'persist'}    = Slim::Utils::Log->persist;

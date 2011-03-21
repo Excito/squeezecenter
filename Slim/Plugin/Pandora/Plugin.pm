@@ -95,8 +95,10 @@ sub rateTrack {
 	
 	return unless defined $client;
 	
+	my $song = $client->playingSong() || return;
+	
 	# ignore if user is not using Pandora
-	my $url = Slim::Player::Playlist::url($client) || return;
+	my $url = $song->currentTrack()->url;
 	return unless $url =~ /^pandora/;
 	
 	my $rating = $request->getParam('_rating');
@@ -109,8 +111,7 @@ sub rateTrack {
 	my ($stationId) = $url =~ m{^pandora://([^.]+)\.mp3};
 	
 	# Get the current track
-	my $currentTrack = $client->pluginData('prevTrack') || $client->pluginData('currentTrack');
-	return unless $currentTrack;
+	my $currentTrack = $song->{'pluginData'} || return;
 	
 	my $trackId = $currentTrack->{trackToken};
 	
@@ -158,8 +159,8 @@ sub _rateTrackOK {
 		$log->debug('Rating was negative but no more skips allowed');
 	}
 	
-	# Parse the text out of the OPML
-	my ($text) = $http->content =~ m/text="([^"]+)/;	
+	# Parse the text out of the JSON
+	my ($text) = $http->content =~ m/"text":"([^"]+)/;	
 	$request->addResult( text => Slim::Utils::Unicode::utf8on($text) );
 	
 	$request->setStatusDone();
@@ -184,15 +185,12 @@ sub skipTrack {
 	return unless defined $client;
 	
 	# ignore if user is not using Pandora
-	my $url = Slim::Player::Playlist::url($client) || return;
+	my $song = $client->playingSong() || return;
+	my $url = $song->currentTrack()->url;
 	return unless $url =~ /^pandora/;
 		
 	$log->debug("Pandora: Skip requested");
-	
-	# Tell onJump not to display buffering info, so we don't
-	# mess up the showBriefly message
-	$client->pluginData( banMode => 1 );
-	
+		
 	$client->execute( [ "playlist", "jump", "+1" ] );
 	
 	$request->setStatusDone();
@@ -201,12 +199,11 @@ sub skipTrack {
 sub trackInfoMenu {
 	my ( $client, $url, $track, $remoteMeta ) = @_;
 	
-	# can't browse without a player connected
 	return unless $client;
 	
-	if ( !Slim::Networking::SqueezeNetwork->hasAccount( $client, 'pandora' ) ) {
-		return;
-	}
+	return unless Slim::Networking::SqueezeNetwork->isServiceEnabled( $client, 'Pandora' );
+	
+	return unless Slim::Networking::SqueezeNetwork->hasAccount( $client, 'pandora' );
 	
 	my $artist = $track->remote ? $remoteMeta->{artist} : ( $track->artist ? $track->artist->name : undef );
 	my $title  = $track->remote ? $remoteMeta->{title}  : $track->title;

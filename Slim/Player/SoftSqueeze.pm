@@ -107,9 +107,22 @@ sub canDirectStream {
 	return undef;
 }
 
+
 # Need to use weighted play-point
+sub needsWeightedPlayPoint { 1 }
+
 sub playPoint {
 	return Slim::Player::Client::playPoint(@_);
+}
+
+sub skipAhead {
+	my $client = shift;
+	
+	my $ret = $client->SUPER::skipAhead(@_);
+	
+	$client->playPoint(undef);
+	
+	return $ret;
 }
 
 1;

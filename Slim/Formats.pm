@@ -1,6 +1,6 @@
 package Slim::Formats;
 
-# $Id: Formats.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Formats.pm 23663 2008-10-23 11:47:52Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -9,7 +9,7 @@ package Slim::Formats;
 
 use strict;
 use base qw(Class::Data::Inheritable);
-
+	
 use Slim::Music::Info;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;

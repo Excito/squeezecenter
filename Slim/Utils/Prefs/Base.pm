@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Base;
 
-# $Id: Base.pm 23226 2008-09-20 11:04:37Z adrian $
+# $Id: Base.pm 24088 2008-11-25 18:31:35Z andy $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -256,11 +256,11 @@ sub set {
 
 		$root->save;
 		
-		my $client = Slim::Player::Client::getClient($clientid);
+		my $client = $clientid ? Slim::Player::Client::getClient($clientid) : undef;
 		
 		if ( !defined $old || !defined $new || $old ne $new || ref $new ) {
 			
-			if ( main::SLIM_SERVICE && $clientid ) {
+			if ( main::SLIM_SERVICE && blessed($client) ) {
 				# Skip param lets routines like initPersistedPrefs avoid writing right back to the db
 				my $skip = shift || 0;
 
@@ -295,10 +295,12 @@ sub set {
 			}
 		}
 
-		Slim::Control::Request::notifyFromArray(
-			$clientid ? $client : undef,
-			['prefset', $namespace, $pref, $new]
-		);
+		if (!main::SCANNER) {
+			Slim::Control::Request::notifyFromArray(
+				$clientid ? $client : undef,
+				['prefset', $namespace, $pref, $new]
+			);
+		}
 
 		return wantarray ? ($new, 1) : $new;
 

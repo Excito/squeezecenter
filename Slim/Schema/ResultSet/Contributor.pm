@@ -1,6 +1,6 @@
 package Slim::Schema::ResultSet::Contributor;
 
-# $Id: Contributor.pm 21711 2008-07-13 20:00:32Z andy $
+# $Id: Contributor.pm 21714 2008-07-13 20:01:40Z andy $
 
 use strict;
 use base qw(Slim::Schema::ResultSet::Base);

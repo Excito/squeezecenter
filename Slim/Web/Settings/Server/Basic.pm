@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Basic;
 
-# $Id: Basic.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Basic.pm 23362 2008-10-01 07:07:30Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -107,9 +107,6 @@ sub handler {
 		}
 	}
 
-	my @versions = Slim::Utils::Misc::settingsDiagString();
-
-	$paramRef->{'versionInfo'} = join( "<br />\n", @versions ) . "\n";
 	$paramRef->{'newVersion'}  = $::newVersion;
 	$paramRef->{'languageoptions'} = Slim::Utils::Strings::languageOptions();
 

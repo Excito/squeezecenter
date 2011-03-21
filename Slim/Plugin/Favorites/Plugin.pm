@@ -1,6 +1,6 @@
 package Slim::Plugin::Favorites::Plugin;
 
-# $Id: Plugin.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Plugin.pm 24454 2008-12-31 15:05:56Z adrian $
 
 # A Favorites implementation which stores favorites as opml files and allows
 # the favorites list to be edited from the web interface
@@ -72,6 +72,7 @@ sub initPlugin {
 	Slim::Control::Request::addDispatch(['favorites', 'rename'], [0, 0, 1, \&cliRename]);
 	Slim::Control::Request::addDispatch(['favorites', 'move'], [0, 0, 1, \&cliMove]);
 	Slim::Control::Request::addDispatch(['favorites', 'playlist', '_method' ],[1, 1, 1, \&cliBrowse]);
+	Slim::Control::Request::addDispatch(['favorites', 'exists', '_id'], [0, 1, 1, \&cliExists]);
 	
 	# register notifications
 	Slim::Control::Request::addDispatch(['favorites', 'changed'], [0, 0, 0, undef]);
@@ -799,7 +800,42 @@ sub cliBrowse {
 		$feed = Storable::dclone($feed);
 	}
 
-	Slim::Buttons::XMLBrowser::cliQuery('favorites', $feed, $request);
+	Slim::Control::XMLBrowser::cliQuery('favorites', $feed, $request);
+}
+
+sub cliExists {
+	my $request = shift;
+
+	my $client = $request->client();
+	my $id     = $request->getParam('_id');
+	my $url;
+	
+	my $favs = Slim::Utils::Favorites->new($client);
+	
+	if ( $id =~ /^\d+$/ ) {
+		my $obj = Slim::Schema->rs('Track')->find($id);
+		if ( !$obj ) {
+			$request->setStatusBadParams();
+			return;
+		}
+		
+		$url = $obj->url;
+	}
+	else {
+		$url = $id;
+	}
+	
+	my $index = $favs->findUrl($url);
+	
+	if ( defined $index ) {
+		$request->addResult( exists => 1 );
+		$request->addResult( index  => $index );
+	}
+	else {
+		$request->addResult( exists => 0 );
+	}
+	
+	$request->setStatusDone();
 }
 
 sub cliAdd {
@@ -816,6 +852,7 @@ sub cliAdd {
 	my $title  = $request->getParam('title');
 	my $icon   = $request->getParam('icon');
 	my $index  = $request->getParam('item_id');
+	my $hotkey = $request->getParam('hotkey');
 	
 	if ( main::SLIM_SERVICE ) {
 		# XXX: the below SC code should be refactored to use Slim::Utils::Favorites
@@ -826,7 +863,11 @@ sub cliAdd {
 
 			$log->info("adding entry $title - $url");
 			
-			$favs->add( $url, $title );
+			my $index = $favs->add( $url, $title );
+
+			if (defined $hotkey) {
+				$favs->setHotkey($index, $hotkey);
+			}
 			
 			$request->addResult( 'count', 1 );
 			
@@ -901,6 +942,10 @@ sub cliAdd {
 		}
 
 		$favs->save;
+
+		if (defined $hotkey && (my $index = $favs->findUrl($url))) {
+			$favs->setHotkey($index, $hotkey);
+		}
 
 		# show feedback if this action came from jive cometd session
 		if ($request->source && $request->source =~ /\/slim\/request/) {

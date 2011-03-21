@@ -7,79 +7,12 @@ Ext.isIE7 = Ext.isIE7 || Ext.isIE8;
 var SqueezeJS = {
 	Strings : new Array(),
 	string : function(s){ return this.Strings[s]; },
-
+	
 	contributorRoles : new Array('artist', 'composer', 'conductor', 'band', 'albumartist', 'trackartist'),
 	coverFileSuffix : Ext.isIE && !Ext.isIE7 ? 'gif' : 'png',
 
 	Controller : null
 };
-
-// TODO MH: remove when updating ExtJS post 2.1 
-// patch against Ext.Slider v2.1 to fix handle position with minValue <> 0 (bug 8919)
-
-Ext.override(Ext.Slider, {
-	onClickChange : function(local){
-		if(local.top > this.clickRange[0] && local.top < this.clickRange[1]){
-			this.setValue(Math.round(this.reverseValue(local.left)), undefined, true);
-		}
-	},
-
-	getRatio : function(){
-		var w = this.innerEl.getWidth();
-		var v = this.maxValue - this.minValue;
-		return v == 0 ? w : (w/v);
-	},
-
-	setValue : function(v, animate, changeComplete){
-		v = this.normalizeValue(v);
-		if(v !== this.value && this.fireEvent('beforechange', this, v, this.value) !== false){
-			this.value = v;
-			this.moveThumb(this.translateValue(v), animate !== false);
-			this.fireEvent('change', this, v);
-			if(changeComplete){
-				this.fireEvent('changecomplete', this, v);
-			}
-		}
-	},
-
-	translateValue : function(v){
-		var ratio = this.getRatio();
-		return (v * ratio)-(this.minValue * ratio)-this.halfThumb;
-	},
-	
-	reverseValue : function(pos){
-		var ratio = this.getRatio();
-		return (pos+this.halfThumb+(this.minValue * ratio))/ratio;
-	},
-
-	onMouseDown : function(e){
-		if(this.disabled) {return;}
-		if(this.clickToChange && e.target != this.thumb.dom){
-			var local = this.innerEl.translatePoints(e.getXY());
-			local.left -= 5;
-			this.onClickChange(local);
-		}
-		this.focus();
-	},
-
-	onDrag: function(e){
-		var pos = this.innerEl.translatePoints(this.tracker.getXY());
-		this.setValue(Math.round(this.reverseValue(pos.left-5)), false);
-		this.fireEvent('drag', this, e);
-	},
-
-	onResize : function(w, h){
-		this.innerEl.setWidth(w - (this.el.getPadding('l') + this.endEl.getPadding('r')));
-		this.syncThumb();
-	},
-	
-	syncThumb : function(){
-		if(this.rendered){
-			this.moveThumb(this.translateValue(this.value));
-		}
-	}
-
-});
 
 _init();
 
@@ -244,9 +177,9 @@ function _init() {
 	
 					// only increment interim value if playing and not scanning (FWD/RWD)
 					if (this.playerStatus.mode == 'play' && this.playerStatus.rate == 1)
-						this.playerStatus.playtime += 0.5;
+						this.playerStatus.playtime++;
 	
-					self.timer.delay(500);
+					self.timer.delay(950);
 				}
 			});
 
@@ -288,7 +221,8 @@ function _init() {
 				timestamp: null,
 				dontUpdate: false,
 				player: null,
-				rescan: 0
+				rescan: 0,
+				canSeek: false
 			}
 		},
 
@@ -422,6 +356,7 @@ function _init() {
 				track:     response.playlist_tracks > 0 ? response.playlist_loop[0].url : '',
 				index:     response.playlist_cur_index,
 				duration:  parseInt(response.duration) || 0,
+				canSeek:   response.can_seek ? true : false,
 				playtime:  parseInt(response.time),
 				timestamp: response.playlist_timestamp
 			};
@@ -532,6 +467,37 @@ function _init() {
 
 SqueezeJS.getPlayer = SqueezeJS.Controller.getPlayer;
 
+Ext.apply(SqueezeJS, {
+	loadStrings : function(strings) {
+		var newStrings = '';
+		for (var x = 0; x < strings.length; x++) {
+			if (!this.Strings[strings[x].toLowerCase()] > '') {
+				newStrings += strings[x] + ',';
+			}
+		}
+		
+		if (newStrings > '') {
+			newStrings = newStrings.replace(/,$/, '');
+			this.Controller.request({
+				params: [ '', [ 'getstring', newStrings ] ],
+				scope: this,
+				
+				success: function(response) {
+					if (response && response.responseText) {
+						response = Ext.util.JSON.decode(response.responseText);
+						for (x in response.result) {
+							this.Strings[x.toLowerCase()] = response.result[x]; 
+						}
+					}
+				}
+			})
+		}
+	},
+
+	loadString : function(string) {
+		this.loadStrings([string]);
+	}
+});
 
 SqueezeJS.SonginfoParser = {
 	tpl : {
@@ -551,7 +517,7 @@ SqueezeJS.SonginfoParser = {
 		}
 	},
 
-	title : function(result, noLink, noRemoteTitle){
+	title : function(result, noLink, noRemoteTitle, noTrackNo){
 		var title;
 		var link;
 		var id;
@@ -563,6 +529,9 @@ SqueezeJS.SonginfoParser = {
 			else if (result.playlist_loop[0].remote_title && !noRemoteTitle)
 				title = result.playlist_loop[0].remote_title;
 	
+			else if (noTrackNo)
+				title = result.playlist_loop[0].title;
+
 			else
 				title = (result.playlist_loop[0].disc ? result.playlist_loop[0].disc + '-' : '')
 						+ (result.playlist_loop[0].tracknum ? result.playlist_loop[0].tracknum + ". " : '')

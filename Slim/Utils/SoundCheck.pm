@@ -1,6 +1,6 @@
 package Slim::Utils::SoundCheck;
 
-# $Id: SoundCheck.pm 20859 2008-06-17 18:44:24Z andy $
+# $Id: SoundCheck.pm 20863 2008-06-17 18:45:28Z andy $
 # 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

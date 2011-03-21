@@ -1,6 +1,6 @@
 package Slim::Web::Pages::Status;
 
-# $Id: Status.pm 18423 2008-04-05 12:25:27Z andy $
+# $Id: Status.pm 23724 2008-10-28 20:08:47Z awy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -101,16 +101,8 @@ sub status {
 		}
 
 		#
-		if (Slim::Player::Source::rate($client) > 1) {
-			$params->{'rate'} = 'ffwd';
-		} elsif (Slim::Player::Source::rate($client) < 0) {
-			$params->{'rate'} = 'rew';
-		} else {
-			$params->{'rate'} = 'norm';
-		}
 		
-		$params->{'rateval'} = Slim::Player::Source::rate($client);
-		$params->{'sync'}    = Slim::Player::Sync::syncwith($client);
+		$params->{'sync'}    = $client->syncedWithNames();
 		$params->{'mode'}    = $client->power() ? 'on' : 'off';
 
 		if ($client->isPlayer()) {
@@ -139,12 +131,18 @@ sub status {
 		
 		Slim::Web::Pages->addSongInfo($client, $params, 1);
 
-		# for current song, display the playback bitrate instead.
-		my $undermax = Slim::Player::TranscodingHelper::underMax($client,Slim::Player::Playlist::song($client));
-
-		if (defined $undermax && !$undermax) {
-			$params->{'bitrate'} = string('CONVERTED_TO')." ".Slim::Utils::Prefs::maxRate($client).string('KBPS').' ABR';
-	}
+		my ($song, $sourcebitrate, $streambitrate);
+		
+		if (($song = $client->playingSong())
+			&& ($sourcebitrate = $song->bitrate())
+			&& ($streambitrate = $song->streambitrate())
+			&& $sourcebitrate != $streambitrate)
+		{
+			$params->{'bitrate'} = sprintf( ' (%s %s%s ABR)', 
+				string('CONVERTED_TO'), 
+				$streambitrate / 1000,
+				string('KBPS')); 
+		}
 
 		if ($prefs->get('playlistdir')) {
 			$params->{'cansave'} = 1;

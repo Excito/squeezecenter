@@ -1,6 +1,6 @@
 package Slim::Schema::Progress;
 
-# $Id: Progress.pm 18077 2008-03-27 12:20:03Z andy $
+# $Id: Progress.pm 18079 2008-03-27 12:20:25Z andy $
 
 use strict;
 use base 'Slim::Schema::DBI';

@@ -1,6 +1,6 @@
 package Slim::Buttons::Synchronize;
 
-# $Id: Synchronize.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Synchronize.pm 23877 2008-11-10 11:26:58Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -33,8 +33,8 @@ sub loadList {
 	
 	@{$client->syncSelections} = Slim::Player::Sync::canSyncWith($client);
 	
-	# add ourselves (for unsyncing) if we're already part of a synced.
-	if (Slim::Player::Sync::isSynced($client)) { push @{$client->syncSelections}, $client };
+	# add ourselves (for unsyncing) if we're the master of a sync-group.
+	if (Slim::Player::Sync::isMaster($client)) { push @{$client->syncSelections}, $client };
 
 	if (!defined($client->syncSelection()) || $client->syncSelection >= @{$client->syncSelections}) {
 		$client->syncSelection(0);
@@ -57,7 +57,7 @@ sub lines {
 			# get the currently selected client
 			my $selectedClient = $client->syncSelections->[ $client->syncSelection ];
 			
-			if (Slim::Player::Sync::isSyncedWith($client, $selectedClient) || $selectedClient eq $client) {
+			if ($client->isSyncedWith($selectedClient)) {
 				$line1 = $client->string('UNSYNC_WITH');
 			} else {
 				$line1 = $client->string('SYNC_WITH');
@@ -74,27 +74,21 @@ sub buddies {
 	my @buddies = ();
 	my $list = '';
 	
-	foreach my $buddy (Slim::Player::Sync::syncedWith($selectedClient)) {
-		if ($buddy ne $client) {
-			push @buddies, $buddy;	
-		}
-	}
+	push @buddies, $selectedClient unless $selectedClient == $client;
 	
-	if ($selectedClient ne $client) {
-		push @buddies, $selectedClient;
-	}
+	push @buddies, $selectedClient->syncedWith($client);
 	
 	while (scalar(@buddies) > 2) {
-		my $buddy = pop @buddies;
+		my $buddy = shift @buddies;
 		$list .= $buddy->name() . ", ";
 	}
 	
 	if (scalar(@buddies) > 1) {
-		my $buddy = pop @buddies;
+		my $buddy = shift @buddies;
 		$list .= $buddy->name() . " " . $client->string('AND') . " ";		
 	}
 
-	my $buddy = pop @buddies;
+	my $buddy = shift @buddies;
 	$list .= $buddy->name();
 	
 	return $list;
@@ -132,7 +126,7 @@ sub setMode {
 		'headerArgs'     => 'C',
 		'listRef'        => \@{$client->syncSelections},
 		'externRef'      => sub {
-								return buddies($_[0], undef);
+								return buddies($_[0]);
 							},
 		'externRefArgs'  => 'CV',
 		'overlayRef'     => sub { return (undef, shift->symbols('rightarrow')) },
@@ -155,10 +149,31 @@ sub syncExitHandler {
 		my $selectedClient = $client->syncSelections->[ $client->syncSelection ];
 	
 		my @oldlines = $client->curLines();
-	
-		if (Slim::Player::Sync::isSyncedWith($client, $selectedClient) || ($client eq $selectedClient)) {
+		
+		if ($client->isSyncedWith($selectedClient)) {
 			$client->execute( [ 'sync', '-' ] );
 		} else {
+			
+			# bug 9722: Tell user if their sync operation has also resulted in an unsync
+			if ($client->isSynced) {
+				my $lines;
+				if ($client->linesPerScreen() == 1) {
+					$lines = [ $client->string( 'UNSYNCING_FROM', buddies($client, $client))
+								. ' ' . $client->string( 'AND' ) . ' '
+								. $client->string( 'SYNCING_WITH', buddies($client))];
+				} else {
+					$lines = [ $client->string( 'UNSYNCING_FROM', buddies($client, $client)),
+								$client->string( 'SYNCING_WITH', buddies($client))];
+				}
+				
+				# Do this on a timer so that the mode animation can complete first
+				Slim::Utils::Timers::setTimer($client, Time::HiRes::time() + .1,
+					sub {
+						$client->showBriefly( {'line' => $lines}, 
+							{'block' => 1, 'scroll' => 1, 'duration' => 2} );
+					});
+			}
+			
 			$selectedClient->execute( [ 'sync', $client->id ] );
 		}
 

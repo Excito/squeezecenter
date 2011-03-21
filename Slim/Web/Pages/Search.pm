@@ -1,6 +1,6 @@
 package Slim::Web::Pages::Search;
 
-# $Id: Search.pm 21515 2008-07-04 13:26:19Z andy $
+# $Id: Search.pm 21518 2008-07-04 13:29:10Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

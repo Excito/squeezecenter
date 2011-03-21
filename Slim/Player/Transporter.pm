@@ -54,6 +54,7 @@ our $defaultPrefs = {
 		BROWSE_MUSIC
 		RADIO
 		MUSIC_SERVICES
+		MUSIC_STORES
 		FAVORITES
 		PLUGIN_DIGITAL_INPUT
 		PLUGINS
@@ -61,20 +62,6 @@ our $defaultPrefs = {
 		SQUEEZENETWORK_CONNECT
 	)],
 };
-
-if ( main::SLIM_SERVICE ) {
-	$defaultPrefs->{menuItem} = [ qw(
-		NOW_PLAYING
-		MY_MUSIC
-		RADIO
-		MUSIC_SERVICES
-		FAVORITES
-		PLUGIN_DIGITAL_INPUT
-		PLUGINS
-		SETTINGS
-		SQUEEZECENTER_CONNECT
-	) ];
-}
 
 sub initPrefs {
 	my $client = shift;
@@ -110,6 +97,10 @@ sub reconnect {
 	# Update the knob in reconnect - as that's the last function that is
 	# called when a new or pre-existing client connects to the server.
 	$client->updateKnob(1);
+
+	if ( !Slim::Music::Info::isDigitalInput(Slim::Player::Playlist::url($client))) {
+		$client->setDigitalInput(0);
+	}
 }
 
 sub play {
@@ -120,7 +111,7 @@ sub play {
 	# value for those. If the user then goes and pressed play on a
 	# standard file:// or http:// URL, we need to set the value back to 0,
 	# IE: input from the network.
-	my $url = $params->{'url'};
+	my $url = $params->{'controller'}->streamUrl();
 
 	if ($url) {
 
@@ -387,6 +378,10 @@ sub hasCompression {
 
 sub voltage {
 	return Slim::Networking::Slimproto::voltage(@_);
+}
+
+sub maxSupportedSamplerate {
+	return 96000;
 }
 
 sub volumeString {

@@ -5,7 +5,7 @@ package Slim::Display::Graphics;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Graphics.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Graphics.pm 24522 2009-01-05 22:19:53Z adrian $
 
 =head1 NAME
 
@@ -42,6 +42,8 @@ our $defaultPrefs = {
 	'powerOffBrightness'   => 1,
 	'powerOnBrightness'    => 4,
 };
+
+$prefs->setValidate({ 'validator' => 'intlimit', 'low' => 1, 'high' => 20 }, qw(scrollPixels scrollPixelsDouble));
 
 sub initPrefs {
 	my $display = shift;
@@ -168,7 +170,7 @@ sub render {
 
 		if ($screen1 && !exists($parts->{screen1}) && 
 			(exists($parts->{line}) || exists($parts->{center}) || exists($parts->{overlay}) || 
-			 exists($parts->{ticker}) || exists($parts->{bits}))){ 
+			 exists($parts->{ticker}) || exists($parts->{bits}) || !scalar keys(%$parts))){ 
 			$screen = $parts;           # screen 1 components allowed at top level of display hash
 		} else {
 			$screen = $parts->{$s};     # other screens must be within {screenX} component of hash
@@ -572,15 +574,14 @@ sub maxTextSize {
 
 sub measureText {
 	my $display = shift;
-	my $text = shift;
+	my $text = shift || '';
 	my $line = shift;
-	my $overlay = shift;
+	my $spaces = shift; # number or additional inter-character spaces to add [overlay needs at least 1]
 	
 	my $fonts = $display->fonts();
 
-	# add the padding space to the string for the overlay so we include this in the length
-	if ($overlay) {
-		$text = "\x00" . $text;
+	if ($spaces) {
+		$text .= chr(0) x $spaces;
 	}
 
 	my $len = Slim::Display::Lib::Fonts::measureText($fonts->{"line"}[$line-1], $display->symbols($text));
@@ -607,7 +608,7 @@ sub sliderBar {
 	if ($value > 100) { $value = 100; }
 	if ($width == 0)  { return ""; }
 
-	my $spaces = int($width) - 4;
+	my $spaces = $midpoint ? $width - 2 : $width - 1; # allocate space for progressEnd and mid point
 	my $dots   = int($value/100 * $spaces);
 	my $divider= int($midpoint/100 * $spaces);
 	if (defined $cursor) {

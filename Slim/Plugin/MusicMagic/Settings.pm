@@ -18,6 +18,8 @@ my $log = Slim::Utils::Log->addLogCategory({
 	'defaultLevel' => 'ERROR',
 });
 
+my %filterHash = ();
+
 my $prefs = preferences('plugin.musicip');
 
 $prefs->migrate(1, sub {
@@ -33,7 +35,7 @@ $prefs->migrate(1, sub {
 	$prefs->set('mix_style',       Slim::Utils::Prefs::OldPrefs->get('MMMStyle') || 0                             );
 	$prefs->set('mix_type',        Slim::Utils::Prefs::OldPrefs->get('MMMMixType')                                );
 	$prefs->set('mix_size',        Slim::Utils::Prefs::OldPrefs->get('MMMSize') || 12                             );
-	$prefs->set('playlist_prefix', Slim::Utils::Prefs::OldPrefs->get('MusicMagicplaylistprefix') || 'MusicIP: '   );
+	$prefs->set('playlist_prefix', Slim::Utils::Prefs::OldPrefs->get('MusicMagicplaylistprefix') || ''   );
 	$prefs->set('playlist_suffix', Slim::Utils::Prefs::OldPrefs->get('MusicMagicplaylistsuffix') || ''            );
 
 	$prefs->set('musicmagic', 0) unless defined $prefs->get('musicmagic'); # default to on if not previously set
@@ -60,8 +62,14 @@ $prefs->migrate(2, sub {
 	$prefs->set('mix_style',       $oldPrefs->get('mix_style') || 0                 );
 	$prefs->set('mix_type',        $oldPrefs->get('mix_type')                       );
 	$prefs->set('mix_size',        $oldPrefs->get('mix_size') || 12                 );
-	$prefs->set('playlist_prefix', $oldPrefs->get('playlist_prefix') || 'MusicIP: ' );
+	$prefs->set('playlist_prefix', $oldPrefs->get('playlist_prefix') || '' );
 	$prefs->set('playlist_suffix', $oldPrefs->get('playlist_suffix') || ''          );
+
+	my $prefix = $prefs->get('playlist_prefix');
+	if ($prefix =~ /MusicMagic/) {
+		$prefix =~ s/MusicMagic/MusicIP/g;
+		$prefs->set('playlist_prefix', $prefix);
+	}
 
 	$prefs->remove('musicmagic');
 	1;
@@ -98,6 +106,7 @@ $prefs->setChange(
 	},
 'scan_interval');
 
+
 sub name {
 	return Slim::Web::HTTP::protectName('MUSICMAGIC');
 }
@@ -112,34 +121,58 @@ sub prefs {
 }
 
 sub handler {
-	my ($class, $client, $params) = @_;
+	my ($class, $client, $params, $callback, @args) = @_;
 
-	# Cleanup the checkbox
-	$params->{'pref_musicip'} = defined $params->{'pref_musicip'} ? 1 : 0;
+	if ( !$params->{'saveSettings'} ) {
 
-	$params->{'filters'}  = grabFilters();
+		$class->grabFilters($client, $params, $callback, @args);
+		
+		return undef;
+	}
+	
+	$params->{'filters'} = getFilterList();
 
 	return $class->SUPER::handler($client, $params);
 }
 
 sub grabFilters {
-	my @filters    = ();
-	my %filterHash = ();
+	my ($class, $client, $params, $callback, @args) = @_;
 	
 	my $MMSport = $prefs->get('port');
 	my $MMSHost = $prefs->get('host');
 
-	$log->debug("Get filters list");
+	my $http = Slim::Networking::SimpleAsyncHTTP->new(
+		\&_gotFilters,
+		sub {
+			$log->error('Failed fetching filters from MusicIP');
+			_fetchingFiltersDone(shift);
+		},
+		{
+			client   => $client,
+			params   => $params,
+			callback => $callback,
+			class    => $class,
+			args     => \@args,
+			timeout  => 5,
+#			cacheTime => 0
+		}
+	);
 
-	my $http = Slim::Player::Protocols::HTTP->new({
-		'url'    => "http://$MMSHost:$MMSport/api/filters",
-		'create' => 0,
-	});
+	$http->get( "http://$MMSHost:$MMSport/api/filters" );
+}
+
+sub getFilterList {
+	return \%filterHash;
+}
+
+sub _gotFilters {
+	my $http = shift;
+
+	my @filters = ();
 
 	if ($http) {
 
-		@filters = split(/\n/, $http->content);
-		$http->close;
+		@filters = split(/\n/, Slim::Plugin::MusicMagic::Common::decode($http->content));
 
 		if ($log->is_debug && scalar @filters) {
 
@@ -155,6 +188,7 @@ sub grabFilters {
 	my $none = sprintf('(%s)', Slim::Utils::Strings::string('NONE'));
 
 	push @filters, $none;
+	%filterHash = ();
 
 	foreach my $filter ( @filters ) {
 
@@ -167,7 +201,43 @@ sub grabFilters {
 		$filterHash{$filter} = $filter;
 	}
 
-	return \%filterHash;
+	# remove filter from client settings if it doesn't exist any more
+	foreach my $client (Slim::Player::Client::clients()) {
+
+		unless ( $filterHash{ $prefs->client($client)->get('mix_filter') } ) {
+
+			$log->warn('Filter "' . $prefs->client($client)->get('mix_filter') . '" does no longer exist - resetting');
+			$prefs->client($client)->set('mix_filter', 0);
+
+		}
+
+	}
+
+	unless ( $filterHash{ $prefs->get('mix_filter') } ) {
+
+		$log->warn('Filter "' . $prefs->get('mix_filter') . '" does no longer exist - resetting');
+		$prefs->set('mix_filter', 0);
+
+	}
+	
+	_fetchingFiltersDone($http);
+}
+
+sub _fetchingFiltersDone {
+	my $http = shift;
+
+	my $client   = $http->params('client');
+	my $params   = $http->params('params');
+	my $callback = $http->params('callback');
+	my $class    = $http->params('class');
+	my @args     = @{$http->params('args')};
+
+	$params->{'filters'} = \%filterHash;
+
+	if ($callback && $class) {		
+		my $body = $class->SUPER::handler($client, $params);
+		$callback->( $client, $params, $body, @args );	
+	}
 }
 
 1;

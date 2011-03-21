@@ -1,6 +1,6 @@
 package Slim::Formats::XML;
 
-# $Id: XML.pm 23265 2008-09-23 21:41:00Z andy $
+# $Id: XML.pm 24083 2008-11-25 17:56:36Z andy $
 
 # Copyright 2006-2007 Logitech
 
@@ -13,6 +13,7 @@ package Slim::Formats::XML;
 use strict;
 use File::Slurp;
 use HTML::Entities;
+use JSON::XS qw(from_json);
 use Scalar::Util qw(weaken);
 use URI::Escape qw(uri_escape);
 use XML::Simple;
@@ -108,51 +109,54 @@ sub getFeedAsync {
 	
 	# If the URL is on SqueezeNetwork, add session headers or login first
 	if ( Slim::Networking::SqueezeNetwork->isSNURL($url) && !$params->{no_sn} ) {
+		
+		# Don't require SN session for public URLs
+		if ( $url !~ /public/ ) {
+			$log->info("URL requires SqueezeNetwork session");
+		
+			# Sometimes from the web we won't have a client, so pick a random one
+			# (Never use random client on SN)
+			if ( !main::SLIM_SERVICE ) {
+				$params->{client} ||= Slim::Player::Client::clientRandom();
+			}
 
-		$log->info("URL requires SqueezeNetwork session");
+			if ( !$params->{client} ) {
+				# No player connected, cannot continue
+				$ecb->( string('SQUEEZENETWORK_NO_PLAYER_CONNECTED'), $params );
+				return;
+			}
 		
-		# Sometimes from the web we won't have a client, so pick a random one
-		# (Never use random client on SN)
-		if ( !main::SLIM_SERVICE ) {
-			$params->{client} ||= Slim::Player::Client::clientRandom();
-		}
+			my %snHeaders = Slim::Networking::SqueezeNetwork->getHeaders( $params->{client} );
+			while ( my ($k, $v) = each %snHeaders ) {
+				$headers{$k} = $v;
+			}
+		
+			if ( my $snCookie = Slim::Networking::SqueezeNetwork->getCookie( $params->{client} ) ) {
+				$headers{Cookie} = $snCookie;
+			}
+			else {
+				$log->info("Logging in to SqueezeNetwork to obtain session ID");
+		
+				# Login and get a session ID
+				Slim::Networking::SqueezeNetwork->login(
+					client => $params->{client},
+					cb     => sub {
+						if ( my $snCookie = Slim::Networking::SqueezeNetwork->getCookie( $params->{client} ) ) {
+							$headers{Cookie} = $snCookie;
 
-		if ( !$params->{client} ) {
-			# No player connected, cannot continue
-			$ecb->( string('SQUEEZENETWORK_NO_PLAYER_CONNECTED'), $params );
-			return;
-		}
-		
-		my %snHeaders = Slim::Networking::SqueezeNetwork->getHeaders( $params->{client} );
-		while ( my ($k, $v) = each %snHeaders ) {
-			$headers{$k} = $v;
-		}
-		
-		if ( my $snCookie = Slim::Networking::SqueezeNetwork->getCookie( $params->{client} ) ) {
-			$headers{Cookie} = $snCookie;
-		}
-		else {
-			$log->info("Logging in to SqueezeNetwork to obtain session ID");
-		
-			# Login and get a session ID
-			Slim::Networking::SqueezeNetwork->login(
-				client => $params->{client},
-				cb     => sub {
-					if ( my $snCookie = Slim::Networking::SqueezeNetwork->getCookie( $params->{client} ) ) {
-						$headers{Cookie} = $snCookie;
-
-						$log->info('Got SqueezeNetwork session ID');
-					}
+							$log->info('Got SqueezeNetwork session ID');
+						}
 				
-					$http->get( $url, %headers );
-				},
-				ecb   => sub {
-					my ( $http, $error ) = @_;
-					$ecb->( $error, $params );
-				},
-			);
+						$http->get( $url, %headers );
+					},
+					ecb   => sub {
+						my ( $http, $error ) = @_;
+						$ecb->( $error, $params );
+					},
+				);
 		
-			return;
+				return;
+			}
 		}
 	}
 
@@ -163,10 +167,12 @@ sub gotViaHTTP {
 	my $http = shift;
 	my $params = $http->params();
 	my $feed;
+	
+	my $ct = $http->headers()->content_type;
 
 	if ( $log->is_debug ) {
 		$log->debug("Got ", $http->url);
-		$log->debug("Content type is ", $http->headers()->content_type);
+		$log->debug("Content type is $ct");
 	}
 
 	# Try and turn the content we fetched into a parsed data structure.
@@ -201,7 +207,7 @@ sub gotViaHTTP {
 
 	} else {
 
-		$feed = eval { parseXMLIntoFeed($http->contentRef) };
+		$feed = eval { parseXMLIntoFeed( $http->contentRef, $ct ) };
 	}
 
 	if ($@) {
@@ -277,9 +283,17 @@ sub gotErrorViaHTTP {
 
 sub parseXMLIntoFeed {
 	my $content = shift || return undef;
+	my $type    = shift || 'text/xml';
 
-	my $xml = xmlToHash($content);
-
+	my $xml;
+	
+	if ( $type =~ /json/ ) {
+		$xml = from_json($$content);
+	}
+	else {
+		$xml = xmlToHash($content);
+	}
+	
 	# convert XML into data structure
 	if ($xml && $xml->{'body'}) {
 
@@ -528,108 +542,9 @@ sub _parseOPMLOutline {
 			'items' => _parseOPMLOutline($itemXML->{'outline'}),
 			%attrs,
 		};
-		
-		# Cache images for remote URLs to support RadioTime logos
-		if ( $attrs{image} ) {
-			my $cache = Slim::Utils::Cache->new( 'Artwork', 1, 1 );
-			$cache->set( "remote_image_$url", $attrs{image}, 86400 * 7 );
-		}
 	}
 
 	return \@items;
-}
-
-sub openSearch {
-	my $class = shift;
-	my ( $cb, $ecb, $params ) = @_;
-
-	# Fetch the OpenSearch description file
-	my $url = $params->{'search'};
-
-	my $http = Slim::Networking::SimpleAsyncHTTP->new(
-		\&openSearchDescription,
-		\&gotErrorViaHTTP,
-		{
-			'params' => $params,
-			'cb'     => $cb,
-			'ecb'    => $ecb,
-			'cache'  => 1,
-		},
-	);
-
-	$log->info("Async opensearch description request: $url");
-
-	$http->get($url);
-}
-
-sub openSearchDescription {
-	my $http = shift;
-	my $params = $http->params;
-
-	my $desc = eval { xmlToHash( $http->contentRef ) };
-
-	if ($@) {
-		# call ecb
-		my $ecb = $params->{'ecb'};
-		$ecb->( $@, $params->{'params'} );
-		return;
-	}
-
-	if (!$desc) {
-		# call ecb
-		my $ecb = $params->{'ecb'};
-		$ecb->( '{PARSE_ERROR}', $params->{'params'} );
-		return;
-	}
-	
-	# run the search query
-	my $url = $desc->{'Url'}->{'template'};
-	my $query = $params->{'params'}->{'query'};
-	$url =~ s/{searchTerms}/$query/;
-	
-	my $asyncHTTP = Slim::Networking::SimpleAsyncHTTP->new(
-		\&openSearchResult,
-		\&gotErrorViaHTTP,
-		$params,
-	);
-
-	$log->info("Async opensearch query: $url");
-
-	$asyncHTTP->get($url);
-}
-
-sub openSearchResult {
-	my $http = shift;
-	my $params = $http->params;
-	
-	my $feed = eval { parseXMLIntoFeed($http->contentRef) };
-	
-	if ($@) {
-		# call ecb
-		my $ecb = $params->{'ecb'};
-		$ecb->( $@, $params->{'params'} );
-		return;
-	}
-
-	if (!$feed) {
-		# call ecb
-		my $ecb = $params->{'ecb'};
-		$ecb->( '{PARSE_ERROR}', $params->{'params'} );
-		return;
-	}
-	
-	# check for error reported in RSS
-	if ( $feed->{'items'}->[0]->{'title'} eq 'Error' ) {
-		my $ecb = $params->{'ecb'};
-		return $ecb->( $feed->{'items'}->[0]->{'description'}, $params->{'params'} );
-	}
-	
-	if ( $log->is_info ) {
-		$log->info(sprintf("Got opensearch results [%s]", scalar @{ $feed->{'items'} }));
-	}
-	
-	my $cb = $params->{'cb'};
-	$cb->( $feed, $params->{'params'} );
 }
 
 sub xmlToHash {
@@ -680,7 +595,7 @@ sub xmlToHash {
 			};
 			
 			if ($@) {
-				logError("Pass $pass failed to parse: $@");
+				$log->warn("Pass $pass failed to parse: $@");
 			}
 			else {
 				last;
@@ -693,12 +608,12 @@ sub xmlToHash {
 
 	if ($@) {
 
-		logError("Failed to parse feed because: [$@]");
+		$log->warn("Failed to parse feed because: [$@]");
 
 		if (defined $content && ref($content) eq 'SCALAR') {
 
-			if (length $$content < 50000) {
-				logError("Here's the bad feed:\n[$$content]\n");
+			if ($log->is_debug && length $$content < 50000) {
+				$log->debug("Here's the bad feed:\n[$$content]\n");
 			}
 
 			undef $content;

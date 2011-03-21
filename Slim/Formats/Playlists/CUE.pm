@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists::CUE;
 
-# $Id: CUE.pm 22368 2008-08-05 02:01:31Z andy $
+# $Id: CUE.pm 22372 2008-08-05 04:08:57Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 #

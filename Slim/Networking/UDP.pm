@@ -1,6 +1,6 @@
 package Slim::Networking::UDP;
 
-# $Id: UDP.pm 19546 2008-05-07 21:35:54Z andy $
+# $Id: UDP.pm 23948 2008-11-17 18:32:32Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -49,7 +49,7 @@ sub init {
 
 	Slim::Networking::Select::addRead($udpsock, \&readUDP);
 
-	Slim::Networking::Discovery::Server::init();
+	Slim::Networking::Discovery::Server::init() if Slim::Utils::OSDetect::details->{osName} !~ /Windows 2000/i;
 	Slim::Networking::Discovery::Players::init();
 
 	# say hello to the old slimp3 clients that we might remember...

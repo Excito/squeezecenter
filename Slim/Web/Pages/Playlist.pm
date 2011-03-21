@@ -1,6 +1,6 @@
 package Slim::Web::Pages::Playlist;
 
-# $Id: Playlist.pm 21292 2008-06-28 22:59:42Z andy $
+# $Id: Playlist.pm 22943 2008-08-28 17:56:34Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -46,7 +46,7 @@ sub playlist {
 	}
 	
 	# If synced, use the master's playlist
-	$client = Slim::Player::Sync::masterOrSelf($client);
+	$client = $client->master();
 
 	$params->{'playercount'} = Slim::Player::Client::clientCount();
 	

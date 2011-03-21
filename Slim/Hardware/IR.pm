@@ -1,6 +1,6 @@
 package Slim::Hardware::IR;
 
-# $Id: IR.pm 23411 2008-10-03 17:02:16Z andy $
+# $Id: IR.pm 24535 2009-01-06 22:42:18Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -1085,7 +1085,7 @@ sub executeButton {
 
 		if (!defined $subref || ref($subref) ne 'CODE') {
 
-			$log->error("Error: Subroutine for irCode: [$irCode] mode: [$mode] does not exist!");
+			$log->is_warn && $log->warn("Warning: Subroutine for irCode: [$irCode] mode: [$mode] does not exist!");
 
 			return;
 		}

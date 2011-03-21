@@ -6,20 +6,27 @@
 		<ul>
 		[% IF menulist %]
 		    [% FOREACH item = orderlist %]
-	    		<li><a href="[% menulist.$item %]player=[% playerURI %]">[% item | string %]</a></li>
+	    		<li><a href="[% menulist.$item %]player=[% playerURI %]">[% item | getstring %]</a></li>
 	    	[% END %]
 		    [% FOREACH link = menulist; IF !orderlist.grep(link.key).size %]
-	    		<li><a href="[% link.value %]player=[% playerURI %]">[% link.key | string %]</a></li>
+	    		<li><a href="[% link.value %]player=[% playerURI %]">[% link.key | getstring %]</a></li>
 	    	[% END;END %]
 		[% END %]
 		[% FOREACH link = additionalmenu %]
-	   		<li><a href="[% link.value | html %]?[% IF NOT link.value.match('^http') %]player=[% playerURI %][% END %]">[% link.key | string %]</a></li>
+	   		<li><a href="[% link.value | html %]?[% IF NOT link.value.match('^http') %]player=[% playerURI %][% END %]">[% link.key | getstring %]</a></li>
 		[% END %]
 		</ul>
 	[% END %]
 
 	[% pagetitle = "HOME" | string %]
 [% END -%]
+
+	[%
+		IF warn && !refresh;
+			refresh = 30;
+			refreshurl = webroot _ '?';
+		END;
+	%]
 
 	[%- PROCESS pageheader.html %]
 

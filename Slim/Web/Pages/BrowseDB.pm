@@ -1,6 +1,6 @@
 package Slim::Web::Pages::BrowseDB;
 
-# $Id: BrowseDB.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: BrowseDB.pm 23663 2008-10-23 11:47:52Z mherger $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -207,7 +207,7 @@ sub browsedb {
 		}
 	}
 
-	# Bug 3311, disable editing for iTunes and MusicMagic playlists
+	# Bug 3311, disable editing for iTunes and MusicIP playlists
 	if (ref $params->{'playlist'}) {
 
 		if ($params->{'playlist'}->content_type =~ /(?:itu|mmp)/) {

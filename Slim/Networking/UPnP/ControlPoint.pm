@@ -7,7 +7,7 @@ package Slim::Networking::UPnP::ControlPoint;
 
 # An asynchronous UPnP Control Point 
 
-# $Id: ControlPoint.pm 21788 2008-07-15 20:01:58Z andy $
+# $Id: ControlPoint.pm 21790 2008-07-15 20:18:07Z andy $
 
 use strict;
 use warnings;

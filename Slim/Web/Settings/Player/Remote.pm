@@ -32,7 +32,7 @@ sub validFor {
 	my $class = shift;
 	my $client = shift;
 	
-	return $client->isPlayer && !$client->isa('Slim::Player::Receiver');
+	return $client->hasIR;
 }
 
 sub prefs {

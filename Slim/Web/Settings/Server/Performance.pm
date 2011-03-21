@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Performance;
 
-# $Id: Performance.pm 20695 2008-06-12 19:40:52Z andy $
+# $Id: Performance.pm 20698 2008-06-12 19:42:41Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

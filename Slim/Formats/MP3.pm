@@ -1,6 +1,6 @@
 package Slim::Formats::MP3;
 
-# $Id: MP3.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: MP3.pm 24401 2008-12-23 02:38:03Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -562,30 +562,24 @@ sub scanBitrate {
 	# This will allow full files streamed from places like LMA or UPnP servers
 	# to have accurate bitrate/length information
 	my $frame = MPEG::Audio::Frame->read( $fh );
-	if ( $frame && $frame->content =~ /(Xing.*)/ ) {
-		my $xing = IO::String->new( $1 );
+	if ( $frame && $frame->content =~ /Xing(.{12})/s ) {
+		my $header = $1;		
+		my $xing = IO::String->new( $header );
 		my $vbr  = {};
-		my $off  = 4;
 		
 		# Xing parsing code from MP3::Info
 		my $unpack_head = sub { unpack('l', pack('L', unpack('N', $_[0]))) };
 
-		seek $xing, $off, 0;
 		read $xing, my $flags, 4;
-		$off += 4;
 		$vbr->{flags} = $unpack_head->($flags);
 		
 		if ( $vbr->{flags} & 1 ) {
-			seek $xing, $off, 0;
 			read $xing, my $bytes, 4;
-			$off += 4;
 			$vbr->{frames} = $unpack_head->($bytes);
 		}
 
 		if ( $vbr->{flags} & 2 ) {
-			seek $xing, $off, 0;
 			read $xing, my $bytes, 4;
-			$off += 4;
 			$vbr->{bytes} = $unpack_head->($bytes);
 		}
 		
@@ -630,19 +624,29 @@ sub scanBitrate {
 	$scannerlog->warn("Unable to find any MP3 frames in stream!");
 
 	return (-1, undef);
-}	
+}
+
+sub canSeek {1}	
 
 # Read the initial audio frame, this supports seeking while preserving
 # the Xing header needed for gapless playback
 sub getInitialAudioBlock {
-	my ( $class, $fh ) = @_;
+	my ( $class, $fh, $track, $timeOffset ) = @_;
+	
+	# Only bother if not playing from the start
+	unless ($timeOffset) {return undef;}
 	
 	open my $localFh, '<&=', $fh;
-	seek $localFh, 0, 0;
+	seek $localFh, ($track->audio_offset() || 0), 0;
 	
 	my $frame = MPEG::Audio::Frame->read( $localFh );
-	
+	seek($localFh, 0, 0);
 	close $localFh;
+	
+	# check that we have an Xing frame
+	if ($frame->content !~ /Xing|Info/) {
+		return ''; # The empty string will be cached
+	}
 	
 	return $frame->asbin;
 }

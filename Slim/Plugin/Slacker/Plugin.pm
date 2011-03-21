@@ -100,7 +100,7 @@ sub rateTrack {
 	my ($stationId) = $url =~ m{^slacker://([^.]+)\.mp3};
 	
 	# Get the current track
-	my $currentTrack = $client->pluginData('prevTrack') || $client->pluginData('currentTrack');
+	my $currentTrack = $client->master->pluginData('prevTrack') || $client->master->pluginData('currentTrack');
 	return unless $currentTrack;
 	
 	my $trackId = $currentTrack->{tid};
@@ -150,18 +150,18 @@ sub _rateTrackOK {
 	
 	# For a change in rating, adjust our cached track data
 	if ( $rating =~ /[FU]/ ) {
-		$currentTrack = $client->pluginData('prevTrack') || $client->pluginData('currentTrack');
+		$currentTrack = $client->master->pluginData('prevTrack') || $client->master->pluginData('currentTrack');
 		$currentTrack->{trate} = ( $rating eq 'F' ) ? 100 : 0;
 		
 		# Use prevTrack so we don't clobber any current track data
-		$client->pluginData( prevTrack => $currentTrack );
+		$client->master->pluginData( prevTrack => $currentTrack );
 		
 		# Web UI should auto-refresh the metadata after this,
 		# so it will get the new icon
 	}
 	
-	# Parse the text out of the OPML
-	my ($text) = $http->content =~ m/text="([^"]+)/;	
+	# Parse the text out of the JSON
+	my ($text) = $http->content =~ m/"text":"([^"]+)/;	
 	$request->addResult( text => Slim::Utils::Unicode::utf8on($text) );
 	
 	$request->setStatusDone();
@@ -188,10 +188,6 @@ sub skipTrack {
 	# ignore if user is not using Slacker
 	my $url = Slim::Player::Playlist::url($client) || return;
 	return unless $url =~ /^slacker/;
-	
-	# Tell onJump not to display buffering info, so we don't
-	# mess up the showBriefly message
-	$client->pluginData( banMode => 1 );
 	
 	$client->execute( [ 'playlist', 'jump', '+1' ] );
 }
@@ -234,9 +230,9 @@ sub trackInfoMenu {
 
 	return unless $client;
 	
-	if ( !Slim::Networking::SqueezeNetwork->hasAccount( $client, 'slacker' ) ) {
-		return;
-	}
+	return unless Slim::Networking::SqueezeNetwork->isServiceEnabled( $client, 'Slacker' );
+	
+	return unless Slim::Networking::SqueezeNetwork->hasAccount( $client, 'slacker' );
 	
 	my $artist = $track->remote ? $remoteMeta->{artist} : ( $track->artist ? $track->artist->name : undef );
 	

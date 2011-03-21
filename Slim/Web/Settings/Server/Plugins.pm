@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Plugins;
 
-# $Id: Plugins.pm 19485 2008-05-06 17:30:41Z andy $
+# $Id: Plugins.pm 19487 2008-05-06 17:31:12Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

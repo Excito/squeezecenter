@@ -5,7 +5,7 @@ package Slim::Utils::Firmware;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Firmware.pm 23365 2008-10-01 13:39:33Z mherger $
+# $Id: Firmware.pm 23794 2008-11-03 14:27:03Z andy $
 
 =head1 NAME
 
@@ -44,11 +44,14 @@ use Slim::Utils::OSDetect;
 use Slim::Utils::Prefs;
 use Slim::Utils::Timers;
 
+use constant INITIAL_RETRY_TIME => 600;
+use constant MAX_RETRY_TIME     => 86400;
+
 # Models to download firmware for
 my @models = qw( squeezebox squeezebox2 transporter boom receiver );
 
 # Firmware location
-my $dir = Slim::Utils::OSDetect::dirsFor('Firmware');
+my $dir      = Slim::Utils::OSDetect::dirsFor('Firmware');
 
 # Download location
 sub BASE {
@@ -58,7 +61,7 @@ sub BASE {
 }
 
 # Check interval when firmware can't be downloaded
-my $CHECK_TIME = 600;
+my $CHECK_TIME = INITIAL_RETRY_TIME;
 
 # Current Jive firmware file and version/revision
 my $JIVE_FW;
@@ -83,6 +86,8 @@ sub init {
 	# Special handling is needed for Jive firmware
 	init_jive();
 	
+	my $cachedir = $prefs->get('cachedir');
+	
 	for my $model ( @models ) {
 
 		# read each model's version file
@@ -101,18 +106,19 @@ sub init {
 			
 			if ( $version ) {
 
-				my $file = "${model}_${version}.bin";
-				my $path = catdir( $dir, $file );
+				my $file  = "${model}_${version}.bin";
+				my $path  = catdir( $dir, $file );
+				my $path2 = catdir( $cachedir, $file );
 
-				if ($files->{$path}) {
+				if ($files->{$path} || $files->{$path2}) {
 					next;
 				}
-				
-				if ( !-r $path ) {
+
+				if ( !-r $path && !-r $path2 ) {
 
 					$log->info("Need to download $file\n");
 
-					$files->{$path} = 1;
+					$files->{$path2} = 1;
 				}
 			}
 		}
@@ -136,7 +142,7 @@ sub init {
 	}
 	
 	if ( !$ok ) {
-		logError("Some firmware failed to download, will try again in 10 minutes.  Please check your Internet connection.");
+		logError("Some firmware failed to download, will try again in " . int( $CHECK_TIME / 60 ) . " minutes.  Please check your Internet connection.");
 	}
 }
 
@@ -153,8 +159,6 @@ and custom.jive.bin in the cachedir.  If these exist then these are used in pref
 
 sub init_jive {
 
-	my $url = BASE() . '/' . $::VERSION . '/jive.version';
-		
 	my $version_file   = catdir( $prefs->get('cachedir'), 'jive.version' );
 
 	my $custom_version = catdir( $prefs->get('cachedir'), 'custom.jive.version' );
@@ -260,6 +264,34 @@ sub init_jive_done {
 	$JIVE_VER = $ver;
 	$JIVE_REV = $rev;
 	$JIVE_FW  = $jive_file;
+}
+
+=head2 init_jive_error()
+
+Called if Jive firmware download failed.  Checks if another firmware exists in cache.
+
+=cut
+
+sub init_jive_error {	
+	# Check if we have a usable Jive firmware
+	my $version_file = catdir( $prefs->get('cachedir'), 'jive.version' );
+	
+	if ( -e $version_file ) {
+		my $version = read_file($version_file);
+
+		my ($ver, $rev) = $version =~ m/^([^ ]+)\sr(\d+)/;
+
+		my $jive_file = catdir( $prefs->get('cachedir'), "jive_${ver}_r${rev}.bin" );
+
+		if ( -e $jive_file ) {
+			$log->info("Jive firmware download had an error, using existing firmware: $jive_file");
+			$JIVE_VER = $ver;
+			$JIVE_REV = $rev;
+			$JIVE_FW  = $jive_file;
+		}
+	}
+	
+	# Note: Server will keep trying to download a new one
 }
 
 =head2 jive_url()
@@ -425,6 +457,8 @@ sub downloadAsyncDone {
 	my $pt   = $http->params('pt');
 	my $url  = $http->url;
 	
+	$CHECK_TIME = INITIAL_RETRY_TIME;
+	
 	# make sure we got the file
 	if ( !-e "$file.tmp" ) {
 		return downloadAsyncError( $http, 'File was not saved properly' );
@@ -495,14 +529,27 @@ sub downloadAsyncError {
 	my $file = $http->params('file');
 	
 	# Clean up
-	unlink "$file.tmp" if -e "$file.tmp";
+	unlink "$file.tmp" if -e "$file.tmp"; 
 	
-	logWarning(sprintf("Firmware: Failed to download %s (%s), will try again in 10 minutes.",
+	logWarning(sprintf("Firmware: Failed to download %s (%s), will try again in %d minutes.",
 		$http->url,
 		$error,
+		int( $CHECK_TIME / 60 ),
 	));
 	
-	Slim::Utils::Timers::setTimer( $file, time() + $CHECK_TIME + int(rand(60)), \&downloadAsync );
+	Slim::Utils::Timers::setTimer( $file, time() + $CHECK_TIME, \&downloadAsync );
+	
+	# Increase retry time in case of multiple failures, but don't exceed MAX_RETRY_TIME
+	$CHECK_TIME *= 2;
+	if ( $CHECK_TIME > MAX_RETRY_TIME ) {
+		$CHECK_TIME = MAX_RETRY_TIME;
+	}
+	
+	# Bug 9230, if we failed to download a Jive firmware but have a valid one in Cache already,
+	# we should still offer it for download
+	if ( $file =~ /jive/ ) {
+		init_jive_error();
+	}
 }
 
 =head2 fatal($msg)

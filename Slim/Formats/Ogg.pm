@@ -1,6 +1,6 @@
 package Slim::Formats::Ogg;
 
-# $Id: Ogg.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: Ogg.pm 22943 2008-08-28 17:56:34Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -433,5 +433,7 @@ sub _isOggPageHeader {
 	
 	return 1;
 }
+
+sub canSeek {1}
 
 1;

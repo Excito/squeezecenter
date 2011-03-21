@@ -1,6 +1,6 @@
 package Slim::Schema::Playlist;
 
-# $Id: Playlist.pm 21850 2008-07-17 22:04:19Z andy $
+# $Id: Playlist.pm 21857 2008-07-18 03:17:05Z andy $
 
 use strict;
 use base 'Slim::Schema::Track';

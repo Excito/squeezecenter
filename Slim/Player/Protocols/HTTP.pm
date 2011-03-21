@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::HTTP;
 
-# $Id: HTTP.pm 23188 2008-09-15 17:48:53Z andy $
+# $Id: HTTP.pm 24274 2008-12-11 03:43:56Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -14,6 +14,7 @@ use File::Spec::Functions qw(:ALL);
 use IO::String;
 use Scalar::Util qw(blessed);
 
+use Slim::Formats::RemoteMetadata;
 use Slim::Music::Info;
 use Slim::Player::TranscodingHelper;
 use Slim::Utils::Errno;
@@ -33,17 +34,20 @@ sub new {
 	my $class = shift;
 	my $args  = shift;
 
-	if (!$args->{'url'}) {
+	if (!$args->{'song'}) {
 
-		logWarning("No url passed!");
-		return undef;
+		logWarning("No song passed!");
+		
+		# XXX: MusicIP abuses this as a non-async HTTP client, can't return undef
+		# return undef;
 	}
 
 	my $self = $class->open($args);
 
 	if (defined($self)) {
-		${*$self}{'url'}     = $args->{'url'};
+		${*$self}{'song'}    = $args->{'song'};
 		${*$self}{'client'}  = $args->{'client'};
+		${*$self}{'url'}     = $args->{'url'};
 	}
 
 	return $self;
@@ -110,7 +114,7 @@ sub readMetaData {
 
 		$log->info("Metadata: $metadata");
 
-		${*$self}{'title'} = parseMetadata($client, $self->url, $metadata);
+		${*$self}{'title'} = __PACKAGE__->parseMetadata($client, $self->url, $metadata);
 
 		# new song, so reset counters
 		$client->songBytes(0);
@@ -125,13 +129,26 @@ sub getFormatForURL {
 }
 
 sub parseMetadata {
-	my $client   = shift;
-	my $url      = shift;
-	my $metadata = shift;
+	my ( $class, $client, $url, $metadata ) = @_;
 
 	$url = Slim::Player::Playlist::url(
 		$client, Slim::Player::Source::streamingSongIndex($client)
 	);
+	
+	# See if there is a parser for this stream
+	my $parser = Slim::Formats::RemoteMetadata->getParserFor( $url );
+	if ( $parser ) {
+		if ( $log->is_debug ) {
+			$log->debug( 'Trying metadata parser ' . Slim::Utils::PerlRunTime::realNameForCodeRef($parser) );
+		}
+		
+		my $handled = eval { $parser->( $client, $url, $metadata ) };
+		if ( $@ ) {
+			my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($parser);
+			logger('formats.metadata')->error( "Metadata parser $name failed: $@" );
+		}
+		return if $handled;
+	}
 
 	if ($metadata =~ (/StreamTitle=\'(.*?)\'(;|$)/)) {
 
@@ -151,19 +168,39 @@ sub parseMetadata {
 		}
 		
 		# Delay the title set
-		return Slim::Music::Info::setDelayedTitle( $client, $url, $newTitle );
+		Slim::Music::Info::setDelayedTitle( $client, $url, $newTitle );
+	}
+	
+	# Check for an image URL in the metadata.  Currently, only Radio Paradise supports this
+	if ( $metadata =~ /StreamUrl=\'([^']+)\'/ ) {
+		my $metaUrl = $1;
+		if ( $metaUrl =~ /\.(?:jpe?g|gif|png)$/i ) {
+			# Set this in the artwork cache after a delay
+			my $delay = Slim::Music::Info::getStreamDelay($client);
+			
+			Slim::Utils::Timers::setTimer(
+				$client,
+				Time::HiRes::time() + $delay,
+				sub {
+					my $cache = Slim::Utils::Cache->new( 'Artwork', 1, 1 );
+					$cache->set( "remote_image_$url", $metaUrl, 3600 );
+					
+					$directlog->debug("Updating stream artwork to $metaUrl");
+				},
+			);
+		}
 	}
 
 	return undef;
 }
 
 sub canDirectStream {
-	my ($classOrSelf, $client, $url) = @_;
+	my ($classOrSelf, $client, $url, $inType) = @_;
 	
 	if ( !main::SLIM_SERVICE ) {
 		# When synced, we don't direct stream so that the server can proxy a single
 		# stream for all players
-		if ( Slim::Player::Sync::isSynced($client) ) {
+		if ( $client->isSynced(1) ) {
 
 			if ( $directlog->is_info ) {
 				$directlog->info(sprintf(
@@ -188,14 +225,7 @@ sub canDirectStream {
 		$url =~ s/#slim:.+$//;
 	}
 
-	# Check the available types - direct stream MP3, but not Ogg.
-	my ($command, $type, $format) = Slim::Player::TranscodingHelper::getConvertCommand($client, $url);
-
-	if (defined $command && $command eq '-' || $format eq 'mp3') {
-		return $url;
-	}
-
-	return 0;
+	return $url;
 }
 
 sub sysread {
@@ -240,6 +270,11 @@ sub parseDirectHeaders {
 	my ( $class, $client, $url, @headers ) = @_;
 	
 	my $isDebug = $directlog->is_debug;
+	
+	# May get a track object
+	if ( blessed($url) ) {
+		$url = $url->url;
+	}
 	
 	my ($title, $bitrate, $metaint, $redir, $contentType, $length, $body);
 	
@@ -287,206 +322,33 @@ sub parseDirectHeaders {
 		# or send an invalid type we don't include in types.conf
 		$contentType = 'mp3';
 	}
-	
-	if ( $length && $contentType eq 'mp3' ) {
-		$directlog->debug("Stream supports seeking");
-		$client->scanData->{mp3_can_seek} = 1;
-	}
-	else {
-		$directlog->debug("Stream does not support seeking");
-		delete $client->scanData->{mp3_can_seek};
-	}
-	
+		
 	return ($title, $bitrate, $metaint, $redir, $contentType, $length, $body);
 }
 
-# Whether or not to display buffering info while a track is loading
-sub showBuffering {
-	my ( $class, $client, $url ) = @_;
+sub scanUrl {
+	my ( $class, $url, $args ) = @_;
 	
-	return $client->showBuffering;
-}
-
-# Handle normal advances to the next track
-sub onDecoderUnderrun {
-	my ( $class, $client, $nextURL, $callback ) = @_;
+	my $callersCallback = $args->{'cb'};
 	
-	# Flag that we don't want any buffering messages while loading the next track,
-	$client->showBuffering( 0 );
-	
-	# Special handling needed when synced since onDecoderUnderrun is
-	# called for all players
-	if ( Slim::Player::Sync::isSynced($client) ) {
-		if ( !Slim::Player::Sync::isMaster($client) ) {
-			# Only the master needs to scan the track
-			$log->debug('Letting sync master scan next track');
-			
-			$callback->();
-			
-			return;
-		}
-	}
-	
-	# If user was listening to a playlist, it may contain non-infinite tracks
-	# so this lets us advance to the next entry in the playlist.  We just
-	# want to skip scanHTTPTrack in this case, and the onUnderrun callback
-	# will handle playing the next entry
-	if ( $client->remotePlaylistCurrentEntry ) {
-		my $playlist = Slim::Schema->rs('Playlist')->objectForUrl( { 	 
-			url => Slim::Player::Playlist::url($client), 	 
-		} );
-		
-		if ( my $nextEntry = $playlist->getNextEntry( { after => $client->remotePlaylistCurrentEntry } ) ) {
-			$log->debug( 'Playlist contains more tracks, not scanning next track, waiting for underrun' );
-			return;
-		}
-	}
-	
-	$log->debug( 'Scanning next HTTP track before playback' );
-	
-	$class->scanHTTPTrack( $client, $nextURL, $callback );
-}
-
-sub onUnderrun {
-	my ( $class, $client, $url, $callback ) = @_;
-	
-	# Special handling needed when synced since onUnderrun is
-	# called for all players
-	if ( Slim::Player::Sync::isSynced($client) ) {
-		if ( !Slim::Player::Sync::isMaster($client) ) {
-			# Only the master needs to scan the track
-			$log->debug('Letting sync master handle onUnderrun');
-			
-			$callback->();
-			
-			return;
-		}
-	}
-	
-	# If user was listening to a playlist, it may contain non-infinite tracks
-	# so this lets us advance to the next entry in the playlist
-	if ( $client->remotePlaylistCurrentEntry ) {
-		my $playlist = Slim::Schema->rs('Playlist')->objectForUrl( { 	 
-			url => Slim::Player::Playlist::url($client), 	 
-		} );
-		
-		if ( my $nextEntry = $playlist->getNextEntry( { after => $client->remotePlaylistCurrentEntry } ) ) {
-			# Jump to the same track where we'll play the next item in the playlist
-			
-			$client->remotePlaylistCurrentEntry( $nextEntry );
-			
-			$log->debug( "Jumping to same track to play the next entry in the playlist" );
-
-			if ( $nextEntry->title !~ /^(?:http|mms)/ ) {
-				Slim::Music::Info::setCurrentTitle( $playlist->url, $nextEntry->title );
+	$args->{'cb'} = sub {
+		my ( $track ) = @_;
+		if ( $track ) {
+			# An HTTP URL may really be an MMS URL,
+			# check now and if so, change the URL before playback
+			if ( $track->content_type eq 'wma' ) {
+				$log->debug( "Changing URL to MMS protocol: " . $track->url);
+				my $mmsURL = $track->url;
+				$mmsURL =~ s/^http/mms/i;
+				$track->url( $mmsURL );
+				$track->update;
 			}
-
-			Slim::Player::Source::jumpto( $client, '+0' );
-			
-			return;
 		}
-	}
-	
-	$callback->();
-}
-
-# On skip, load the next track before playback
-sub onJump {
-	my ( $class, $client, $nextURL, $callback ) = @_;
-	
-	# If seeking, we can avoid scanning
-	if ( $client->scanData->{seekdata} ) {
-		# XXX: we could set showBuffering to 0 but on slow
-		# streams there would be no feedback
 		
-		$callback->();
-		return;
-	}
-
-	# Display buffering info on loading the next track
-	$client->showBuffering( 1 );
-
-	$log->debug( 'Scanning next HTTP track before playback' );
-		
-	$class->scanHTTPTrack( $client, $nextURL, $callback );
-}
-
-sub scanHTTPTrack {
-	my ( $class, $client, $nextURL, $callback ) = @_;
+		$callersCallback->(@_);
+	};
 	
-	$client = $client->masterOrSelf;
-	
-	# Clear previous playlist entry if any
-	$client->remotePlaylistCurrentEntry( undef );
-	
-	# Bug 7739, Scan the next track/playlist before we play it
-	Slim::Utils::Scanner::Remote->scanURL( $nextURL, {
-		client => $client,
-		cb     => sub {
-			my ( $track, $error ) = @_;
-			
-			if ( $track ) {
-				
-				if ( $sourcelog->is_debug ) {
-					$sourcelog->debug( "Remote scan finished for " . $track->url );
-				}
-				
-				# An HTTP URL may really be an MMS URL,
-				# check now and if so, change the URL before playback
-				if ( $track->content_type eq 'wma' ) {
-					$sourcelog->debug( "Changing URL to MMS protocol: $nextURL" );
-					my $mmsURL = $nextURL;
-					$mmsURL =~ s/^http/mms/i;
-					$track->url( $mmsURL );
-					$track->update;
-					
-					# Move scanData for this URL
-					$client->scanData->{$mmsURL} = delete $client->scanData->{$nextURL};
-				}
-				
-				# Replace the item on the playlist in case it was changed due to
-				# a redirect or the above MMS code
-				my $i = 0;
-				for my $item ( @{ Slim::Player::Playlist::playList($client) } ) {
-					my $itemURL = blessed($item) ? $item->url : $item;
-					if ( $itemURL eq $nextURL ) {
-						$sourcelog->debug( "Replacing playlist item $i with new track object" );
-						splice @{ Slim::Player::Playlist::playList($client) }, $i, 1, $track;
-						last;
-					}
-					$i++;
-				}
-				
-				$callback->();
-			}
-			else {
-				$sourcelog->debug( "Remote scanning returned error: $error" );
-				
-				my $line1;
-				$error ||= 'PROBLEM_OPENING_REMOTE_URL';
-
-				# If the playlist was unable to load a remote URL, notify
-				# This is used for logging broken stream links
-				Slim::Control::Request::notifyFromArray( $client, [ 'playlist', 'cant_open', $nextURL, $error ] );
-
-				if ( uc($error) eq $error ) {
-					$line1 = $client->string($error);
-				}
-				else {
-					$line1 = $error;
-				}
-
-				# Show an error message
-				$client->showBriefly( {
-					line => [ $line1, $nextURL ],
-				}, {
-					scroll    => 1,
-					firstline => 1,
-					duration  => 5,
-				} );
-			}
-		},
-	} );
+	Slim::Utils::Scanner::Remote->scanURL($url, $args);
 }
 
 # Allow mp3tunes tracks to be scrobbled
@@ -504,7 +366,44 @@ sub audioScrobblerSource {
 
 sub getMetadataFor {
 	my ( $class, $client, $url, $forceCurrent ) = @_;
-
+	
+	# Check for an alternate metadata provider for this URL
+	my $provider = Slim::Formats::RemoteMetadata->getProviderFor($url);
+	if ( $provider ) {
+		my $metadata = eval { $provider->( $client, $url ) };
+		if ( $@ ) {
+			my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($provider);
+			$log->error( "Metadata provider $name failed: $@" );
+		}
+		elsif ( scalar keys %{$metadata} ) {
+			return $metadata;
+		}
+	}
+	
+	# Check for parsed WMA metadata, this is here because WMA may
+	# use HTTP protocol handler
+	if ( my $song = $client->playingSong() ) {
+		if ( my $meta = $song->pluginData('wmaMeta') ) {
+			my $data = {};
+			if ( $meta->{artist} ) {
+				$data->{artist} = $meta->{artist};
+			}
+			if ( $meta->{album} ) {
+				$data->{album} = $meta->{album};
+			}
+			if ( $meta->{title} ) {
+				$data->{title} = $meta->{title};
+			}
+			if ( $meta->{cover} ) {
+				$data->{cover} = $meta->{cover};
+			}
+	
+			if ( scalar keys %{$data} ) {
+				return $data;
+			}
+		}
+	}
+	
 	my ($artist, $title);
 	# Radio tracks, return artist and title if the metadata looks like Artist - Title
 	if ( my $currentTitle = Slim::Music::Info::getCurrentTitle( $client, $url ) ) {
@@ -521,14 +420,14 @@ sub getMetadataFor {
 	# Remember playlist URL
 	my $playlistURL = $url;
 	
-	# Check for radio URLs with cached covers (RadioTime)
+	# Check for radio URLs with cached covers
 	my $cache = Slim::Utils::Cache->new( 'Artwork', 1, 1 );
 	my $cover = $cache->get( "remote_image_$url" );
 	
 	# Item may be a playlist, so get the real URL playing
 	if ( Slim::Music::Info::isPlaylist($url) ) {
-		if ( my $entry = $client->remotePlaylistCurrentEntry ) {
-			$url = $entry->url;
+		if (my $cur = $client->currentTrackForUrl($url)) {
+			$url = $cur->url;
 		}
 	}
 	
@@ -544,40 +443,7 @@ sub getMetadataFor {
 		$cover = '/music/' . $track->id . '/cover.jpg';
 	}
 	
-	if ( $url =~ /mp3tunes\.com/ || $url =~ m|squeezenetwork\.com.+/mp3tunes| ) {
-		if ( Slim::Utils::PluginManager->isEnabled('Slim::Plugin::MP3tunes::Plugin') ) {
-			my $icon = Slim::Plugin::MP3tunes::Plugin->_pluginDataFor('icon');
-			my $meta = Slim::Plugin::MP3tunes::Plugin->getLockerInfo( $client, $url );
-			if ( $meta ) {
-				# Metadata for currently playing song
-				return {
-					artist   => $meta->{artist},
-					album    => $meta->{album},
-					tracknum => $meta->{tracknum},
-					title    => $meta->{title},
-					cover    => $cover || $meta->{cover} || $icon,
-					icon     => $icon,
-					type     => 'MP3tunes',
-				};
-			}
-			else {
-				# Metadata for items in the playlist that have not yet been played
-			
-				# We can still get cover art for items not yet played
-				if ( !$cover && $url =~ /hasArt=1/ ) {
-					my ($id)  = $url =~ m/([0-9a-f]+\?sid=[0-9a-f]+)/;
-					$cover    = "http://content.mp3tunes.com/storage/albumartget/$id";
-				}
-			
-				return {
-					cover    => $cover || $icon,
-					icon     => $icon,
-					type     => 'MP3tunes',
-				};
-			}
-		}
-	}
-	elsif ( $url =~ /archive\.org/ || $url =~ m|squeezenetwork\.com.+/lma/| ) {
+	if ( $url =~ /archive\.org/ || $url =~ m|squeezenetwork\.com.+/lma/| ) {
 		if ( Slim::Utils::PluginManager->isEnabled('Slim::Plugin::LMA::Plugin') ) {
 			my $icon = Slim::Plugin::LMA::Plugin->_pluginDataFor('icon');
 			return {
@@ -589,9 +455,12 @@ sub getMetadataFor {
 		}
 	}
 	elsif ( $playlistURL =~ /radioio/i ) {
-		if ( Slim::Utils::PluginManager->isEnabled('Slim::Plugin::RadioIO::Plugin') ) {
+		if ( main::SLIM_SERVICE || Slim::Plugin::InternetRadio::Plugin::RadioIO->can('_pluginDataFor') ) {
 			# RadioIO
-			my $icon = Slim::Plugin::RadioIO::Plugin->_pluginDataFor('icon');
+			my $icon = main::SLIM_SERVICE
+				? 'http://www.squeezenetwork.com/static/images/icons/radioio.png'
+				: Slim::Plugin::InternetRadio::Plugin::RadioIO->_pluginDataFor('icon');
+				
 			return {
 				artist   => $artist,
 				title    => $title,
@@ -603,7 +472,7 @@ sub getMetadataFor {
 	}
 	else {	
 
-		if ( (my $handler = Slim::Player::ProtocolHandlers->handlerForURL($url)) ne $class )  {
+		if ( (my $handler = Slim::Player::ProtocolHandlers->handlerForURL($url)) !~ /^(?:$class|Slim::Player::Protocols::MMS)$/ )  {
 			if ( $handler && $handler->can('getMetadataFor') ) {
 				return $handler->getMetadataFor( $client, $url );
 			}
@@ -638,43 +507,27 @@ sub getIcon {
 }
 
 sub canSeek {
-	my ( $class, $client, $url ) = @_;
+	my ( $class, $client, $song ) = @_;
 	
-	$client = $client->masterOrSelf;
-	
-	if ( Slim::Music::Info::isPlaylist($url) ) {
-		if ( my $entry = $client->remotePlaylistCurrentEntry ) {
-			$url = $entry->url;
-		}
-	}
+	$client = $client->master();
 	
 	# Can only seek if bitrate and duration are known
-	my $bitrate = Slim::Music::Info::getBitrate( $url );
-	my $seconds = Slim::Music::Info::getDuration( $url );
+	my $bitrate = $song->bitrate();
+	my $seconds = $song->duration();
 	
 	if ( !$bitrate || !$seconds ) {
 		#$log->debug( "bitrate: $bitrate, duration: $seconds" );
 		#$log->debug( "Unknown bitrate or duration, seek disabled" );
 		return 0;
 	}
-	
-	if ( $client->scanData->{mp3_can_seek} ) {
-		return 1;
-	}
-	
-	#$log->debug( "Seek not possible, content-length missing or wrong content-type" );
-	
-	return 0;
+		
+	return 1;
 }
 
 sub canSeekError {
-	my ( $class, $client, $url ) = @_;
+	my ( $class, $client, $song ) = @_;
 	
-	if ( Slim::Music::Info::isPlaylist($url) ) {
-		if ( my $entry = $client->remotePlaylistCurrentEntry ) {
-			$url = $entry->url;
-		}
-	}
+	my $url = $song->currentTrack()->url;
 	
 	my $ct = Slim::Music::Info::contentType($url);
 	
@@ -682,10 +535,11 @@ sub canSeekError {
 		return ( 'SEEK_ERROR_TYPE_NOT_SUPPORTED', $ct );
 	} 
 	
-	if ( !Slim::Music::Info::getBitrate( $url ) ) {
+	if ( !$song->bitrate() ) {
+		$log->info("bitrate unknown for: " . $url);
 		return 'SEEK_ERROR_MP3_UNKNOWN_BITRATE';
 	}
-	elsif ( !Slim::Music::Info::getDuration( $url ) ) {
+	elsif ( !$song->duration() ) {
 		return 'SEEK_ERROR_MP3_UNKNOWN_DURATION';
 	}
 	
@@ -693,95 +547,32 @@ sub canSeekError {
 }
 
 sub getSeekData {
-	my ( $class, $client, $url, $newtime ) = @_;
-	
-	if ( Slim::Music::Info::isPlaylist($url) ) {
-		if ( my $entry = $client->remotePlaylistCurrentEntry ) {
-			$url = $entry->url;
-		}
-	}
+	my ( $class, $client, $song, $newtime ) = @_;
 	
 	# Determine byte offset and song length in bytes
-	my $bitrate = Slim::Music::Info::getBitrate( $url ) || return;
-	my $seconds = Slim::Music::Info::getDuration( $url ) || return;
+	my $bitrate = $song->bitrate() || return;
 		
 	$bitrate /= 1000;
 		
-	$log->debug( "Trying to seek $newtime seconds into $bitrate kbps stream of $seconds length" );
+	$log->info( "Trying to seek $newtime seconds into $bitrate kbps" );
 	
-	my $data = {
-		newoffset         => ( ( $bitrate * 1024 ) / 8 ) * $newtime,
-		songLengthInBytes => ( ( $bitrate * 1024 ) / 8 ) * $seconds,
+	return {
+		sourceStreamOffset   => ( ( $bitrate * 1024 ) / 8 ) * $newtime,
+		timeOffset           => $newtime,
 	};
-	
-	return $data;
 }
 
-sub setSeekData {
-	my ( $class, $client, $url, $newtime, $newoffset ) = @_;
+sub getSeekDataByPosition {
+	my ($class, $client, $song, $bytesReceived) = @_;
 	
-	my @clients;
-	
-	if ( Slim::Player::Sync::isSynced($client) ) {
-		# if synced, save seek data for all players
-		my $master = Slim::Player::Sync::masterOrSelf($client);
-		push @clients, $master, @{ $master->slaves };
-	}
-	else {
-		push @clients, $client;
-	}
-	
-	for my $client ( @clients ) {
-		# Save the new seek point
-		$client->scanData( {
-			seekdata => {
-				newtime   => $newtime,
-				newoffset => $newoffset,
-			},
-		} );
-	}
-}
-
-sub onOpen {
-	my ( $class, $client, $track ) = @_;
-	
-	$client = $client->masterOrSelf;
-	
-	if ( Slim::Music::Info::isPlaylist( $track, $track->content_type ) ) {
-		if ( my $next = $client->remotePlaylistCurrentEntry ) {
-			return $next;
-		}
-		
-		# Return the first good audio track
-		my $playlist = Slim::Schema->rs('Playlist')->objectForUrl( {
-			url => $track->url,
-		} );
-		
-		if ( $log->is_debug ) {
-			$log->debug( "Getting next audio URL from playlist " . $track->url );
-		}
-		
-		my $next = $playlist->getNextEntry;
-		
-		# Save the current playlist entry being used
-		$client->remotePlaylistCurrentEntry( $next );
-		
-		return $next;
-	}
-	
-	return $track;
+	return {sourceStreamOffset => $bytesReceived};
 }
 
 # reinit is used on SN to maintain seamless playback when bumped to another instance
 sub reinit {
-	my ( $class, $client, $playlist, $newsong ) = @_;
-	
-	my $url = $playlist->[0];
+	my ( $class, $client, $song ) = @_;
 	
 	$log->debug("Re-init HTTP");
-	
-	# Re-add playlist item
-	$client->execute( [ 'playlist', 'add', $url ] );
 	
 	# Back to Now Playing
 	Slim::Buttons::Common::pushMode( $client, 'playlist' );
@@ -789,7 +580,7 @@ sub reinit {
 	# Trigger event logging timer for this stream
 	Slim::Control::Request::notifyFromArray(
 		$client,
-		[ 'playlist', 'newsong', Slim::Music::Info::standardTitle( $client, $url ), 0 ]
+		[ 'playlist', 'newsong', Slim::Music::Info::standardTitle( $client, $song->{streamUrl} ), 0 ]
 	);
 	
 	return 1;

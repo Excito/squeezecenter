@@ -5,7 +5,7 @@ package Slim::Display::SqueezeboxG;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: SqueezeboxG.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: SqueezeboxG.pm 23271 2008-09-24 07:39:11Z mherger $
 
 =head1 NAME
 
@@ -44,6 +44,10 @@ our $defaultFontPrefs = {
 	'idleFont'            => [qw(small medium large huge)],
 	'idleFont_curr'       => 1,
 };
+
+$prefs->setChange( sub { $_[2]->textSize($_[1]) if $_[2]->power(); }, 'activeFont_curr');
+$prefs->setChange( sub { $_[2]->textSize($_[1]) unless $_[2]->power(); }, 'idleFont_curr');
+
 
 # Display Modes
 

@@ -10,13 +10,14 @@
 #
 package Slim::Player::SLIMP3;
 
+use base qw(Slim::Player::Player);
+
 use strict;
+
 use Slim::Player::Player;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Utils::Prefs;
-
-use base qw(Slim::Player::Player);
 
 my $prefs = preferences('server');
 
@@ -66,8 +67,6 @@ sub init {
 	my $client = shift;
 
 	$client->SUPER::init();
-
-	$client->display->periodicScreenRefresh(); 
 }
 
 sub initPrefs {
@@ -85,6 +84,7 @@ sub connected {
 sub model {
 	return 'slimp3';
 }
+
 sub modelName { 'SLIMP3' }
 
 sub type {
@@ -99,10 +99,92 @@ sub decoder {
 	return 'mas3507d';
 }
 
+sub hasIR { 1 }
+
+sub nextChunk {
+	my $client = $_[0];
+	
+	my $chunk = Slim::Player::Source::nextChunk(@_);
+	
+	if (defined($chunk) && length($$chunk) == 0) {
+		# EndOfStream
+		$client->controller()->playerEndOfStream($client);
+		
+		# Bug 10400 - need to tell the controller to get next track ready
+		# We may not actually be prepared to stream the next track yet 
+		# but this will be checked when the controller calls isReadyToStream()
+		$client->controller()->playerReadyToStream($client);
+		
+		if ($client->isSynced(1)) {
+			return $chunk;	# playout
+		} else {
+			return undef;
+		}
+	}
+	
+	return $chunk;
+}
+
+sub underrun {
+	my $client = $_[0];
+	
+	if (Slim::Networking::SliMP3::Stream::isPlaying($client)) {
+		if ($client->controller()->isStreaming()) {
+			$client->controller()->playerOutputUnderrun($client);
+			return;
+		} else {
+			# Finished playout
+			# and fall
+		}	
+	}
+	Slim::Networking::SliMP3::Stream::stop($client);
+	$client->controller()->playerStopped($client);	
+}
+
+sub autostart {
+	my $client = $_[0];
+	$client->controller()->playerTrackStarted($client);
+}
+
+sub heartbeat {
+	my $client = $_[0];
+	
+	if ( !$client->bufferReady() && $client->bytesReceivedOffset() 		# may need to signal track-start
+		&& ($client->bytesReceived() - $client->bytesReceivedOffset() - $client->bufferFullness() > 0) )
+	{
+		$client->bufferReady(1);	# to stop multiple starts 
+		$client->controller()->playerTrackStarted($client);
+	} else {
+		$client->controller->playerStatusHeartbeat($client);
+	}
+}
+
+sub isReadyToStream {
+	my ($client, $song) = @_;
+	
+	return 1 if $client->readyToStream();
+	
+	return 0 if $client->isSynced(1);
+	
+	return 1; # assume safe to stream one file after another, even if frame rates different
+}
+
 sub play {
 	my $client = shift;
 	my $params = shift;
 	
+	if (Slim::Networking::SliMP3::Stream::isPlaying($client)) {
+		assert(!$client->isSynced(1));
+		
+		$client->bytesReceivedOffset($client->streamBytes());
+		$client->bufferReady(0);
+		
+		return 1;
+	}
+	
+	$client->bytesReceivedOffset(0);
+	$client->streamBytes(0);
+		
 	# make sure volume is set, without changing temp setting
 	$client->volume($client->volume(),
 					defined($client->tempVolume()));
@@ -120,7 +202,12 @@ sub play {
 	# is still processing the i2c commands we just sent.
 	select(undef,undef,undef,.05);
 
+	if ( $params->{'controller'}->protocolHandler()->isRemote() ) {	
+		$client->buffering(bufferSize() / 2);
+	}
+
 	Slim::Networking::SliMP3::Stream::newStream($client, $params->{'paused'});
+	
 	return 1;
 }
 
@@ -186,16 +273,8 @@ sub stop {
 	my $client = shift;
 
 	Slim::Networking::SliMP3::Stream::stop($client);
-}
-
-#
-# playout - play out what's in the buffer
-#
-sub playout {
-	my $client = shift;
-
-	Slim::Networking::SliMP3::Stream::playout($client);
-	return 1;
+	$client->SUPER::stop();
+	
 }
 
 sub bufferFullness {

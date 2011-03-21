@@ -1,6 +1,6 @@
 package Slim::Player::ProtocolHandlers;
 
-# $Id: ProtocolHandlers.pm 22935 2008-08-28 15:00:49Z andy $
+# $Id: ProtocolHandlers.pm 23721 2008-10-28 16:57:01Z awy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -19,13 +19,17 @@ use Slim::Music::Info;
 # indexed by the URL protocol.  built-in protocols are exist in the hash, but
 # have a zero value
 my %protocolHandlers = ( 
+	file     => qw(Slim::Player::Protocols::File),
 	http     => qw(Slim::Player::Protocols::HTTP),
 	icy      => qw(Slim::Player::Protocols::HTTP),
 	mms      => qw(Slim::Player::Protocols::MMS),
 	rtsp     => 1,
-	file     => 0,
 	playlist => 0,
 	db       => 1,
+);
+
+my %localHandlers = (
+	file     => 1,
 );
 
 my %loadedHandlers = ();
@@ -46,6 +50,13 @@ sub isValidHandler {
 	return undef;
 }
 
+sub isValidRemoteHandler {
+	my ($class, $protocol) = @_;
+	
+	return isValidHandler(@_) && !$localHandlers{$protocol};
+	
+}
+
 sub registeredHandlers {
 	my $class = shift;
 
@@ -59,34 +70,9 @@ sub registerHandler {
 }
 
 sub registerIconHandler {
-	my ($class, $regex, $ref) = @_;
+        my ($class, $regex, $ref) = @_;
 
-	$iconHandlers{$regex} = $ref;
-}
-
-sub openRemoteStream {
-	my $class  = shift;
-	my $url    = shift;
-	my $client = shift;
-
-	my $protoClass = $class->handlerForURL($url);
-	my $log        = logger('player.source');
-
-	$log->info("Trying to open protocol stream for $url");
-
-	if ($protoClass) {
-
-		$log->info("Found handler for $url - using $protoClass");
-
-		return $protoClass->new({
-			'url'    => $url,
-			'client' => $client,
-		});
-	}
-
-	$log->warn("Couldn't find protocol handler for $url");
-
-	return undef;
+        $iconHandlers{$regex} = $ref;
 }
 
 sub handlerForURL {

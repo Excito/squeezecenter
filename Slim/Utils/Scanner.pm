@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner;
 
-# $Id: Scanner.pm 23443 2008-10-07 19:30:48Z andy $
+# $Id: Scanner.pm 23545 2008-10-14 10:39:10Z mherger $
 #
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -114,7 +114,7 @@ sub findFilesMatching {
 	my $topDir = shift;
 	my $args   = shift;
 
-	my $os     = Slim::Utils::OSDetect::OS();
+	my $isWin  = Slim::Utils::OSDetect::isWindows();
 	my $types  = Slim::Music::Info::validTypeExtensions($args->{'types'});
 
 	my $descend_filter = sub {
@@ -143,7 +143,7 @@ sub findFilesMatching {
 		# Are they named anything other than .lnk? I don't think so.
 		if ($file =~ /\.lnk$/i) {
 
-			if ($os ne 'win') {
+			unless ($isWin) {
 				next;
 			}
 
@@ -212,7 +212,7 @@ sub findFilesMatching {
 =head2 findFilesForRescan( $topDir, $args )
 
 Wrapper around L<findNewAndChangedFiles>(), so that other callers (iTunes,
-MusicMagic can reuse the logic.
+MusicIP can reuse the logic.
 
 =cut
 
@@ -293,12 +293,13 @@ sub scanDirectory {
 	my $files  = [];
 
 	# Send progress info to the db and progress bar
-	my $progress = Slim::Utils::Progress->new({
+	my $progress;
+	$progress = Slim::Utils::Progress->new({
 		'type' => 'importer',
 		'name' => $args->{'scanName'} || 'directory',
 		'bar' => 1,
 		'every'=> ($args->{'scanName'} && $args->{'scanName'} eq 'playlist'), # record all playists in the db
-	});
+	}) if $args->{progress};
 
 	if ($::rescan) {
 		$files = $class->findFilesForRescan($topDir->stringify, $args);
@@ -310,7 +311,7 @@ sub scanDirectory {
 
 		$log->warn("Didn't find any valid files in: [$topDir]");
 
-		$progress->final;
+		$progress->final if $progress;
 
 		return $foundItems;
 
@@ -321,14 +322,14 @@ sub scanDirectory {
 		}
 	}
 
-	$progress->total( scalar @{$files} );
+	$progress->total( scalar @{$files} ) if $progress;
 
 	# If we're starting with a clean db - don't bother with searching for a track
 	my $method   = $::wipe ? 'newTrack' : 'updateOrCreate';
 
 	for my $file (@{$files}) {
 
-		$progress->update($file);
+		$progress->update($file) if $progress;
 
 		my $url = Slim::Utils::Misc::fileURLFromPath($file);
 
@@ -372,7 +373,7 @@ sub scanDirectory {
 
 	}
 
-	$progress->final;
+	$progress->final if $progress;
 
 	return $foundItems;
 }
@@ -474,6 +475,30 @@ sub scanPlaylistFileHandle {
 
 	return wantarray ? @playlistTracks : \@playlistTracks;
 }
+
+=head2 scanBitrate( $fh, $contentType, $url )
+
+Scan a remote stream for bitrate information using a temporary file.
+
+Currently supports MP3, Ogg, and FLAC streams (any format class that implements 'scanBitrate')
+
+=cut
+
+sub scanBitrate {
+	my ( $fh, $contentType, $url ) = @_;
+
+	my $formatClass = Slim::Formats->classForFormat($contentType);
+
+	if ($formatClass && Slim::Formats->loadTagFormatForType($contentType) && $formatClass->can('scanBitrate')) {
+
+		return $formatClass->scanBitrate( $fh, $url );
+	}
+
+	$log->warn("Unable to scan content-type: $contentType");
+
+	return (-1, undef);
+}
+
 
 1;
 

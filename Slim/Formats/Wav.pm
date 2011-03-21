@@ -1,6 +1,6 @@
 package Slim::Formats::Wav;
 
-# $Id: Wav.pm 23261 2008-09-23 19:17:47Z andy $
+# $Id: Wav.pm 23947 2008-11-17 17:15:34Z awy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -83,5 +83,23 @@ sub getTag {
 
 	return $tags;
 }
+
+# bug 10012; disable so that WAV/PCM confusion does not cause bad audio
+#sub getInitialAudioBlock {
+#	my ($class, $fh, $track) = @_;
+#	my $length = $track->audio_offset() || return undef;
+#	
+#	open(my $localFh, '<&=', $fh);
+#	
+#	seek($localFh, 0, 0);
+#	logger('player.source')->debug("Reading initial audio block: length $length");
+#	read ($localFh, my $buffer, $length);
+#	seek($localFh, 0, 0);
+#	close($localFh);
+#	
+#	return $buffer;
+#}
+#
+#sub canSeek {1}
 
 1;

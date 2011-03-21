@@ -1,6 +1,6 @@
 package Slim::Buttons::Volume;
 
-# $Id: Volume.pm 23162 2008-09-12 19:56:33Z adrian $
+# $Id: Volume.pm 23167 2008-09-13 19:38:16Z andy $
 #
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or

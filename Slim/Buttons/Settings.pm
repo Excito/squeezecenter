@@ -33,7 +33,7 @@ if ( !main::SLIM_SERVICE ) {
 
 my $prefs = preferences('server');
 
-our @defaultSettingsChoices = qw(SHUFFLE REPEAT ALARM SYNCHRONIZE AUDIO_SETTINGS DISPLAY_SETTINGS);
+our @defaultSettingsChoices = qw(SHUFFLE REPEAT ALARM SYNCHRONIZE PLAYLIST_MODE AUDIO_SETTINGS DISPLAY_SETTINGS);
 
 if ( main::SLIM_SERVICE ) {
 	push @defaultSettingsChoices, qw(
@@ -418,18 +418,10 @@ sub init {
 							'useMode'      => 'INPUT.Choice',
 							'header'       => '{TEXTSIZE}',
 							'headerAddCount' => 1,
-							'onPlay'       => sub { 
-								$_[0]->textSize($_[1]->{'value'})
-							},
-							'onAdd'        => sub { 
-								$_[0]->textSize($_[1]->{'value'})
-							},
-							'onRight'      => sub { 
-								$_[0]->textSize($_[1]->{'value'})
-							},
+							'onChange'     => \&setPref,
 							'pref'         => 'activeFont_curr',
 							'initialValue' => sub { $prefs->client(shift)->get('activeFont_curr') },
-							'condition'    => sub { 1 },
+							'condition'    => sub { $_[0]->display->isa('Slim::Display::Graphics'); },
 							'init'         => sub {
 								my $client = shift;
 		
@@ -451,7 +443,7 @@ sub init {
 						# Brightness submenus
 						'SETUP_GROUP_BRIGHTNESS'        => {
 							'useMode'         => 'INPUT.List',
-							'listRef'         => ['SETUP_POWERONBRIGHTNESS', 'SETUP_POWEROFFBRIGHTNESS', 'SETUP_IDLEBRIGHTNESS'],
+							'listRef'         => ['SETUP_POWERONBRIGHTNESS', 'SETUP_POWEROFFBRIGHTNESS', 'SETUP_IDLEBRIGHTNESS', 'SETUP_MINAUTOBRIGHTNESS', 'SETUP_SENSAUTOBRIGHTNESS'],
 							'stringExternRef' => 1,
 							'header'          => 'SETUP_GROUP_BRIGHTNESS',
 							'stringHeader'    => 1,
@@ -461,6 +453,25 @@ sub init {
 							},
 							'overlayRefArgs'  => 'CV',
 							'condition'    => sub { 1 },
+							'init'            => sub {
+								my $client = shift;
+								my @opts;
+								
+								my @settingsChoices = @{$menuParams{'SETTINGS'}{'submenus'}{'DISPLAY_SETTINGS'}{'submenus'}{'SETUP_GROUP_BRIGHTNESS'}{'listRef'}};
+								my $menu = $menuParams{'SETTINGS'}{'submenus'}{'DISPLAY_SETTINGS'}{'submenus'}{'SETUP_GROUP_BRIGHTNESS'}{'submenus'};
+								
+								for my $setting ( @settingsChoices) {
+								
+									if ($menu->{$setting}->{'condition'} && &{$menu->{$setting}->{'condition'}}($client)) {
+							
+										push @opts, $setting;
+									}
+								}
+					
+								#@settingsChoices = sort { $client->string($a) cmp $client->string($b) } @settingsChoices;
+					
+								$client->modeParam('listRef', \@opts);
+							},
 							'submenus'        => {
 			
 								'SETUP_POWERONBRIGHTNESS' => {
@@ -473,6 +484,7 @@ sub init {
 									'headerAddCount'=> 1,
 									'initialValue'  => sub { $prefs->client(shift)->get('powerOnBrightness') },
 									'init'          => \&brightnessInit,
+									'condition'    => sub { 1 },
 								},
 								
 								'SETUP_POWEROFFBRIGHTNESS' => {
@@ -485,6 +497,7 @@ sub init {
 									'headerAddCount'=> 1,
 									'initialValue'  => sub { $prefs->client(shift)->get('powerOffBrightness') },
 									'init'          => \&brightnessInit,
+									'condition'    => sub { 1 },
 								},
 						
 								'SETUP_IDLEBRIGHTNESS' => {
@@ -497,6 +510,51 @@ sub init {
 									'headerAddCount'=> 1,
 									'initialValue'  => sub { $prefs->client(shift)->get('idleBrightness') },
 									'init'          => \&brightnessInit,
+									'condition'    => sub { 1 },
+								},
+								'SETUP_MINAUTOBRIGHTNESS'    => {
+									'useMode'      => 'INPUT.Bar',
+									'header'       => 'SETUP_MINAUTOBRIGHTNESS',
+									'stringHeader' => 1,
+									'headerValue'  => 'unscaled',
+									'min'          => 1,
+									'max'          => 5,
+									'increment'    => 1,
+									'onChange'     => sub {
+										my ($client, $value) = @_;
+										
+										$value = $prefs->client($client)->get('minAutoBrightness') + $value;
+										$prefs->client($client)->set('minAutoBrightness', $value);
+									},
+									
+									'pref'         => "minAutoBrightness",
+									'initialValue' => sub { $prefs->client(shift)->get('minAutoBrightness') },
+									'condition'    => sub {
+										my $client = shift;
+										return $client->isa('Slim::Player::Boom');
+									},
+								},
+								'SETUP_SENSAUTOBRIGHTNESS'    => {
+									'useMode'      => 'INPUT.Bar',
+									'header'       => 'SETUP_SENSAUTOBRIGHTNESS',
+									'stringHeader' => 1,
+									'headerValue'  => 'unscaled',
+									'min'          => 1,
+									'max'          => 20,
+									'increment'    => 1,
+									'onChange'     => sub {
+										my ($client, $value) = @_;
+										
+										$value = $prefs->client($client)->get('sensAutoBrightness') + $value;
+										$prefs->client($client)->set('sensAutoBrightness', $value);
+									},
+									
+									'pref'         => "sensAutoBrightness",
+									'initialValue' => sub { $prefs->client(shift)->get('sensAutoBrightness') },
+									'condition'    => sub {
+										my $client = shift;
+										return $client->isa('Slim::Player::Boom');
+									},
 								},
 							},
 						},
@@ -571,6 +629,8 @@ sub init {
 		
 								my $modes = $client->display->modes;
 								my @opts  = ();
+								
+								my $x     = 0;
 		
 								for my $mode (@{ $prefs->client($client)->get('playingDisplayModes') }) {
 		
@@ -582,8 +642,9 @@ sub init {
 		
 									push @opts, {
 										'name'  => join(' ', @desc),
-										'value' => $mode,
+										'value' => $x,
 									};
+									$x++;
 								}
 		
 								$client->modeParam('listRef', \@opts);
@@ -654,7 +715,7 @@ sub init {
 					'command'      => 'playlist',
 					'subcommand'   => 'repeat',
 				},
-		
+
 				'SHUFFLE'          => {
 					'useMode'      => 'INPUT.Choice',
 					'listRef'      => [
@@ -682,13 +743,45 @@ sub init {
 					'command'      => 'playlist',
 					'subcommand'   => 'shuffle',
 				},
-				
+	
+				'PLAYLIST_MODE'          => {
+					'useMode'      => 'INPUT.Choice',
+					'listRef'      => [
+						{
+							name   => '{PLAYLIST_MODE_DISABLED}',
+							value  => 'disabled',
+						},
+						{
+							name   => '{PLAYLIST_MODE_OFF}',
+							value  => 'off',
+						},
+						{
+							name   => '{PLAYLIST_MODE_ON}',
+							value  => 'on',
+						},
+						{
+							name   => '{PARTY_MODE_ON}',
+							value  => 'party',
+						},
+					],
+					'onPlay'        => \&executeCommand,
+					'onAdd'         => \&executeCommand,
+					'onRight'       => \&executeCommand,
+					'header'        => '{PLAYLIST_MODE}',
+					'headerAddCount'=> 1,
+					'condition'     => sub { 1 },
+					'pref'          => sub{ return Slim::Player::Playlist::playlistMode(shift)},
+					'initialValue'  => sub{ return Slim::Player::Playlist::playlistMode(shift)},
+					'command'       => 'playlistmode',
+					'subcommand'    => 'set',
+				},
+		
 				'SYNCHRONIZE' => {
 					'useMode'   => 'synchronize',
 					'condition' => sub {
 						my $client = shift;
 
-						return Slim::Player::Sync::isSynced($client) || 
+						return $client->isSynced() || 
 							(scalar(Slim::Player::Sync::canSyncWith($client)) > 0);
 					},
 				},
@@ -705,7 +798,7 @@ sub init {
 					'overlayRef'     => sub {
 						my ($client, $item) = @_;
 						return [undef, 
-							Slim::Networking::Discovery::Server::is_self($item->{value})
+							( !main::SLIM_SERVICE && Slim::Networking::Discovery::Server::is_self($item->{value}) )
 							? Slim::Buttons::Common::checkBoxOverlay($client, 1)
 							: $client->symbols('rightarrow')
 						];
@@ -876,7 +969,6 @@ sub init {
 		};
 		
 		# Delete menu items we don't want on SN
-		delete $menuParams{'SETTINGS'}->{'submenus'}->{'DISPLAY_SETTINGS'}->{'submenus'}->{'TITLEFORMAT'};
 		delete $menuParams{'SETTINGS'}->{'submenus'}->{'AUDIO_SETTINGS'}->{'submenus'}->{'REPLAYGAIN'};
 	}
 
@@ -991,6 +1083,14 @@ sub analogOutMenu {
 				name   => '{ANALOGOUTMODE_SUBOUT}',
 				value  => 1,
 			},
+			{
+				name   => '{ANALOGOUTMODE_ALWAYS_ON}',
+				value  => 2,
+			},
+			{
+				name   => '{ANALOGOUTMODE_ALWAYS_OFF}',
+				value  => 3,
+			},
 		],
 		'onPlay'       => \&setPref,
 		'onAdd'        => \&setPref,
@@ -1001,7 +1101,7 @@ sub analogOutMenu {
 		'initialValue'    => sub { $prefs->client(shift)->get('analogOutMode') },
 		'condition'   => sub {
 			my $client = shift;
-			return $client->isa('Slim::Player::Boom');
+			return $client->hasHeadSubOut();
 		},
 	};
 }

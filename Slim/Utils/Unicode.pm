@@ -1,6 +1,6 @@
 package Slim::Utils::Unicode;
 
-# $Id: Unicode.pm 18551 2008-04-08 14:08:22Z andy $
+# $Id: Unicode.pm 24497 2009-01-05 10:32:25Z mherger $
 
 =head1 NAME
 
@@ -43,7 +43,7 @@ use Slim::Utils::Log;
 
 # Find out what code page we're in, so we can properly translate file/directory encodings.
 our (
-	$sysLang, $locale, $lc_ctype, $lc_time, $utf8_re_bits, $bomRE, $FB_QUIET,
+	$lc_ctype, $lc_time, $utf8_re_bits, $bomRE, $FB_QUIET,
 	$recomposeTable, $decomposeTable, $recomposeRE, $decomposeRE
 );
 
@@ -51,7 +51,7 @@ our (
 	# We implement a decode() & encode(), so don't import those.
 	require Encode;
 	require Encode::Guess;
-
+	
 	$FB_QUIET = Encode::FB_QUIET();
 
 	$bomRE = qr/^(?:
@@ -62,107 +62,18 @@ our (
 		\xff\xfe\x00\x00
 	)/x;
 
-	# Set some defaults:
-	$sysLang = 'en';
-	$locale  = 'en_US';
+	($lc_ctype, $lc_time) = Slim::Utils::OSDetect->getOS->localeDetails();
 
-        if ($^O =~ /Win32/) {
+	# Setup Encode::Guess	 
+	$Encode::Guess::NoUTFAutoGuess = 1;	 
+	 	 
+	# Setup suspects for Encode::Guess based on the locale - we might also	 
+	# want to use our own Language pref?	 
+	if ($lc_ctype ne 'utf8') {	 
 
-		require Win32::OLE::NLS;
-		require Win32::Locale;
-
-		my $langid = Win32::OLE::NLS::GetSystemDefaultLCID();
-		my $lcid   = Win32::OLE::NLS::MAKELCID($langid);
-		my $linfo  = Win32::OLE::NLS::GetLocaleInfo($lcid, Win32::OLE::NLS::LOCALE_IDEFAULTANSICODEPAGE());
-
-		$lc_ctype = "cp$linfo";
-
-		$locale   = Win32::Locale::get_locale($langid);
-		$lc_time  = POSIX::setlocale(LC_TIME, $locale);
-
-		$sysLang  = $locale;
-		$sysLang =~ s/_\w+$//;
-
-	} elsif ($^O =~ /darwin/) {
-
-		# I believe this is correct from reading:
-		# http://developer.apple.com/documentation/MacOSX/Conceptual/SystemOverview/FileSystem/chapter_8_section_6.html
-		$lc_ctype = 'utf8';
-
-		# Now figure out what the locale is - something like en_US
-		if (open(LOCALE, "/usr/bin/defaults read 'Apple Global Domain' AppleLocale |")) {
-
-			chomp($locale = <LOCALE>);
-			close(LOCALE);
-		}
-
-		# On OSX - LC_TIME doesn't get updated even if you change the
-		# language / formatting. Set it here, so we don't need to do a
-		# system call for every clock second update.
-		$lc_time = POSIX::setlocale(LC_TIME, $locale);
-
-		# Will return something like:
-		# (en, ja, fr, de, es, it, nl, sv, nb, da, fi, pt, "zh-Hant", "zh-Hans", ko)
-		# We want to use the first value. See:
-		# http://gemma.apple.com/documentation/MacOSX/Conceptual/BPInternational/Articles/ChoosingLocalizations.html
-		if (open(LANG, "/usr/bin/defaults read 'Apple Global Domain' AppleLanguages |")) {
-
-			chomp(my $languages = <LANG>);
-
-			$languages =~ s/[\(\)]//g;
-			$sysLang = (split /, /, $languages)[0];
-
-			close(LANG);
-		}
-
-	} else {
-
-		$lc_time  = POSIX::setlocale(LC_TIME)  || 'C';
-		$lc_ctype = POSIX::setlocale(LC_CTYPE) || 'C';
-
-		# If the locale is C or POSIX, that's ASCII - we'll set to iso-8859-1
-		# Otherwise, normalize the codeset part of the locale.
-		if ($lc_ctype eq 'C' || $lc_ctype eq 'POSIX') {
-			$lc_ctype = 'iso-8859-1';
-		} else {
-			$lc_ctype = lc((split(/\./, $lc_ctype))[1]);
-		}
-
-		# Locale can end up with nothing, if it's invalid, such as "en_US"
-		if (!defined $lc_ctype || $lc_ctype =~ /^\s*$/) {
-			$lc_ctype = 'iso-8859-1';
-		}
-
-		# Sometimes underscores can be aliases - Solaris
-		$lc_ctype =~ s/_/-/g;
-
-		# ISO encodings with 4 or more digits use a hyphen after "ISO"
-		$lc_ctype =~ s/^iso(\d{4})/iso-$1/;
-
-		# Special case ISO 2022 and 8859 to be nice
-		$lc_ctype =~ s/^iso-(2022|8859)([^-])/iso-$1-$2/;
-
-		$lc_ctype =~ s/utf-8/utf8/gi;
-
-		# CJK Locales
-		$lc_ctype =~ s/eucjp/euc-jp/i;
-		$lc_ctype =~ s/ujis/euc-jp/i;
-		$lc_ctype =~ s/sjis/shiftjis/i;
-		$lc_ctype =~ s/euckr/euc-kr/i;
-		$lc_ctype =~ s/big5/big5-eten/i;
-		$lc_ctype =~ s/gb2312/euc-cn/i;
+		Encode::Guess->add_suspects($lc_ctype);	 
 	}
-
-	# Setup Encode::Guess
-	$Encode::Guess::NoUTFAutoGuess = 1;
-
-	# Setup suspects for Encode::Guess based on the locale - we might also
-	# want to use our own Language pref?
-	if ($lc_ctype ne 'utf8') {
-
-		Encode::Guess->add_suspects($lc_ctype);
-	}
-
+	         
 	# Create a regex for looks_like_utf8()
 	$utf8_re_bits = join "|", map { latin1toUTF8(chr($_)) } (127..255);
 
@@ -455,21 +366,16 @@ sub utf8decode_guess {
 		return $string;
 	}
 
-	my $charset  = encodingFromString($string);
-	my $encoding = undef;
+	my $charset = encodingFromString($string);
 
-	if ($charset && $charset ne 'raw') {
+	if ( $charset && $charset ne 'raw') {
+		my $encoding;
 
-		$encoding = Encode::find_encoding($charset);
+		if (($encoding = Encode::find_encoding($charset)) && ref $encoding) {
 
-	} else {
+			return $encoding->decode($string, $FB_QUIET);
+		}
 
-		$encoding = Encode::Guess::guess_encoding($string);
-	}
-
-	if (ref $encoding) {
-
-		return $encoding->decode($string, $FB_QUIET);
 	}
 
 	for my $encoding (@preferedEncodings) {
@@ -498,7 +404,7 @@ Return the newly decoded string.
 sub utf8decode_locale {
 	my $string = shift;
 
-	if ($string && $] > 5.007 && !Encode::is_utf8($string)) {
+	if ($string && !Encode::is_utf8($string)) {
 
 		$string = Encode::decode($lc_ctype, $string, $FB_QUIET);
 	}
@@ -525,23 +431,14 @@ sub utf8encode {
 
 	my $orig = $string;
 
-	# Don't try to encode a string which isn't utf8
-	# 
-	# If the incoming string already is utf8, turn off the utf8 flag.
-	if ($string && $] > 5.007 && ($encoding ne 'utf8' || !Encode::is_utf8($string))) {
+	if ($string && $encoding ne 'utf8') {
 
+		$string = utf8on($string);
 		$string = Encode::encode($encoding, $string, $FB_QUIET);
 
-	} elsif ($string && $] > 5.007) {
+	} elsif ($string) {
 
 		Encode::_utf8_off($string);
-	}
-
-	# Check for doubly encoded strings - and revert back to our original
-	# string if that's the case.
-	if ($string && $] > 5.007 && encodingFromString($string) eq 'utf8') {
-
-		$string = $orig;
 	}
 
 	return $string;
@@ -571,7 +468,7 @@ Returns the new string.
 sub utf8off {
 	my $string = shift;
 
-	if ($string && $] > 5.007) {
+	if ($string) {
 		Encode::_utf8_off($string);
 	}
 
@@ -589,7 +486,7 @@ Returns the new string.
 sub utf8on {
 	my $string = shift;
 
-	if ($string && $] > 5.007 && looks_like_utf8($string)) {
+	if ($string && looks_like_utf8($string)) {
 		Encode::_utf8_on($string);
 	}
 
@@ -697,14 +594,7 @@ Returns a UTF-8 encoded string from a ISO-8859-1 string.
 sub latin1toUTF8 {
 	my $data = shift;
 
-	if ($] > 5.007) {
-
-		$data = eval { Encode::encode('utf8', $data, $FB_QUIET) } || $data;
-
-	} else {
-
-		$data =~ s/([\x80-\xFF])/chr(0xC0|ord($1)>>6).chr(0x80|ord($1)&0x3F)/eg;
-	}
+	$data = eval { Encode::encode('utf8', $data, $FB_QUIET) } || $data;
 
 	return $data;
 }
@@ -718,15 +608,7 @@ Returns a ISO-8859-1 string from a UTF-8 encoded string.
 sub utf8toLatin1 {
 	my $data = shift;
 
-	if ($] > 5.007) {
-
-		$data = eval { Encode::encode('iso-8859-1', $data, $FB_QUIET) } || $data;
-
-	} else {
-
-		$data =~ s/([\xC0-\xDF])([\x80-\xBF])/chr(ord($1)<<6&0xC0|ord($2)&0x3F)/eg; 
-		$data =~ s/[\xE2][\x80][\x99]/'/g;
-	}
+	$data = eval { Encode::encode('iso-8859-1', $data, $FB_QUIET) } || $data;
 
 	return $data;
 }
@@ -776,6 +658,17 @@ sub encodingFromString {
 	# Check Encode::Detect::Detector before ISO-8859-1, as it can find
 	# overlapping charsets.
 	my $charset = Encode::Detect::Detector::detect($_[0]);
+
+	# Encode::Detect::Detector is mislead to to return Big5 with some characters
+	# In these cases Encode::Guess does a better job... (bug 9553)
+	if (lc($charset) eq 'big5') {
+
+		eval {
+			$charset = Encode::Guess::guess_encoding($_[0])->name;
+		};
+	}
+
+	$charset =~ s/utf-8/utf8/i;
 
 	if ($charset) {
 
@@ -841,7 +734,7 @@ sub encodingFromFileHandle {
 	my $enc = '';
 
 	# Explitly check for IO::String - as it does have a seek() method!
-	if ($] > 5.007 && ref($fh) && ref($fh) ne 'IO::String' && $fh->can('seek')) {
+	if (ref($fh) && ref($fh) ne 'IO::String' && $fh->can('seek')) {
 		$enc = File::BOM::get_encoding_from_filehandle($fh);
 	}
 
@@ -909,10 +802,6 @@ Recompose a decomposed UTF-8 string.
 sub recomposeUnicode {
 	my $string = shift;
 
-	if ($] <= 5.007) {
-		return $string;
-	}
-
 	# Make sure we're on.
 	$string = Encode::decode('utf8', $string);
 
@@ -931,10 +820,6 @@ Decompose a UTF-8 string.
 
 sub decomposeUnicode {
 	my $string = shift;
-
-	if ($] <= 5.007) {
-		return $string;
-	}
 
 	# Make sure we're on.
 	$string = Encode::decode('utf8', $string);
@@ -955,12 +840,9 @@ Removes UTF-8, UTF-16 & UTF-32 Byte Order Marks and returns the string.
 sub stripBOM {
 	my $string = shift;
 
-	if ($] > 5.007) {
+	use bytes;
 
-		use bytes;
-
-		$string =~ s/$bomRE//;
-	}
+	$string =~ s/$bomRE//;
 
 	return $string;
 }
@@ -975,8 +857,6 @@ sub decode {
 	my $encoding = shift;
 	my $string = shift;
 	
-	return $string unless $] > 5.007;
-	
 	return Encode::decode($encoding, $string);
 }
 
@@ -990,9 +870,32 @@ sub encode {
 	my $encoding = shift;
 	my $string = shift;
 	
-	return $string unless $] > 5.007;
-	
 	return Encode::encode($encoding, $string);
+}
+
+
+=head2 from_to( $string, $from_encoding, $to_encoding )
+
+=cut
+
+sub from_to {
+	my $string = shift;
+	my $from_encoding = shift;
+	my $to_encoding = shift;
+	
+	return $string if $from_encoding eq $to_encoding;
+	
+	# wrap transformation in eval as utf8 -> iso8859-1 could break on wide characters
+	eval {
+		$string = decode($from_encoding, $string);
+		$string = encode($to_encoding, $string);
+	};
+	
+	if ($@) {
+		Slim::Utils::Log->logger('server')->warn("Could not convert from $from_encoding to $to_encoding: $string ($@)");
+	}
+	
+	return $string;
 }
 
 =head1 SEE ALSO

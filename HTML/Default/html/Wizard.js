@@ -1,18 +1,11 @@
 Wizard = {
 	fileselectors : new Array(),
 
-	init : function(wizardDone){
+	init : function(args) {
+		
 		var mainpanel = new Array();
-
-		var windowSize = new Array(top.window.outerWidth, top.window.outerHeight);
-	
-		// some MSIE versions won't return a value
-		if (windowSize[0] == undefined || windowSize[1] == undefined) {
-			windowSize[0] = Ext.lib.Dom.getViewWidth() + 30;
-			windowSize[1] = Ext.lib.Dom.getViewHeight() + 130;  // viewport + guessed toolbar size etc...
-		}
-
 		var panels = Ext.DomQuery.select('.wz_page');
+
 		for(var i = 0; i < panels.length; i++) {
 			mainpanel.push({
 				id: panels[i].id,
@@ -36,8 +29,10 @@ Wizard = {
 
 			// our own handlers
 			activeItemPos: 0,
-			windowSize: windowSize,
-			wizardDone: wizardDone,
+			wizardDone: args.wizardDone,
+			useAudioDir: args.useAudioDir,
+			useMusicIP: args.useMusicIP,
+			useiTunes: args.useiTunes,
 
 			next: function(){
 				if (this.items.items[this.activeItemPos].finish && !this.wizardDone) {
@@ -62,9 +57,6 @@ Wizard = {
 					}
 					
 					document.forms.wizardForm.submit();
-
-					if (this.windowSize[0] && this.windowSize[1]);
-						window.resizeTo(this.windowSize[0], this.windowSize[1]);
 				}
 
 				else if (this.wizardDone)
@@ -77,6 +69,7 @@ Wizard = {
 				else
 					this.jump(1)
 			},
+			
 			previous: function(){ this.jump(-1) },
 
 			jump: function(offset) {
@@ -156,7 +149,6 @@ Wizard = {
 									}
 			
 									else {
-										resultEl.update(SqueezeJS.string('sn_success'));
 										this.jump(1)
 									}
 								}
@@ -165,7 +157,6 @@ Wizard = {
 			
 						else {
 							email_summary.update(SqueezeJS.string('summary_none'));
-							resultEl.update(SqueezeJS.string('sn_success'));
 							this.jump(1)
 						}
 					}
@@ -177,9 +168,10 @@ Wizard = {
 					},
 
 					skip: function(){
-						var el = Ext.get('useAudiodir');
-						return !(el && el.dom.checked);
-					}
+						return !this.useAudioDir;
+					},
+					
+					useAudioDir: args.useAudioDir
 				},
 
 				playlistdir_p: {
@@ -188,50 +180,36 @@ Wizard = {
 					},
 
 					skip: function(){
-						var el = Ext.get('useAudiodir');
-						return !(el && el.dom.checked);
-					}
-				},
-
-				itunes_p: {
-					validator: function(){
-						this._validatePref('itunes', 'xml_file');
+						return !this.useAudioDir;
 					},
-
-					skip: function(){
-						var el = Ext.get('itunes');
-						return !(el && el.dom.checked);
-					}
-				},
-
-				musicip_p: {
-					skip: function(){
-						var el = Ext.get('musicmagic');
-						return !(el && el.dom.checked);
-					}
+					
+					useAudioDir: args.useAudioDir
 				},
 
 				summary_p: {
 					skip: function(){
 						// just update the summary, ...
 						Ext.get('summary').update(
-							(!(Ext.get('useAudiodir').dom.checked || Ext.get('itunes').dom.checked || Ext.get('musicmagic').dom.checked) 
+							(!(Ext.get('audiodir').dom.value || this.useiTunes || this.useMusicIP) 
 								? '<li>' + SqueezeJS.string('summary_none') + '</li>' 
-								: '') 
-							+ (Ext.get('useAudiodir').dom.checked 
+								: '') +
+							(Ext.get('audiodir').dom.value 
 								? '<li>' + SqueezeJS.string('summary_audiodir') + ' ' + Ext.get('audiodir').dom.value + '</li>'
 								         + ('<li>' + SqueezeJS.string('summary_playlistdir') + ' ' + Ext.get('playlistdir').dom.value + '</li>')
 								: '')  +
-							(Ext.get('itunes').dom.checked 
+							(this.useiTunes 
 								? '<li>' + SqueezeJS.string('summary_itunes') + '</li>' 
 								: '') +
-							(Ext.get('musicmagic').dom.checked 
-								? '<li>' + SqueezeJS.string('summary_musicmagic') + '</li>' 
+							(this.useMusicIP 
+								? '<li>' + SqueezeJS.string('summary_musicip') + '</li>' 
 								: '')
 						);
 						// ...but never skip
 						return false;
-					}
+					},
+					useAudioDir: args.useAudioDir,
+					useMusicIP: args.useMusicIP,
+					useiTunes: args.useiTunes
 				}
 			},
 
@@ -360,13 +338,6 @@ Wizard = {
 				renderTo: 'playlistdirselector',
 				filter: 'foldersonly',
 				input: 'playlistdir'
-			});
-
-		if (Ext.get('itunespathselector'))
-			this.fileselectors['itunes'] = new SqueezeJS.UI.FileSelector({
-				renderTo: 'itunespathselector',
-				input: 'xml_file',
-				filter: 'filetype:xml'
 			});
 
 		this.wizard.jump(0);

@@ -19,13 +19,11 @@ use FindBin qw($Bin);
 use lib $Bin;
 
 use constant SLIM_SERVICE => 0;
+use constant SCANNER => 1;
 
 # Tell PerlApp to bundle these modules
 if (0) {
-	require Encode::CN;
-	require Encode::JP;
-	require Encode::KR;
-	require Encode::TW;
+	require 'auto/Compress/Zlib/autosplit.ix';
 }
 
 BEGIN {
@@ -53,7 +51,6 @@ use Slim::Utils::PluginManager;
 use Slim::Utils::Progress;
 use Slim::Utils::Scanner;
 use Slim::Utils::Strings qw(string);
-use Slim::Control::Request;
 
 sub main {
 
@@ -61,6 +58,7 @@ sub main {
 	our ($quiet, $logfile, $logdir, $logconf, $debug, $help);
 
 	our $LogTimestamp = 1;
+	our $noweb = 1;
 
 	my $prefs = preferences('server');
 	my $musicmagic;
@@ -160,8 +158,17 @@ sub main {
 	# Take the db out of autocommit mode - this makes for a much faster scan.
 	Slim::Schema->storage->dbh->{'AutoCommit'} = 0;
 
+	my $scanType = 'SETUP_STANDARDRESCAN';
+
+	if ($wipe) {
+		$scanType = 'SETUP_WIPEDB';
+
+	} elsif ($playlists) {
+		$scanType = 'SETUP_PLAYLISTRESCAN';
+	}
+
 	# Flag the database as being scanned.
-	Slim::Music::Import->setIsScanning(1);
+	Slim::Music::Import->setIsScanning($scanType);
 
 	if ($cleanup) {
 		Slim::Music::Import->cleanupDatabase(1);
@@ -198,7 +205,10 @@ sub main {
 
 		for my $url (@ARGV) {
 
-			eval { Slim::Utils::Scanner->scanPathOrURL({ 'url' => $url }) };
+			eval { Slim::Utils::Scanner->scanPathOrURL({ 
+				'url'      => $url,
+				'progress' => 1, 
+			}) };
 		}
 
 	} else {
@@ -250,7 +260,7 @@ sub initializeFrameworks {
 	$log->info("SqueezeCenter OSDetect init...");
 
 	Slim::Utils::OSDetect::init();
-	Slim::Utils::OSDetect::initSearchPath();
+	Slim::Utils::OSDetect::getOS->initSearchPath();
 
 	# initialize SqueezeCenter subsystems
 	$log->info("SqueezeCenter settings init...");

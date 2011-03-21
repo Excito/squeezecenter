@@ -1,6 +1,6 @@
 package Slim::Plugin::AudioScrobbler::Plugin;
 
-# $Id: Plugin.pm 23256 2008-09-23 17:43:19Z andy $
+# $Id: Plugin.pm 24510 2009-01-05 18:54:24Z andy $
 
 # This plugin handles submission of tracks to Last.fm's
 # Audioscrobbler service.
@@ -91,6 +91,12 @@ sub initPlugin {
 	Slim::Control::Request::addDispatch(['audioscrobbler', 'banTrack', '_url', '_skip'],
 		[0, 1, 1, \&banTrack]);
 	
+	Slim::Control::Request::addDispatch([ 'audioscrobbler', 'settings' ],
+		[1, 1, 0, \&jiveSettingsMenu]);
+
+	Slim::Control::Request::addDispatch([ 'audioscrobbler', 'account' ],
+		[1, 0, 1, \&jiveSettingsCommand]);
+
 	# Pref change hooks
 	$prefs->setChange( sub {
 		my $value  = $_[1];
@@ -250,9 +256,9 @@ sub clearSession {
 	my $client = shift;
 	
 	# Reset our state
-	$client->pluginData( session_id      => 0 );
-	$client->pluginData( now_playing_url => 0 );
-	$client->pluginData( submit_url      => 0 );
+	$client->master->pluginData( session_id      => 0 );
+	$client->master->pluginData( now_playing_url => 0 );
+	$client->master->pluginData( submit_url      => 0 );
 }
 
 sub handshake {
@@ -322,10 +328,10 @@ sub _handshakeOK {
 		$log->debug( "Handshake OK, session id: $session_id, np URL: $now_playing_url, submit URL: $submit_url" );
 		
 		if ( $client ) {
-			$client->pluginData( session_id      => $session_id );
-			$client->pluginData( now_playing_url => $now_playing_url );
-			$client->pluginData( submit_url      => $submit_url );
-			$client->pluginData( handshake_delay => 0 );
+			$client->master->pluginData( session_id      => $session_id );
+			$client->master->pluginData( now_playing_url => $now_playing_url );
+			$client->master->pluginData( submit_url      => $submit_url );
+			$client->master->pluginData( handshake_delay => 0 );
 		
 			# If there are any tracks pending in the queue, send them now
 			my $queue = getQueue($client);
@@ -385,7 +391,7 @@ sub _handshakeError {
 	
 	my $delay;
 	
-	if ( $delay = $client->pluginData('handshake_delay') ) {
+	if ( $delay = $client->master->pluginData('handshake_delay') ) {
 		$delay *= 2;
 		if ( $delay > 120 ) {
 			$delay = 120;
@@ -395,7 +401,7 @@ sub _handshakeError {
 		$delay = 1;
 	}
 	
-	$client->pluginData( handshake_delay => $delay );
+	$client->master->pluginData( handshake_delay => $delay );
 	
 	$log->warn("  retrying in $delay minute(s)");
 	
@@ -412,7 +418,7 @@ sub newsongCallback {
 	my $client  = $request->client() || return;
 	
 	# If synced, only listen to the master
-	if ( Slim::Player::Sync::isSynced($client) ) {
+	if ( $client->isSynced() ) {
 		return unless Slim::Player::Sync::isMaster($client);
 	}
 
@@ -544,7 +550,7 @@ sub submitNowPlaying {
 	# Abort if the user disabled scrobbling for this player
 	return if !$prefs->client($client)->get('account');
 	
-	if ( !$client->pluginData('now_playing_url') ) {
+	if ( !$client->master->pluginData('now_playing_url') ) {
 		# Get a new session
 		handshake( {
 			client => $client,
@@ -584,7 +590,7 @@ sub submitNowPlaying {
 		}
 	}
 	
-	my $post = 's=' . $client->pluginData('session_id')
+	my $post = 's=' . $client->master->pluginData('session_id')
 		. '&a=' . uri_escape_utf8( $artist )
 		. '&t=' . uri_escape_utf8( $title )
 		. '&b=' . uri_escape_utf8( $album )
@@ -606,7 +612,7 @@ sub submitNowPlaying {
 	);
 	
 	$http->post(
-		$client->pluginData('now_playing_url'),
+		$client->master->pluginData('now_playing_url'),
 		'Content-Type' => 'application/x-www-form-urlencoded',
 		$post,
 	);
@@ -675,10 +681,10 @@ sub _submitNowPlayingError {
 sub checkScrobble {
 	my ( $client, $track, $checktime, $rating ) = @_;
 	
-	return unless $client;
+	return unless $client && $track;
 	
 	# Make sure player is either playing or paused
-	if ( $client->playmode !~ /play|pause/ ) {
+	if ( $client->isStopped() ) {
 		$log->debug( $client->id . ' no longer playing or paused, not scrobbling' );
 		return;
 	}
@@ -834,7 +840,7 @@ sub submitScrobble {
 		return $cb->();
 	}
 
-	if ( !$client->pluginData('submit_url') ) {
+	if ( !$client->master->pluginData('submit_url') ) {
 		# Get a new session
 		handshake( {
 			client => $client,
@@ -859,7 +865,7 @@ sub submitScrobble {
 	my $current_item;
 	my @tmpQueue;
 	
-	my $post = 's=' . $client->pluginData('session_id');
+	my $post = 's=' . $client->master->pluginData('session_id');
 	
 	my $index = 0;
 	while ( my $item = shift @{$queue} ) {
@@ -919,7 +925,7 @@ sub submitScrobble {
 		);
 	
 		$http->post(
-			$client->pluginData('submit_url'),
+			$client->master->pluginData('submit_url'),
 			'Content-Type' => 'application/x-www-form-urlencoded',
 			$post,
 		);
@@ -1287,4 +1293,88 @@ sub infoLoveTrackSubmit {
 	} );
 }
 		
+sub jiveSettings {
+
+	my $client = shift;
+
+	return [ {
+		stringToken    => getDisplayName(),
+		id             => 'audioscrobbler',
+		node           => 'advancedSettings',
+		weight         => 100,
+		actions => {
+			go => {
+				player => 0,
+				cmd    => [ 'audioscrobbler', 'settings' ],
+			},
+		},
+	} ];
+}
+
+sub jiveSettingsCommand {
+	my $request = shift;
+	my $client  = $request->client();
+	my $account = $request->getParam('user');
+
+	$log->debug('Setting account to: ' . $account);
+	changeAccount( $client, $account );
+
+	$request->setStatusDone();
+
+}
+	
+sub jiveSettingsMenu {
+
+	my $request  = shift;
+	my $client   = $request->client();
+	my $accounts = $prefs->get('accounts') || [];
+	my $enabled  = $prefs->get('enable_scrobbling');
+	my $selected = $prefs->client($client)->get('account');
+
+	my @menu     = ();
+
+	for my $account (@$accounts) {
+                my $item = {
+			text    => $account->{username},
+			radio   => ($selected == $account->{username} && $enabled) + 0,
+                        actions => {
+                                do => {
+                                        player => 0,
+                                        cmd    => [ 'audioscrobbler' , 'account' ],
+					params => {
+						user => $account->{username},
+					},
+                                },
+                        },
+                };
+		push @menu, $item;
+	}
+
+	# disable for this player
+	my $disableItem = {
+		text    => $client->string('PLUGIN_AUDIOSCROBBLER_SCROBBLING_DISABLED'),
+		radio   => !$enabled + 0,
+		actions => {
+			do => {
+				player => 0,
+				cmd    => [ 'audioscrobbler' , 'account' ],
+				params => {
+					user => '0',
+				},
+			},
+		},
+	};
+	push @menu, $disableItem;
+
+	my $numitems = scalar(@menu);
+	$request->addResult("count", $numitems);
+	$request->addResult("offset", 0);
+	my $cnt = 0;
+	for my $eachItem (@menu[0..$#menu]) {
+		$request->setResultLoopHash('item_loop', $cnt, $eachItem);
+		$cnt++;
+	}
+	$request->setStatusDone();
+}
+
 1;

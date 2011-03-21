@@ -1,6 +1,6 @@
 package Slim::Display::Display;
 
-# $Id: Display.pm 22997 2008-09-01 15:59:20Z andy $
+# $Id: Display.pm 24135 2008-11-27 15:10:52Z andy $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -60,6 +60,8 @@ my $prefs = preferences('server');
 
 my $log = logger('player.display');
 
+my $initialized;
+
 our $defaultPrefs = {
 	'idleBrightness'       => 1,
 	'scrollMode'           => 0,
@@ -69,6 +71,9 @@ our $defaultPrefs = {
 	'scrollRateDouble'     => 0.1,
 	'alwaysShowCount'      => 1,
 };
+
+$prefs->setValidate('num', qw(scrollRate scrollRateDouble scrollPause scrollPauseDouble));
+
 
 {
 	__PACKAGE__->mk_accessor('rw', 'client'); # Note: Always keep client as the first accessor
@@ -117,6 +122,8 @@ sub init {
 	$display->initPrefs();
 
 	$display->displayStrings(Slim::Utils::Strings::clientStrings($display->client));
+	
+	$initialized = 1;
 }
 
 sub initPrefs {
@@ -213,6 +220,8 @@ sub showBriefly {
 	my $display = shift;
 	my $parts   = shift;
 	my $args    = shift;
+	
+	return unless $initialized;
 
 	my $client = $display->client;
 
@@ -461,7 +470,7 @@ sub curDisplay {
 
 sub curLines {
 	my $display = shift;
-	my $client = $display->client;
+	my $client = $display->client || return;
 	my $linefunc = $client->lines;
 	my $parts;
 
@@ -682,6 +691,7 @@ sub scrollUpdate {
 					# transition to permanent scroll pause state
 					$scroll->{offset} = $scroll->{scrollstart};
 					$scroll->{paused} = 1;
+					$scroll->{inhibitsaver} = 0;
 					if ($scroll->{scrollonceend}) {
 						# schedule endAnimaton to kill off scrolling and display new screen
 						$display->animateState(6) unless ($display->animateState() == 5);

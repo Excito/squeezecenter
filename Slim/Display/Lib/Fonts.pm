@@ -5,7 +5,7 @@ package Slim::Display::Lib::Fonts;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 #
-# $Id: Fonts.pm 23166 2008-09-13 19:01:54Z adrian $
+# $Id: Fonts.pm 23167 2008-09-13 19:38:16Z andy $
 #
 
 =head1 NAME

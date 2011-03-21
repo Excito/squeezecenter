@@ -1,6 +1,6 @@
 package Slim::Formats::RemoteStream;
 		  
-# $Id: RemoteStream.pm 15258 2007-12-13 15:29:14Z mherger $
+# $Id: RemoteStream.pm 23539 2008-10-13 19:11:58Z adrian $
 
 # SqueezeCenter Copyright 2001-2007 Logitech.
 #
@@ -28,6 +28,10 @@ use constant MAXCHUNKSIZE => 32768;
 my $log = logger('player.streaming.remote');
 
 my $prefs = preferences('server');
+
+sub isRemote {
+	return 1;
+}
 
 sub open {
 	my $class = shift;
@@ -127,11 +131,12 @@ sub request {
 	my $post    = $args->{'post'};
 
 	my $class   = ref $self;
-	my $request = $self->requestString($args->{'client'}, $url, $post);
+	my $request = $self->requestString($args->{'client'}, $url, $post, $args->{'song'} ? $args->{'song'}->{'seekdata'} : undef);
 	
 	${*$self}{'client'}  = $args->{'client'};
 	${*$self}{'create'}  = $args->{'create'};
 	${*$self}{'bitrate'} = $args->{'bitrate'};
+	${*$self}{'infoUrl'} = $args->{'infoUrl'};
 	
 	$log->info("Request: $request");
 
@@ -193,9 +198,11 @@ sub request {
 
 		return $class->open({
 			'url'     => $redir,
+			'song'    => $args->{'song'},
 			'infoUrl' => $self->infoUrl,
 			'post'    => $post,
 			'create'  => $args->{'create'},
+			'client'  => $args->{'client'},
 		});
 	}
 
