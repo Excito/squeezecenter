@@ -1,0 +1,4 @@
+skinparents:
+ - Nokia770
+preprocess:
+ - cmdwrappers_Nokia770

@@ -1,0 +1,114 @@
+[%- pagetitle = 'SEARCHMUSIC' | string %]
+[%- pageicon = icons.SEARCHMUSIC %]
+[% extJsScripts = BLOCK %]
+	<script type="text/javascript">
+		Ext.onReady(function(){
+			new Ext.form.TextField({
+				applyTo: 'livesearch',
+				validationDelay: 100,
+				validateOnBlur: false,
+				selectOnFocus: true,
+
+				validator: [% IF manualSearch; 'null'; ELSE %]function(value){
+					var el;
+
+					if (value.length > 2) {
+						if (el = Ext.get('browsedbHeader'))
+							el.remove();
+
+						if (el = Ext.get('browsedbList'))
+							el.remove();
+
+						el = Ext.get('search-results')
+
+						// don't wait for an earlier update to finish
+						if (el.getUpdateManager().isUpdating())
+							el.getUpdateManager().abort();
+
+						el.load('search.xml',
+							{
+								query: value,
+								player: player
+							},
+							function(){
+								Highlighter.init();
+								SqueezeJS.UI.ScrollPanel.init();
+							}
+						);
+					}
+					else if (el = Ext.get('search-results')) {
+						el.update('');
+					}
+
+					return true;
+				},
+
+				// overwrite default filter to ignore key modifiers
+			    filterValidation : function(e){
+			        if(!e.isNavKeyPress() && !e.isSpecialKey()){
+			            this.validationTask.delay(this.validationDelay);
+			        }
+			    }
+				[% END %]
+			});
+
+			new Ext.Button({
+				renderTo: 'searchButton',
+				text: '[% "SEARCH" | string %]',
+				type: 'submit',
+				handler: function(){
+					document.getElementById("searchForm").submit();
+				}
+			});
+		});
+	</script>
+[% END %]
+[% pwd_list = BLOCK %]
+	<a href="search.html?player=[% playerURI %][% IF liveSearch %]&amp;livesearch=1[% END %]">[% "SEARCH" | string %]</a>
+[% END %]
+[% PROCESS pageheader.html dontscroll=browse_items.size %]
+
+	<div class="searchHeader">
+	<form id="searchForm" name="searchForm" method="GET" action="search.html">
+		<table><tr>
+			<td><input type="text" id="livesearch" name="query" size="30" value="[% query %]" autocomplete="off"/></td>
+			<td><span id="searchButton"></span></td>
+			<td id="advSearchLink" class="link"><a href="[% webroot %]advanced_search.html?player=[% playerid %]">[% "ADVANCEDSEARCH" | string %]</a></td>
+		</tr></table>
+		<input type="hidden" value="1" name="manualSearch">
+		<input type="hidden" value="[% player %]" name="player">
+	</form>
+	</div>
+
+	<div id="browsedbHeader">
+		[% IF searchError %]
+			[% searchError %]
+		[% END %]
+		[% IF pageinfo.totalpages && pageinfo.totalpages > 1 %]
+			<div class="pagerbox">
+				<div class="pagerbox_top"><div></div></div>
+				<div class="pagerbox_content">
+					[% PROCESS pagebar %]
+				</div>
+				<div class="pagerbox_bottom"><div></div></div>
+			</div>
+		[% END %]
+	</div>
+
+	<div id="search-results">
+		[% IF browse_items.size %]
+			<div id="browsedbList">
+	
+				[% FOREACH item = browse_items %]
+					[% PROCESS browsedbitems_list.html %]
+				[% END %]
+	
+			</div>
+		[% ELSIF manualSearch %]
+			<div id="browsedbList">
+				[% "NO_SEARCH_RESULTS" | string %]
+			</div>
+		[% END %]
+	</div>
+
+[% PROCESS pagefooter.html %]

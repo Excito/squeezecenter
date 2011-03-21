@@ -1,0 +1,212 @@
+[% IF browse_items.size %]
+	[% extJsScripts = BLOCK %]
+	<script TYPE="text/javascript">
+		Ext.onReady(function(){
+			var el = Ext.get('advLink');
+			if (el) {
+				var link = el.dom.href;
+				el.dom.href='javascript:void(0);';
+				el.on('click', function(){ 
+					var f = Ext.get('advSearchForm');
+					
+					if (f.isVisible())
+						location = link;
+					else {
+						f.show();
+						SqueezeJS.UI.ScrollPanel.init();
+					} 
+				})
+			}
+		});
+	</script>
+	[% END %]
+[% END %]
+[% pagetitle = 'ADVANCEDSEARCH' | string %]
+[% pageicon = icons.SEARCHMUSIC %]
+[% pwd_list = BLOCK %]
+<a id="advLink" href="advanced_search.html?player=[% playerURI %]">[% "ADVANCEDSEARCH" | string %]</a>
+[% END %]
+[% IF NOT ajaxUpdate; PROCESS pageheader.html; END %]
+[% FILTER null %]
+[% MACRO logicalSelectionBlock BLOCK %]
+	<select name="[% name %]">
+		<option [% IF $name == "=" %]selected[% END %] value="=" >[% "EQUALS" | string %]</option>
+		<option [% IF $name == "<" %]selected[% END %] value="&lt;" >[% "LESSTHAN" | string %]</option>
+		<option [% IF $name == ">" %]selected[% END %] value="&gt;" >[% "GREATERTHAN" | string %]</option>
+		<option [% IF $name == "!=" %]selected[% END %] value="!=" >[% "NOT" | string %]</option>
+	</select>
+[% END %]
+
+[% size = maxInputSize ? maxInputSize : 35 %]
+
+[% MACRO timeSelectionBlock BLOCK %]
+	<select name="[% name %]">
+		<option [% IF $name == "=" %]selected[% END %] value="=" >[% "IS" | string %]</option>
+		<option [% IF $name == "<" %]selected[% END %] value="&lt;" >[% "BEFORE" | string %]</option>
+		<option [% IF $name == ">" %]selected[% END %] value="&gt;" >[% "AFTER" | string %]</option>
+	</select>
+[% END %]
+
+[% BLOCK  field %]
+	<tr>
+		<td class="content" align="right" valign="middle" width="30%">[% title | string %]&nbsp;</td>
+		<td class="content" align="left" valign="middle" width="70%">
+		  [% content %]
+		</td>
+	</tr>
+[% END %]
+[% END %]
+	<form action="advanced_search.html" method="GET" name="searchForm" id="advSearchForm" [% IF resultClass || browse_items.size %]class="[% resultClass || "resultsPage" %]"[% END %]><br>
+	<input type="hidden" value="[% player %]" name="player">
+
+	<table class="border" border="0" cellpadding="3" cellspacing="1" width="100%">
+		<tbody>
+
+[% WRAPPER field title='TRACK' %]
+	<input name="search.me_titlesearch" value="[% search.me_titlesearch.value %]" size="[% size %]" maxlength="100" type="text">
+[% END %]
+
+[% WRAPPER field title='ARTIST' %]
+	<input name="search.contributor_namesearch" value="[% search.contributor_namesearch.value %]" size="[% size %]" maxlength="100" type="text">
+[% END %]
+
+[% WRAPPER field title='ALBUM' %]
+	<input name="search.album_titlesearch" value="[% search.album_titlesearch.value %]" size="[% size %]" maxlength="100" type="text">
+[% END %]
+
+[% WRAPPER field title='GENRE' %]
+	<select name="search.genre">
+		<option value="">[% "ANY_GENRE" | string %]</option>
+
+		[%- WHILE (genre = genres.next) -%]
+			[%- NEXT IF NOT genre.name -%]
+			<option value="[% genre.id %]" [% IF search.genre.value == genre.id %]selected[% END %]>[% genre.name | html %]</option>
+		[% END -%]
+	</select>
+[% END %]
+
+[% WRAPPER field title='LENGTH' %]
+	[% logicalSelectionBlock(name='search.secs.op') %]
+
+	<input name="search.secs" value="[% search.secs.value %]" size="4" maxlength="4" style="text-align: right;" type="text">
+	[% "SECONDS" | string %]
+[% END %]
+
+[% WRAPPER field title='TRACK' %]
+	[% logicalSelectionBlock(name='search.tracknum.op') %]
+
+	<input name="search.tracknum" value="[% search.tracknum.value %]" size="3" maxlength="3" style="text-align: right;" type="text">
+[% END %]
+
+[% WRAPPER field title='YEAR' %]
+	[% timeSelectionBlock(name='search.year.op') %]
+
+	<input name="search.year" value="[% search.year.value %]" size="4" maxlength="4" style="text-align: right;" type="text">
+[% END %]
+
+[% WRAPPER field title='MODTIME' %]
+	[% timeSelectionBlock(name='search.timestamp.op') %]
+
+	<input name="search.timestamp" value="[% search.timestamp.value %]" size="10" maxlength="10" type="text">
+	&nbsp; [% "EXAMPLE_SHORT" | string %] mm/dd/yyyy
+[% END %]
+
+[% WRAPPER field title='BITRATE' %]
+	[% logicalSelectionBlock(name='search.bitrate.op') %]
+
+	<select name="search.bitrate">
+		<option value="">[% "ANY_VALUE" | string %]</option>
+
+		[% FOREACH bitRate = [ 32 40 48 56 64 80 96 112 128 160 192 224 256 320 ] %]
+			<option value="[% bitRate %]" [% IF search.bitrate.value == bitRate %]selected[% END %]>[% bitRate %]</option>
+		[%- END %]
+
+	</select> [% "KBPS" | string %]
+[% END %]
+
+<!--
+	<tr>
+		<td class="content" align="right" valign="middle" width="30%">[% 'SAMPLERATE' | string %]&nbsp;</td>
+		<td class="content" align="left" valign="middle" width="70%">
+
+			[% logicalSelectionBlock(name='search.samplerate.op') %]
+
+			<select name="search.samplerate">
+				<option value="">[% "ANY_VALUE" | string %]</option>
+
+				[% FOREACH sampleRate = [ 32000 44100 ] %]
+					<option value="[% sampleRate %]">[% sampleRate %]</option>
+				[% END %]
+			</select> kHz
+<				/td>
+	</tr>
+-->
+
+[% WRAPPER field title='TYPE' %]
+	<select name="search.content_type">
+		<option value="">[% "ANY_TYPE" | string %]</option>
+
+		[% FOREACH type = fileTypes.keys %]
+			<option value="[% type %]" [% IF search.content_type.value == type %]selected[% END %]>[% fileTypes.$type %]</option>
+		[%- END %]
+	</select>
+[% END %]
+
+[% WRAPPER field title='FILELENGTH' %]
+	[% logicalSelectionBlock(name='search.filesize.op') %]
+
+	<input name="search.filesize" value="[% search.filesize.value %]" size="12" maxlength="12" style="text-align: right;" type="text">
+	[% "BYTES" | string %]
+[% END %]
+
+	<tr>
+		<td class="content" align="right" nowrap="nowrap" valign="middle" width="25%">[% "COMMENT" | string %]&nbsp;</td>
+		<td class="content" align="left" valign="middle" width="75%">
+			<input name="search.comments_value" value="[% search.comments_value.value %]" size="[% size %]" maxlength="1000" type="text">
+		</td>
+	</tr>
+
+	<tr>
+		<td class="content" align="right" nowrap="nowrap" valign="middle" width="25%">[% "LYRICS" | string %]&nbsp;</td>
+		<td class="content" align="left" valign="middle" width="75%">
+		  <input name="search.lyrics" value="[% search.lyrics.value %]" size="[% size %]" maxlength="1000" type="text">
+		</td>
+	</tr>
+
+	<tr>
+		<td>&nbsp;</td>
+		<td class="content" valign="middle">
+			<br>
+			<input value="[% "SEARCH" | string %]" name="submitAdvSearch" id="submitAdvSearch" type="submit">
+			<input value="[% "CLEAR"  | string %]" name="resetAdvSearch" type="submit">
+		</td>
+	</tr>
+	
+	</tbody></table><br></form>
+
+	<div id="browsedbHeader">
+		[% IF searchError %]
+			[% searchError %]
+		[% END %]
+		
+		[% IF pageinfo.totalpages && pageinfo.totalpages > 1 %][% PROCESS pagebar %][% END %] 
+	</div>
+
+		
+	[% IF browse_items.size %]
+		<div id="browsedbList">
+
+			[% FOREACH item = browse_items %]
+				[% PROCESS browsedbitems_list.html %]
+			[% END %]
+
+		</div>
+	[% ELSIF search %]
+
+		[% "NO_SEARCH_RESULTS" | string %]
+
+	[% END %]
+
+[% IF pageinfo.totalpages && pageinfo.totalpages > 1 %][% PROCESS pagebar %][% END %]
+
+[% IF not ajaxUpdate; PROCESS pagefooter.html; END %]

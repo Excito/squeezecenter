@@ -1,0 +1,149 @@
+[% pagetitle = 'Artwork Setup' %]
+[% lefttoright = '1' %]
+[% PROCESS helpheader.html %]
+
+<p>
+The SqueezeCenter can display artwork associated with each album.
+This "cover art" is typically a copy of the CD/album's cover.
+</p>
+<p>
+Artwork is displayed in several places within the SqueezeCenter Web interface.
+The details of the display vary depending on the skin currently being
+used. The "Default", "Fishbone," and "Moser" skins have browse by cover art 
+functions, clicking on a picture of the CD/album will select the album for
+playing or processing. The "Default" and "Fishbone" skins also display the cover art
+in the status display as the songs are played.
+</P>
+
+<h4>What is Artwork, how does the SqueezeCenter use it?</h4>
+<p>
+Artwork is cover art from CD albums. It is displayed both to beautify 
+the SqueezeCenter interface, and in the "Browse by album" section to
+specify which albums are selected for playing or processing.
+</p>
+
+<h4>How do I get cover art?</h4>
+<p>
+Many site that sell CDs include
+cover art in their catalog. With most browsers, you can right click
+on the image and select "Save image as..."
+</P>
+<p>
+Several third party developers have written utilities
+to automatically retreive cover art based on the internal tags 
+of your MP3, Ogg, Flac, or other files. See 
+<a href="http://www.slimdevices.com/dev_third_party.html">http://www.slimdevices.com/dev_third_party.html</a> 
+for more information.
+</p>
+<h4>Graphic file requirements</h4>
+<p>The SqueezeCenter will display any graphic file that your browser can support. 
+Nearly all browsers support .GIF and .JPG files, so most SlimDevices
+customers use one of these file formats.</p>
+<h4>Image sizes</h4>
+<p>
+The image files should be modest in size, as they are sized to fit
+on the HTML browser window. There is no reason to have images
+larger than 300x300 pixels, they won't be displayed with that size,
+and it simply takes up space and bandwidth.
+</P>
+
+<h4>Technical details</h4>
+<p>For each place in the skin that references a large cover art image,
+the SqueezeCenter software performs the following search:</p>
+<ul>
+<li>Search in the current music directory for (in order): <br>
+<ol><li>cover.jpg, cover.gif, <li>folder.jpg, folder.gif, <li>album.jpg, album.gif, <li>thumb.jpg, thumb.gif, <li>albumartsmall.jpg, albumartsmall.gif</ul>
+</ol>
+<p>
+The SqueezeCenter will use the first image file located in this search.</p>
+
+<p>
+SqueezeCenter looks in the same path as the song, thus you would be looking for the
+same artfile in this case.  However there is an option in Server Settings,
+Advanced, Formatting for setting filenames for Artwork, Artwork Thumbnail, and
+for setting a central location for artwork files. You can enter a specific filename 
+if you use something not found in the list (eg, artwork.jpg).  You may also create 
+filenames based on song variables.  If your first character is %, the server then parses
+ the rest of the string as an InfoFormat, the same as title format is created.
+</p>
+
+<p>
+As an example, you could create a single directory of songs and name all your
+artwork as artist-album.jpg.  For this, enter a setting of</p> 
+<pre>&nbsp;&nbsp;%ARTIST-ALBUM.jpg</pre> 
+<p>for Artwork or Artwork Thumbnail in the server settings section.  The extension can be specified for any SqueezeCenter supported format, .jpg is
+assumed if no extension is given.
+</P>
+
+
+<p>
+Available data elements are:</p> 
+<table>
+<tr><td>&nbsp;&nbsp;</td><td>
+<dl>
+<dt>CT 
+<dd>content type
+<dt>TITLE
+<dd>Song title
+<dt>GENRE
+<dd>Song genre
+<dt>TRACKNUM
+<dd>tracknumber as an integer
+<dt>FS
+<dd>file size as reported by the underlying Operating System.
+<dt>ARTIST
+<dd>Artist for pop music, sometimes conductor for classical works.
+<dt>ALBUM
+<dd>Album name.
+<dt> COMMENT
+<dd>Often the encoder used to create the   MP3/FLAC/AAC/... file.
+<dt> YEAR 
+<dd>Year published or released.
+<dt>SECS
+<dd>total song length in seconds 
+<dt>DURATION 
+<dd>(minutes and seconds), 
+<dt>VBR_SCALE 
+<dd>vbr/cbr 
+<dt>BITRATE
+<dd>encoded bit rate
+<dt>VOLUME
+<dd>volume name 
+<dt>PATH 
+<dd>Path to the song
+<dt>FILE 
+<dd>main file name of song
+<dt>EXT
+<dd>file extension of song (Type in Microsoft systems) 
+<dt>LONGDATE
+<dd>current date, long 
+<dt>SHORTDATEi
+<dd>current date, short 
+<dt>
+CURRTIME
+<dd>current time.
+</dl>
+</td></tr></table>
+<p>Elements can be separated by anything (or nothing). The separators are only used
+if the data elements are present.
+</p>
+
+<p>
+The above list is included for completeness, it is unlikely that anyone would actually
+want to have differing artwork files for songs of different bitrates, but the
+ability is in the SqueezeCenter.
+</P>
+
+<p>
+Artwork internal to the  ID3 tags within a song takes precedence, followed by any specified filename in the server
+settings.  If an Artwork Folder setting is used (in Server Settings, Additional, Interface) then that folder is searched first
+for any file matching those given for Artwork.
+</p>
+
+<p>
+Browse by artwork and status BOTH scale the same image
+file found for Thumb.  By default, the browse by artwork contrains to 100x100,
+while the status constrains to 100 leaving aspect ratio intact. 
+</p>
+
+[% PROCESS helpfooter.html %]

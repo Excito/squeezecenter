@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+
+<extension>
+	<id>2A25E5C4-036E-493F-890C-2BFC07944110</id>
+	<name>MUSICMAGIC</name>
+	<module>Slim::Plugin::MusicMagic::Plugin</module>
+	<version>1.0</version>
+	<description>MUSICMAGIC_DESC</description>
+	<creator>Slim Devices/Logitech</creator>
+	<email>support@slimdevices.com</email>
+
+	<defaultState>enabled</defaultState>
+
+	<homepageURL>http://www.slimdevices.com/</homepageURL>
+	<icon>plugins/MusicMagic/html/images/icon.png</icon>
+	<optionsURL>plugins/MusicMagic/settings/musicmagic.html</optionsURL>
+	<type>2</type><!-- type=extension -->
+
+	<targetApplication>
+		<id>SqueezeCenter</id>
+		<minVersion>7.0a</minVersion>
+		<maxVersion>*</maxVersion>
+	</targetApplication>
+
+</extension>

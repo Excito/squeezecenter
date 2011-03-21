@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+	<head>
+		<meta http-equiv="X-UA-Compatible" content="IE=7" />
+		<title>[% "SQUEEZECENTER" | string %] - [% "HELP" | string %]</title>
+
+		<link rel="stylesheet" type="text/css" href="/html/ext/resources/css/ext-all.css" />
+		<link rel="stylesheet" type="text/css" href="[% webroot %]slim-ext.css?r=[% revision %]" />
+		<link rel="stylesheet" type="text/css" href="[% webroot %]slimserver.css?r=[% revision %]" />
+		<link rel="stylesheet" type="text/css" href="[% webroot %]skin.css?r=[% revision %]" />
+
+		<style>
+			html { background: #666666; }
+		</style>
+
+		<!--[if lte IE 6]>
+		<link href="[% webroot %]ie.css?r=[% revision %]" type="text/css" rel="stylesheet">
+		<![endif]-->
+		<!--[if IE 7]>
+		<link href="[% webroot %]ie7.css?r=[% revision %]" type="text/css" rel="stylesheet">
+		<![endif]-->
+
+		<script type="text/javascript" src="/html/ext/adapter/ext/ext-base.js?r=[% revision %]"></script>
+		<script type="text/javascript" src="/html/ext/ext-all[% IF debug %]-debug[% END %].js?r=[% revision %]"></script>
+		<script type="text/javascript">[% PROCESS html/vars.js %]</script>
+ 		<script type="text/javascript" src="/html/SqueezeJS/Base.js?r=[% revision %]"></script>
+		<script type="text/javascript">[% PROCESS html/SqueezeJS/Strings.js %]</script>
+		<script type="text/javascript" src="[% webroot %]html/Help.js?r=[% revision %]"></script>
+
+		<script type="text/javascript">
+			Ext.onReady(Help.init, Help, true);
+		</script>
+	</head>
+
+	<body class="singlePanel help">
+		<img id="background" src="[% webroot %]html/images/background.png" />
+
+		<div id="header">
+			<div id="header_left"></div>
+			<div id="header_content">
+				<span><img src="[% webroot %]html/images/spacer.gif" id="squeezeCenterLogo"></span>
+				<span><a href="http://www.slimdevices.com" target="_blank"><img src="[% webroot %]html/images/spacer.gif" id="logitechLogo"></a></span>
+			</div>
+		</div>
+
+		<div id="inner_header">
+			<div class="inner">
+				<div class="inner_top"></div>
+				<div class="inner_top_left">&nbsp;</div>
+				<div class="inner_top_right"></div>
+			</div>
+		</div>
+
+		<iframe src="[% webroot %]home.html?page=help" name="help" width="100%" id="maincontent" frameborder="0" scrolling="auto"></iframe>
+
+		<div id="inner_footer">
+			<div id="infoTab" class="buttonbar">
+				<table id="buttonbar">
+					<tr><td><span id="close"></span></td><tr>
+				</table>
+			</div>				
+
+			<div class="inner">
+				<div class="inner_bottom"></div>
+				<div class="inner_bottom_left">&nbsp;</div>
+				<div class="inner_bottom_right">&nbsp;</div>
+			</div>
+		</div>
+
+		<div id="footer">
+			<div id="footer_left"></div>
+			<div id="footer_content">
+			</div>
+		</div>
+
+	</body>
+</html>

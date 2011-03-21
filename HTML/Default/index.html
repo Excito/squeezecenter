@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+	<head>
+		<meta http-equiv="X-UA-Compatible" content="IE=7" />
+		<title>[% "SQUEEZECENTER" | string %]</title>
+
+		[% USE Prefs %][% IF Prefs.preferences('server').get('language') == 'HE' %]
+		<meta http-equiv="refresh" content="0; URL=/Classic/">
+		[% END %]
+		
+		<link rel="stylesheet" type="text/css" href="/html/ext/resources/css/ext-all.css" />
+		<link rel="stylesheet" type="text/css" href="[% webroot %]slim-ext.css?r=[% revision %]" />
+		<link rel="stylesheet" type="text/css" href="[% webroot %]slimserver.css?r=[% revision %]" />
+		<link rel="stylesheet" type="text/css" href="[% webroot %]skin.css?r=[% revision %]" />
+
+		<style>
+			html { background: #666666; }
+
+			#loading-mask {
+				width: 120%;
+				height: 100%;
+				background-image: url(html/images/background.png);
+				position: absolute;
+				z-index: 20000;
+				left: 0;
+				top: 0;
+			}
+
+			#loading {
+				position: absolute;
+				left: 40%;
+				top: 40%;
+				text-align: center;
+				z-index: 20001;
+				display: none;
+			}
+
+			#loading .loading-indicator,
+
+			#noJS { color: white; }
+			#noJS a, #noJS a:visited { color: yellow; }
+			
+			.loading-indicator {
+				background-image: url(html/images/loading.gif);
+			}
+
+			[% IF debug %]
+			.x-layout-panel-body { background: white; }
+			.x-btn-text, .x-btn button { color: black; }
+			.x-dlg .x-tabs-bottom .x-tabs-body {
+				background: white;
+				color: black;
+			}
+			[% END %]
+		</style>
+
+		<!--[if lte IE 6]>
+		<link href="[% webroot %]ie.css?r=[% revision %]" type="text/css" rel="stylesheet">
+		<![endif]-->
+		<!--[if IE 7]>
+		<link href="[% webroot %]ie7.css?r=[% revision %]" type="text/css" rel="stylesheet">
+		<![endif]-->
+	</head>
+
+	<body class="main">
+		<img id="background" src="[% webroot %]html/images/background.png" />
+
+		<div id="loading-mask">&#160;</div>
+		<div id="loading">
+			<div class="loading-indicator">
+				[% "LOADING_SQUEEZECENTER" | string %]
+			</div>
+		</div>
+		<div id="noJS">[% "SETUP_NO_JAVASCRIPT" | string %]</div>
+
+		<script type="text/javascript">
+			document.getElementById('noJS').style.display = 'none';
+			document.getElementById('loading').style.display = 'block';
+		</script>
+
+		<script type="text/javascript" src="/html/ext/adapter/ext/ext-base.js?r=[% revision %]"></script>
+		<script type="text/javascript" src="/html/ext/ext-all[% IF debug %]-debug[% END %].js?r=[% revision %]"></script>
+		<script type="text/javascript">[% PROCESS html/vars.js %]</script>
+ 		<script type="text/javascript" src="/html/SqueezeJS/Base.js?r=[% revision %]"></script>
+		<script type="text/javascript">[% PROCESS html/SqueezeJS/Strings.js %]</script>
+		<script type="text/javascript" src="/html/SqueezeJS/UI.js?r=[% revision %]"></script>
+		<script type="text/javascript" src="[% webroot %]html/Main.js?r=[% revision %]"></script>
+
+		<script type="text/javascript">
+			[% IF moreThanThis != "" %]SqueezeJS.setCookie( 'SqueezeCenter-allLinks', "[% moreThanThis %]" )[% END %]
+
+			Ext.onReady(Main.init, Main, true);
+		</script>
+
+		<div id="header">
+			<div id="header_left"></div>
+			<div id="header_content">
+				<span><a href="[% webroot %]"><img src="[% webroot %]html/images/spacer.gif" id="squeezeCenterLogo"></a></span>
+				<span id="playerChooser"></span>
+				<span><a href="http://www.slimdevices.com" target="_blank"><img src="[% webroot %]html/images/spacer.gif" id="logitechLogo"></a></span>
+			</div>
+		</div>
+
+
+		<div id="leftheader">
+			<div class="inner">
+				<div class="inner_top"></div>
+				<div class="inner_top_left">&nbsp;</div>
+				<div class="inner_top_right">&nbsp;</div>
+			</div>
+		</div>
+
+		<iframe src="[% webroot %]home.html?player=[% playerid %]&uid=[% USE date; date.now %]" name="browser" id="leftcontent" frameborder="0" scrolling="no"></iframe>
+
+		<div id="leftfooter">
+			<div class="inner">
+				<div class="inner_bottom"></div>
+				<div class="inner_bottom_left">&nbsp;</div>
+				<div class="inner_bottom_right">&nbsp;</div>
+			</div>
+		</div>
+
+
+		<div id="rightheader">
+			<div class="inner">
+				<div class="inner_top"></div>
+				<div class="inner_top_left">&nbsp;</div>
+				<div class="inner_top_right">&nbsp;</div>
+			</div>
+		</div>
+
+		<div class="inner_content" id="rightcontent">
+			<div id="playerControlPanel">
+				[% PROCESS status_header.html embedded=1 %]
+			</div>
+
+			<div id="playlistPanel">
+				<div id="playList">
+					<div class="noPlayerPanel" style="display:none">
+						[% PROCESS status_noclients.html ajaxUpdate=1 %]
+					</div>
+				</div>
+			</div>
+		</div>
+	
+		<div id="rightfooter">
+			<div class="inner">
+				<div class="inner_bottom"></div>
+				<div class="inner_bottom_left">&nbsp;</div>
+				<div class="inner_bottom_right">&nbsp;</div>
+			</div>
+		</div>
+
+
+		<div id="footer">
+			<div id="footer_left"></div>
+			<div id="footer_content">
+				<span id="helpInfoSection">
+					<span id="helpLink">
+						<a href="[% webroot %]html/docs/help.html" target="sc_help"><img src="[% webroot %]html/images/btn_help.gif"/></a>
+						<a href="[% webroot %]html/docs/help.html" target="sc_help">[% "HELP" | string %]</a>
+					</span>
+
+					<span id="footerInfo">
+						<span id="scanWarning" style="display:none;">
+							<a href="[% webroot %]progress.html?type=importer" target="browser"><img src="[% webroot %]html/images/btn_info.gif"/></a>
+							<a href="[% webroot %]progress.html?type=importer" target="browser">
+								[% "RESCANNING_SHORT" | string %]
+								<span id="progressInfo" class="link" style="display:none;">
+									<span id="progressName"></span>
+									<span class="progress">&nbsp;(</span><span id="progressDone"></span>
+									<span class="progress"> [% "OF" | string %] </span>
+									<span id="progressTotal"></span><span class="progress">)&nbsp;</span>
+								</span>
+							</a>
+						</span>
+
+						[% IF newVersion %]
+							<span id="newVersion">
+								<img src="[% webroot %]html/images/btn_info.gif"/> [% newVersion %]
+							</span>
+						[% END %]
+
+						<span id="footerInfoText"></span>
+					</span>
+
+				</span>
+
+				<span id="settingsLink">
+					[% IF NOT (nosetup || noserver) %]
+						<a id="settingsBtn"  href="[% webroot %]settings/index.html?player=[% player %]" target="sc_settings"><img src="[% webroot %]html/images/btn_settings.gif"/></a>
+						<a id="settingsHRef" href="[% webroot %]settings/index.html?player=[% player %]" target="sc_settings">[% "SETTINGS" | string %]</a>
+					[% END %]
+				</span>
+			</div>
+		</div>
+
+	</body>
+</html>

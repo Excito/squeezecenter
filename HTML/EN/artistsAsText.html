@@ -1,0 +1,13 @@
+[% UNLESS noby %] [% "BY" | string %] [% END %]
+[%- FILTER null %]
+[% contributorsText = [] %]
+
+[% contributors = item.artistsWithAttributes || itemobj.artistsWithAttributes %]
+
+[% FOREACH contributorTuple IN contributors %]
+
+	[% contributorsText.push(contributorTuple.name) %]
+
+[% END %]
+[% END -%]
+[% contributorsText.join(', ') %]

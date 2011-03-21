@@ -1,0 +1,185 @@
+[% IF query %]
+	[%# Add the search query to each link if available %]
+	[% searchquery = 'query=' _ query _ '&amp;' %]
+[% END %]
+
+[% FILTER null %]
+[% pageicon = 'RADIO'; noSpacer = NOT streaminfo; %]
+[% pwd_list = [];
+	FOREACH crumb IN crumb;
+		crumbItem = BLOCK %]
+			<a href="[% path %]?[% searchquery | replace("'", "%27") | uri %]player=[% playerURI %]&amp;index=[% crumb.index %]&amp;sess=[% sess %]">[% crumb.name %]</a>
+		[% END %]
+		[% pwd_list.push(crumbItem) %]
+	[% END %]
+[% END # filter -%]
+
+[% IF useAJAX %][% pageHeaderScripts = BLOCK %]
+	<script TYPE="text/javascript">[% PROCESS html/vars.js %]</script>
+	<script type="text/javascript" src="[% webroot %]html/prototype.js?r=[% revision %]" ></script>
+	<script type="text/javascript" src="[% webroot %]html/scriptaculous/scriptaculous.js?load=effects,dragdrop&amp;r=[% revision %]"></script>
+	<script TYPE="text/javascript" src="[% webroot %]html/global.js?r=[% revision %]"></script>
+	<script TYPE="text/javascript" src="[% webroot %]html/common.js?r=[% revision %]"></script>
+[% END %][% END %]
+
+[% IF NOT ajaxUpdate %][% PROCESS pageheader.html %]<div id="mainbody">[% END %]
+
+[% IF msg %][% WRAPPER contentcontainer %]
+	<b>[% msg %]</b>
+[% END %][% END %]
+
+[% IF streaminfo %]
+	[% IF streaminfo.item.enclosure || streaminfo.item.url %]
+	<div id="songInfoHeader">
+		[% WRAPPER playlink %]href="[% path %]?[% searchquery %]action=play&amp;index=[% streaminfo.index %]&amp;player=[% player | uri %]&amp;sess=[% sess %]"[% END %] [% "PLAY" | string %]<br />
+		[% WRAPPER addlink %]href="[% path %]?[% searchquery %]action=add&amp;index=[% streaminfo.index %]&amp;player=[% player | uri %]&amp;sess=[% sess %]"[% END %] [% "ADD_TO_PLAYLIST" | string %]
+	</div>
+	[% END %]
+	
+	[% PROCESS xmlbrowser_details.html %]
+[% END %]
+
+[% IF search %]
+	<form id="searchForm" name="searchForm" method="GET">
+		<input type="text" id="query" name="query" size="40" value="[% query %]"/>
+		<input name="submit" type="submit" class="stdclick" value="[% "SEARCH" | string %]" onClick = "document.searchForm.submit();"><p>
+		<input type="hidden" value="[% player %]" name="player">
+		<input type="hidden" value="[% sess %]" name="sess">
+	</form>
+[% END %]
+
+[%- odd = 1 %]
+[%- IF items.size -%]
+	 [%- # Maintain correct index values 	
+	 	UNLESS path == 'trackinfo.html'; 
+			FOREACH item = items; 	 
+				item.index = index _ (start + loop.index); 	 
+			END; 	 
+		END;
+	%]
+
+	[% IF hasPagebar %]
+		[% "ITEMS" | string %] [% pageinfo.startitem + 1 %] [% "TO" | string %] [% pageinfo.enditem + 1 %] [% "OF" | string %] [% pageinfo.totalitems %]
+		[% PROCESS pagebar %]
+	[% END %]
+	
+	[% BLOCK favoritescontrol %]<span id="controls[% item.index || index _ (start + loop.index) %]" [% IF useAJAX %]style="display: none;"[% END %]>
+		[% IF item.favorites == 1 %]
+			[% WRAPPER favaddlink noTarget=1 %]
+				[%- IF useAJAX -%]href="javascript:void(0);" onClick="ajaxUpdate('[% path %]', 'action=favadd&index=[% item.index || index _ (start + loop.index) %]&start=[% pageinfo.startitem %]&sess=[% sess %]')"
+				[%- ELSE       -%]href="[% path %]?action=favadd&index=[% item.index || index _ (start + loop.index) %]&amp;start=[% pageinfo.startitem %]&amp;player=[% player | uri %]&amp;sess=[% sess %]"
+				[%- END -%]
+			[% END %]
+		[% ELSIF item.favorites == 2 %]
+			[% WRAPPER favdellink noTarget=1 %]
+				[%- IF useAJAX -%]href="javascript:void(0);" onClick="ajaxUpdate('[% path %]', 'action=favdel&index=[% item.index || index _ (start + loop.index) %]&start=[% pageinfo.startitem %]&sess=[% sess %]')"
+				[%- ELSE       -%]href="[% path %]?action=favdel&index=[% item.index || index _ (start + loop.index) %]&amp;start=[% pageinfo.startitem %]&amp;player=[% player | uri %]&amp;sess=[% sess %]"
+				[%- END -%]
+			[% END %]
+		[% END %]</span>
+	[% END %]
+	
+	[%- # treat track information specially
+	IF path == 'trackinfo.html';
+
+		songInfoPlayLinks = BLOCK; PROCESS songInfoPlayLinks attributes = "&track.id=" _ sess item = details.mixers.0; END;
+
+		PROCESS songinfo_header.html albumFirst = 1
+			itemobj = {
+				id => sess,
+				album => details.album.0,
+				contributorRoles => details.contributors.keys,
+				contributors => details.contributors,
+				genres => details.genre,
+				year => details.year.0.id
+			}
+			plugin_meta = {
+				title => details.title.0.name 
+			};
+
+		image = undef;
+	END %]
+
+	[%- WRAPPER contentcontainer %]
+		[% IF image %]
+		<ul>
+			<a href="[% image %]" target="cover">
+				<img src="[% image %]" alt="coverArt" onLoad="resize(this)">
+			</a>
+		</ul>
+		[% END %]
+		
+		[% IF itemsHaveAudio %]
+			[%- BLOCK allcontrol -%]
+				[% WRAPPER playlink %]href="[% path %]?[% searchquery %]action=playall&amp;index=[% currentIndex %]&amp;player=[% player | uri %]&amp;sess=[% sess %]"[% END %]
+				[% WRAPPER addlink %]href="[% path %]?[% searchquery %]action=addall&amp;index=[% currentIndex %]&amp;player=[% player | uri %]&amp;sess=[% sess %]"[% END %]
+			[%- END %]
+			[%- WRAPPER contentitem leftcontrols = 'allcontrol' %]
+				[% "ALL_SONGS" | string %]
+			[%- END %]
+			[%- odd = (not odd) %]
+		[% END %]
+		
+		[%- FOREACH item = items %]
+
+			[% lctype = item.web.group | lower; IF details.${ lctype } || details.contributors.${item.web.group}; NEXT; END %]
+
+			[%- BLOCK gencontrol -%]
+				[% IF item.type == 'audio' || item.type == 'playlist' || item.enclosure || item.play %]
+					[% WRAPPER playlink %]href="[% path %]?[% searchquery %]action=play[% IF item.type == 'playlist' %]all[% END %]&amp;index=[% item.index || index _ (start + loop.index) %]&amp;player=[% player | uri %]&amp;sess=[% sess %]"[% END %]
+					[% WRAPPER addlink %]href="[% path %]?[% searchquery %]action=add[% IF item.type == 'playlist' %]all[% END %]&amp;index=[% item.index || index _ (start + loop.index) %]&amp;player=[% player | uri %]&amp;sess=[% sess %]"[% END %]
+				[% ELSE %]
+					[% PROCESS dummylink %]
+					[% PROCESS dummylink %]
+				[% END %]
+			[%- END %]
+			
+			[% IF item.type == 'search' %]
+				<form name="searchForm[% item.index || index _ (start + loop.index) %]" id="searchForm[% item.index || index _ (start + loop.index) %]" method="GET">
+					[% item.name || item.title %]
+					<input type="text" name="q" value=""/>
+					<input name="formsubmit" type="submit" class="stdclick" value="[% "SEARCH" | string %]" onClick = "document.getElementById('searchForm[% item.index || index _ (start + loop.index) %]').submit();"><p>
+					<input type="hidden" value="[% player %]" name="player" />
+					<input type="hidden" value="[% sess %]" name="sess">
+					<input type="hidden" value="[% item.index || index _ (start + loop.index) %]" name="index" />
+				</form>
+			[% ELSE %]
+				[% IF useAJAX %]<span style="margin: 0px; padding: 0px; border: 0px;" 
+					onMouseOver="showElements(['controls[% item.index || index _ (start + loop.index) %]'], 'inline');"
+					onMouseOut="hideElements(['controls[% item.index || index _ (start + loop.index) %]'])">
+				[% END %]
+
+				[%- WRAPPER contentitem leftcontrols = 'gencontrol' rightcontrols = 'favoritescontrol' %]
+					[% IF item.web.type == 'htmltemplate' %]
+						[% PROCESS $item.web.value %]
+					[% ELSE %]
+						[% IF item.weblink %]
+							<a href="[% item.weblink %]" target="_blank">
+						[% ELSIF item.type == 'redirect' %]
+							[% IF item.web.url %]
+							<a href="[% item.web.url %]&amp;player=[% player | uri %]" class="browseItemLink">
+							[% ELSE; NEXT %]
+							[% END %]
+						[% ELSIF item.type != 'text' %]
+							<a href="[% path %]?[% searchquery %]index=[% item.index || index _ (start + loop.index) %]&amp;player=[% player | uri %]&amp;sess=[% sess %]">
+						[% END %]
+						[% item.name || item.title || item.web.value %]
+						[% IF item.weblink || item.type != 'text' %]
+						</a>
+						[% END %]
+					[% END %]
+				[%- END %]
+				[% IF useAJAX %]</span>[% END %]
+			[%- END %]
+			[%- odd = (not odd) %]
+		[%- END %]
+
+	[%- END %]
+	[% IF hasPagebar %]
+		[% "ITEMS" | string %] [% pageinfo.startitem + 1 %] [% "TO" | string %] [% pageinfo.enditem + 1 %] [% "OF" | string %] [% pageinfo.totalitems %]
+		[% PROCESS pagebar %]
+	[% END %]
+[%- END %]
+
+[% IF NOT ajaxUpdate %]</div>[% PROCESS pagefooter.html %][% END %]
+

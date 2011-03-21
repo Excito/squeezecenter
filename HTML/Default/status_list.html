@@ -1,0 +1,59 @@
+<div class="draggableSong selectorMarker[% IF noPlaylistCover %]itemWithoutCover[% END %] [% IF item.currentsong %]currentSong[% END %]" id="playlistSong[% item.num %]" onmouseover="Main.playlist.Highlighter.highlight(this);"><div class="selector_topRight"><div class="selector_topLeft"><div class="selector_bottomRight"><div class="selector_bottomLeft">
+	<div class="browsedbListItem [% IF !noPlaylistCover %]itemWithCover[% END %]">
+		[%# Plugins can provide their own songinfo links %]
+		[% info_link = item.plugin_meta.info_link || 'songinfo.html' %]
+		[% IF noPlaylistCover %]
+			<a href="[% webroot _ info_link %]?item=[% item.itemobj.id %]&amp;player=[% playerURI %]" target="browser" class="browseItemLink">[% item.title | html %]</a>
+			[% IF item.includeAlbum && item.itemobj.album && item.itemobj.album.title != item.noAlbum && item.itemobj.album.title != "" %]
+				[% "FROM" | string %]
+				<a href="[% webroot %]browsedb.html?hierarchy=album,track&amp;level=1&amp;album.id=[% item.itemobj.album.id %]&amp;player=[% playerURI %]" target="browser" class="browseItemLink">[% item.itemobj.album.title | html %]</a>
+			[% END %]
+			[% IF item.includeArtist && item.artist && item.artist != item.noArtist; PROCESS artistsAsHTML.html itemobj = item.itemobj; END %]
+			[%# current_title is for radio streams %]
+			[% IF item.current_title %]
+				<br />
+				[% item.current_title | html %]
+			[% END %]
+		[% ELSE %]
+			<span class="playlistCover">
+				[% IF item.itemobj.album.id %]<a href="[% webroot %]browsedb.html?hierarchy=album,track&amp;level=1&amp;album.id=[% item.itemobj.album.id %]&amp;player=[% playerURI %]" target="browser">[% END %]
+				[% IF item.plugin_meta.cover || item.plugin_meta.icon %]
+					[%# Display plugin cover or icon %]
+					[% IF item.plugin_meta.cover %]
+					<img src="[% item.plugin_meta.cover %]" width="50" height="50">
+					[% ELSIF item.plugin_meta.icon %]
+					<img src="[% item.plugin_meta.icon %]_50x50_[% resizeParam %].[% IF browserType == 'IE' %]gif[% ELSE %]png[% END %]">
+					[% END %]
+				[% ELSE %]
+					<img src="/music/[% item.itemobj.id %]/cover_50x50_[% resizeParam %][% IF browserType == 'IE' %].gif[% END %]">
+				[% END %]
+				[% IF item.itemobj.album.id %]</a>[% END %]
+			</span>
+			<div class="playlistSongDetail">
+				<a href="[% webroot _ info_link %]?item=[% item.itemobj.id %]&amp;player=[% playerURI %]" target="browser" class="browseItemLink"><span>[% item.title | html %]</span></a>
+			</div>
+			[%# current_title is for radio streams %]
+			[% IF item.current_title %]
+			<div class="playlistSongDetail">
+				[% item.current_title | html %]
+			</div>
+			[% END %]
+			[% IF item.includeAlbum && item.itemobj.album && item.itemobj.album.title != item.noAlbum && item.itemobj.album.title != "" %]
+				<div class="playlistSongDetail">
+					<a href="[% webroot %]browsedb.html?hierarchy=album,track&amp;level=1&amp;album.id=[% item.itemobj.album.id %]&amp;player=[% playerURI %]" target="browser" class="browseItemLink"><span>[% item.itemobj.album.title | html %]</span></a>
+				</div>
+			[% END %]
+			<div class="playlistSongDetail">
+				[% IF item.includeArtist && item.artist && item.artist != item.noArtist; PROCESS artistsAsHTML.html itemobj = item.itemobj noby = 1; END %]
+			</div>
+		[% END %]
+		<div class="playlistControls">
+			<img onclick="SqueezeJS.UI.setProgressCursor();Main.playlist.request('index', 'playlistSong[% item.num %]')" src="[% webroot %]html/images/b_play.gif" width="[% cmdLinkIconSize %]" height="[% cmdLinkIconSize %]" alt="[% "PLAY" | string %]" title="[% "PLAY" | string %]">
+			<img onclick="SqueezeJS.UI.setProgressCursor();Main.playlist.request('delete', 'playlistSong[% item.num %]')" src="[% webroot %]html/images/b_delete.gif" width="[% cmdLinkIconSize %]" height="[% cmdLinkIconSize %]" alt="[% "DELETE" | string %]" title="[% "DELETE" | string %]"></a>
+			[% FOREACH mixer = item.mixerlinks.values.sort %]
+				[% PROCESS $mixer %]
+			[% END %]
+			[% IF item.currentsong %]<img src="[% webroot %]html/images/spacer.gif" class="nowPlayingIcon"/>[% END %]
+		</div>
+	</div>
+</div></div></div></div></div>

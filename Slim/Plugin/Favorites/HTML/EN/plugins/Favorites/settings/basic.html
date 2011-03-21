@@ -1,0 +1,11 @@
+[% PROCESS settings/header.html %]
+
+	[% WRAPPER setting title="PLUGIN_FAVORITES_PLAYLIST_EDITOR" desc="" %]
+		<div class="prefDesc">[% "PLUGIN_FAVORITES_PLAYLIST_EDITOR_DESC" | string %]</div>
+
+		<div class="prefDesc">[% "ENABLE" | string %]
+			<input name="pref_opmleditor" type="checkbox" [% IF prefs.pref_opmleditor %] checked [% END %]>
+		</div>
+	[% END %]
+
+[% PROCESS settings/footer.html %]

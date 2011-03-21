@@ -1,0 +1,55 @@
+[%# Page home.html %]
+
+[%- FILTER null %]
+	[% BLOCK menu %]
+		[% PROCESS subtitle title=menutitle %]
+		<ul>
+		[% IF menulist %]
+		    [% FOREACH item = orderlist %]
+	    		<li><a href="[% menulist.$item %]player=[% playerURI %]">[% item | string %]</a></li>
+	    	[% END %]
+		    [% FOREACH link = menulist; IF !orderlist.grep(link.key).size %]
+	    		<li><a href="[% link.value %]player=[% playerURI %]">[% link.key | string %]</a></li>
+	    	[% END;END %]
+		[% END %]
+		[% FOREACH link = additionalmenu %]
+	   		<li><a href="[% link.value | html %]?[% IF NOT link.value.match('^http') %]player=[% playerURI %][% END %]">[% link.key | string %]</a></li>
+		[% END %]
+		</ul>
+	[% END %]
+
+	[% pagetitle = "HOME" | string %]
+[% END -%]
+
+	[%- PROCESS pageheader.html %]
+
+	[% PROCESS menu menutitle='BROWSE_MUSIC' menulist=additionalLinks.browse %]
+
+	[% IF additionalLinks.music_services %]
+		[% IF additionalLinks.radios.exists('PLUGIN_PANDORA_MODULE_NAME') %]
+				[% additionalmenu = {'PLUGIN_PANDORA_MODULE_NAME' => additionalLinks.radios.PLUGIN_PANDORA_MODULE_NAME } %]
+		[% END %]
+		[% PROCESS menu menutitle='MUSIC_SERVICES' menulist=additionalLinks.music_services orderlist=additionalLinkOrder.music_services 
+		%]
+	[% END %]
+
+	[% PROCESS menu menutitle='RADIO' menulist=additionalLinks.radios orderlist=additionalLinkOrder.radios 
+		additionalmenu = {'RADIO_TUNEIN' => 'tunein.html'}
+	-%]
+
+	[% PROCESS menu menutitle='SEARCH' menulist=additionalLinks.search orderlist={} additionalmenu={} %]
+	
+	[% IF additionalLinks.plugins %]
+		[% PROCESS menu menutitle='PLUGINS' menulist=additionalLinks.plugins additionalmenu={} orderlist={} %]
+	[% END %]
+	
+	[% PROCESS menu menutitle='HELP' menulist=additionalLinks.help %]
+
+	[% IF warn && NOT pageHeaderInfo; pageHeaderInfo = BLOCK %]
+		<b>[% "NOTE" | string %]</b> [% "HOME_SCAN_WARNING" | string %] (<a href="progress.html">[% "SCANNER_PROGRESS" | string %]</a>)
+	[% END %]
+	[% ELSIF album_count && NOT pageHeaderInfo; pageHeaderInfo = BLOCK %]
+		[% album_count %] | [% song_count %] | [% artist_count %]
+	[% END; END %]
+	[% PROCESS pagefooter.html %]
+[%# /Page home.html %]

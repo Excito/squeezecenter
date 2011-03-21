@@ -1,0 +1,244 @@
+[%- 
+hasArtwork = 0;
+contentwrapper = 'contentitem';
+container = 'contentcontainer';
+
+FOREACH item = items;
+	IF item.image;
+		hasArtwork = 1;
+		LAST;
+	END;	
+END;
+
+IF hasArtwork;
+	IF artwork == 1;
+		container = 'gallerycontainer';
+		contentwrapper = 'galleryitem';
+	END;
+	
+	titleRight = BLOCK %]
+		<div id="viewSelect"></div>
+	[% END; 
+END %]
+
+[%- extJsScripts = BLOCK -%]
+	<script type="text/javascript" src="[% webroot %]html/Browse.js?r=[% revision %]"></script>
+
+	[% IF hasArtwork %]
+	<script type="text/javascript">
+		[% PROCESS jsString id='SWITCH_TO_LIST' jsId='switch_to_list' %]
+		[% PROCESS jsString id='SWITCH_TO_EXTENDED_LIST' jsId='switch_to_extended_list' %]
+		[% PROCESS jsString id='SWITCH_TO_GALLERY' jsId='switch_to_gallery' %]
+		[% PROCESS jsString id='ALBUM_DISPLAY_OPTIONS' jsId='display_options' %]
+		var orderByList;
+	</script>
+	[% END %]
+[% END %]
+
+[% IF query %]
+	[%# Add the search query to each link if available %]
+	[% searchquery = 'query=' _ query _ '&amp;' %]
+[% END %]
+
+[% FILTER null %]
+[% pwd_list = [];
+	FOREACH crumb IN crumb;
+		crumbItem = BLOCK %]
+			<a href="[% path %]?[% searchquery | replace("'", "%27") | uri %]player=[% playerURI %]&amp;index=[% crumb.index %]&amp;sess=[% sess %]">[% crumb.name %]</a>
+		[% END %]
+		[% pwd_list.push(crumbItem) %]
+	[% END %]
+[% END # filter -%]
+
+[% IF NOT ajaxUpdate %][% PROCESS pageheader.html dontscroll = (streaminfo ? 0 : 1) %][% IF !streaminfo %]<div id="mainbody">[% END %][% END %]
+
+[% IF msg %][% WRAPPER contentcontainer %]
+	<div class="message">[% msg %]</div>
+[% END %][% END %]
+
+[% IF streaminfo %]
+	[% IF streaminfo.item.enclosure || streaminfo.item.url; songInfoPlayLinks = BLOCK %]
+	<div id="songInfoPlayLinks">
+		[% WRAPPER playlink %]onclick="SqueezeJS.UI.setProgressCursor();SqueezeJS.Controller.urlRequest(location.pathname + '?[% searchquery | replace("'", "%27") | uri %]action=play&amp;index=[% streaminfo.index %]&amp;player=[% player | uri %]&amp;sess=[% sess %]', false, SqueezeJS.string('connecting_for'));"[% END %]
+		[% WRAPPER addlink %]onclick="SqueezeJS.UI.setProgressCursor();SqueezeJS.Controller.urlRequest(location.pathname + '?[% searchquery | replace("'", "%27") | uri %]action=add&amp;index=[% streaminfo.index %]&amp;player=[% player | uri %]&amp;sess=[% sess %]');"[% END %]
+	</div>
+	[% END; END %]
+
+	[% PROCESS xmlbrowser_details.html %]
+[% END %]
+
+[% IF search;
+	WRAPPER contentitem controls = xmlSearchControls;
+		"SEARCH" | string %]
+		<span class="browsedbControls">
+			<form id="searchForm" name="searchForm" method="GET">
+				<input type="hidden" value="[% player %]" name="player" />
+				<input type="hidden" value="[% sess %]" name="sess" />
+				<input type="hidden" name="submit" class="stdclick" value="[% "SEARCH" | string %]"/>
+				<input type="text" class="x-form-focus searchInput" name="query" value="[% query %]"/>
+				<input type="image" src="[% webroot %]html/images/b_search.gif" width="17px" height="17px" alt="[% "SEARCH" | string %]">
+			</form>
+		</span>					
+	[% END;
+END %]
+
+[%- IF items.size -%]
+	 [%- # Maintain correct index values 	
+	 	UNLESS path == 'trackinfo.html'; 
+			FOREACH item = items; 	 
+				item.index = index _ (start + loop.index); 	 
+			END; 	 
+		END;
+	%]
+
+	<div id="browsedbHeader">
+		[% IF hasPagebar %]
+			<div class="pagerbox">
+				<div class="pagerbox_top"><div></div></div>
+				<div class="pagerbox_content">
+					[% PROCESS pagebar %]
+				</div>
+				<div class="pagerbox_bottom"><div></div></div>
+			</div>
+		[% END %]
+	</div>
+
+	[%- BLOCK gencontrol -%]
+		[% IF item.favorites == 1 %]
+			[% WRAPPER favaddlink noTarget=1 %]
+				href="[% path %]?action=favadd&index=[% (item.index || index _ (start + loop.index)) | replace("'", "%27") | uri %]&amp;start=[% pageinfo.startitem %]&amp;player=[% player | uri %]&amp;sess=[% sess %]"
+			[% END %]
+		[% ELSIF item.favorites == 2 %]
+			[% WRAPPER favdellink noTarget=1 %]
+				href="[% path %]?action=favdel&index=[% (item.index || index _ (start + loop.index)) | replace("'", "%27") | uri %]&amp;start=[% pageinfo.startitem %]&amp;player=[% player | uri %]&amp;sess=[% sess %]"
+			[% END %]
+		[% END %]
+
+		[% IF item.type == 'audio' || item.type == 'playlist' || item.enclosure || item.play %]
+			[% WRAPPER playlink %]onclick="SqueezeJS.UI.setProgressCursor();SqueezeJS.Controller.urlRequest(location.pathname + '?[% searchquery | replace("'", "%27") | uri %]action=play[% IF item.type == 'playlist' %]all[% END %]&amp;index=[% (item.index || index _ (start + loop.index)) | replace("'", "%27") | uri %]&amp;player=[% player | uri %]&amp;sess=[% sess %]', false, SqueezeJS.string('connecting_for'));"[% END %]
+			[% WRAPPER addlink %]onclick="SqueezeJS.UI.setProgressCursor();SqueezeJS.Controller.urlRequest(location.pathname + '?[% searchquery | replace("'", "%27") | uri %]action=add[% IF item.type == 'playlist' %]all[% END %]&amp;index=[% (item.index || index _ (start + loop.index)) | replace("'", "%27") | uri %]&amp;player=[% player | uri %]&amp;sess=[% sess %]');"[% END %]
+		[% ELSE %]
+			[% PROCESS dummylink %]
+			[% PROCESS dummylink %]
+		[% END %]
+	[%- END %]
+
+	[%- # treat track information specially
+	IF path == 'trackinfo.html';
+
+		itemobj = {
+			id => sess,
+			album => details.album.0,
+			contributorRoles => details.contributors.keys,
+			contributors => details.contributors,
+			genres => details.genre,
+			year => details.year.0.id
+			title => pagetitle
+			url => itemUrl
+		};
+
+		songInfoPlayLinks = BLOCK;
+			PROCESS songInfoPlayLinks attributes = "&track.id=" _ sess item = details.mixers.0;
+		END;
+
+		PROCESS songinfo_header.html 
+			albumFirst = 1
+			plugin_meta = {
+				title => details.title.0.name 
+			};
+
+		image = undef;
+	END %]
+
+
+	[%- WRAPPER $container %]
+		[% IF image %]
+		<div>
+			<a href="[% image %]" target="cover">
+				<img src="[% image %]" alt="coverArt" onLoad="resize(this)">
+			</a>
+		</div>
+		[% END %]
+
+		[% IF itemsHaveAudio %]
+			[%- BLOCK allcontrol -%]
+				[% WRAPPER playlink %]onclick="SqueezeJS.UI.setProgressCursor();SqueezeJS.Controller.urlRequest(location.pathname + '?[% searchquery | replace("'", "%27") | uri %]action=playall&amp;index=[% currentIndex %]&amp;player=[% player | uri %]&amp;sess=[% sess %]', false, SqueezeJS.string('connecting_for'));"[% END %]
+				[% WRAPPER addlink %]onclick="SqueezeJS.UI.setProgressCursor();SqueezeJS.Controller.urlRequest(location.pathname + '?[% searchquery | replace("'", "%27") | uri %]action=addall&amp;index=[% currentIndex %]&amp;player=[% player | uri %]&amp;sess=[% sess %]');"[% END %]
+			[%- END %]
+			[%- WRAPPER contentitem controls = 'allcontrol' %]
+				[% "ALL_SONGS" | string %]
+			[%- END %]
+		[% END %]
+
+		[%- FOREACH item = items %]
+
+			[% lctype = item.web.group | lower; IF details.${ lctype } || details.contributors.${item.web.group}; NEXT; END %]
+
+			[% IF item.type == 'search';
+				WRAPPER contentitem controls = xmlSearchControls;
+					IF artwork == 1;
+						itemobj.id = loop.count;
+					END;
+					item.name || item.title %]
+					<span class="browsedbControls">
+						<form id="searchForm[% item.index || index _ (start + loop.index) %]" method="GET">
+							<input type="hidden" value="[% player %]" name="player" />
+							<input type="hidden" value="[% sess %]" name="sess" />
+							<input type="hidden" value="[% item.index || index _ (start + loop.index) %]" name="index" />
+		 					<input type="hidden" name="submit" class="stdclick" value="[% "SEARCH" | string %]"/>
+							<input type="text" class="x-form-focus searchInput" name="q" value=""/>
+							<input type="image" src="[% webroot %]html/images/b_search.gif" width="17px" height="17px" alt="[% "SEARCH" | string %]">
+						</form>
+					</span>					
+				[% END %]
+			[% ELSE %]
+				[%- WRAPPER $contentwrapper controls = 'gencontrol' addClasses = item.type=='text' ? 'defaultCursor' : '' %]
+					[% IF artwork == 1 || path == 'trackinfo.html';
+						item.size = 100;
+						itemobj.id = loop.count;
+					END %]
+
+					[% IF item.image && !(artwork > 0) %]
+						<span class="browseCover">
+							<img src="[% item.image %]" width="50"/>
+						</span>
+						<div class="browseItemDetail">
+					[% END %]
+
+					[% IF item.web.type == 'htmltemplate' %]
+						[% PROCESS $item.web.value %]
+					[% ELSE %]
+						[% IF item.weblink %]
+							<a href="[% item.weblink %]" target="_blank">
+						[% ELSIF item.type == 'redirect' %]
+							[% IF item.web.url %]
+							<a href="[% item.web.url %]&amp;player=[% player | uri %]" class="browseItemLink">
+							[% ELSE; NEXT %]
+							[% END %]
+						[% ELSIF item.type != 'text' %]
+							<a href="[% path %]?[% searchquery | replace("'", "%27") | uri %]index=[% (item.index || index _ (start + loop.index)) | replace("'", "%27") | uri %]&amp;player=[% player | uri %]&amp;sess=[% sess %]" class="browseItemLink">
+						[% END %]
+	
+						[% (item.web.value || item.name || item.title) | html_line_break %]
+	
+						[% IF item.weblink || item.type != 'text' %]
+							</a>
+						[% END %]
+					[% END %]
+
+					[% IF item.image && !(artwork > 0) %]
+						</div>
+					[% END %]
+				[%- END %]
+			[%- END %]
+		[%- END %]
+
+	[%- END %]
+[%- END %]
+
+[%- IF hasPagebar; infoTab = BLOCK -%]
+	<div>[% "ITEMS" | string %] [% pageinfo.startitem + 1 %] [% "TO" | string %] [% pageinfo.enditem + 1 %] [% "OF" | string %] [% pageinfo.totalitems %]</div>
+[%- END; END -%]
+
+[% IF NOT ajaxUpdate %][% IF !streaminfo %]</div>[% END %][% PROCESS pagefooter.html %][% END %]
+

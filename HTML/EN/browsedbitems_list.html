@@ -1,0 +1,28 @@
+[%- IF artwork == 1 && tree != 1 && (item.levelName == 'album' || item.levelName == 'age') && !query;
+	contentwrapper = 'galleryitem';
+ELSE;
+	contentwrapper = 'contentitem';
+END;
+-%]
+[%- IF item.heading %]
+	<div class="searchHeader">
+		[% "$item.heading" _ "SMATCHING" | string %] "[% query %]"[% "COLON" | string %][% item.numresults %]
+	</div>
+[%- ELSE -%]
+	[% WRAPPER $contentwrapper
+			controls    = 'browsecontrols'
+			itemobj     = item.itemobj
+			attributes  = item.attributes
+			odd         = item.odd
+			mixerlinks  = item.mixerlinks || mixerlinks
+			anchor      = item.anchor 
+			showdescend = item.showdescend
+			showplay    = item.showplay
+			showplayall = item.showplayall
+			playallhref = item.playallhref
+			addallhref  = item.addallhref
+			href        = item.href %]
+		
+	[% PROCESS iteminfo %]
+	[% END -%]
+[%- END %]
