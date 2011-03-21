@@ -67,7 +67,13 @@ sub processCoverArtRequest {
 	# need to excavate real path to the static image here
 	if ($path !~ /^music\//) {
 		$trackid = 'notCoverArt';
-		$imgBasename =~ s/(-*[A-Za-z0-9]+)_.*/$1/;
+		$imgBasename =~ /-*([A-Za-z0-9_]+?)  # image name is first string before resizing parameters
+			(?:_(X|\d+)x(X|\d+))?    # width and height are given here, e.g. 300x300
+			(?:_([sSfFpcom]))?       # resizeMode, given by a single character
+			(?:_([\da-fA-F]+))?      # background color, optional
+			(?:\.(jpg|png|gif))?$ # optional file suffixes allowed are jpg png gif
+			/ix;	
+		$imgBasename = $1;
 		$actualPathToImage = $path;
 		$actualPathToImage =~ s/$imgName/$imgBasename$suffix/;
 	}
@@ -82,7 +88,7 @@ sub processCoverArtRequest {
 
 	# typical cover art request would come across as something like cover_300x300_c_000000.jpg
 	# delimiter on "fields" is an underscore '_'
-	$imgName =~ /(cover|thumb|[A-Za-z0-9]+)  # image name is first string before resizing parameters
+	$imgName =~ /(cover|thumb|[A-Za-z0-9_]+?)  # image name is first string before resizing parameters
 			(?:_(X|\d+)x(X|\d+))?    # width and height are given here, e.g. 300x300
 			(?:_([sSfFpcom]))?       # resizeMode, given by a single character
 			(?:_([\da-fA-F]+))?      # background color, optional
@@ -105,30 +111,25 @@ sub processCoverArtRequest {
 	# Check for a cached resize
 	if ( $trackid ne 'current' ) {
 		if ( $cachedImage = $cache->get($cacheKey) ) {
-			my $artworkFile = $cachedImage->{'orig'};
-		
-			if ( defined $artworkFile ) {
+			if ( my $artworkFile = $cachedImage->{'orig'} ) {
 				# Check mtime of original artwork has not changed
-				if ( $artworkFile && -r $artworkFile ) {
+				if ( -r $artworkFile ) {
 					my $origMtime = (stat _)[9];
 					if ( $cachedImage->{'mtime'} != $origMtime ) {
 						main::INFOLOG && $log->info( "  artwork mtime $origMtime differs from cached mtime " . $cachedImage->{'mtime'} );
 						$cachedImage = undef;
 					}
 				}
+			}
 		
-				if ( $cachedImage ) {
-
-					if ( main::INFOLOG && $log->is_info ) {
-						my $type = $cachedImage->{contentType};
-						my $size = length( ${$cachedImage->{body}} );
-						$log->info( "  returning cached artwork image, $type ($size bytes)" );
-					}
-
-					return ($cachedImage->{'body'}, $cachedImage->{'mtime'}, $inode, $cachedImage->{'size'}, $cachedImage->{'contentType'});
+			if ( $cachedImage ) {
+				if ( main::INFOLOG && $log->is_info ) {
+					my $type = $cachedImage->{contentType};
+					my $size = length( ${$cachedImage->{body}} );
+					$log->info( "  returning cached artwork image, $type ($size bytes)" );
 				}
-			} else {
-				main::INFOLOG && $log->info(" cached image not usable because 'orig' undef");
+
+				return ($cachedImage->{'body'}, $cachedImage->{'mtime'}, $inode, $cachedImage->{'size'}, $cachedImage->{'contentType'});
 			}
 		}
 	}

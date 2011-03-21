@@ -1,6 +1,6 @@
 package Slim::Schema::RemotePlaylist;
 
-# $Id: RemotePlaylist.pm 29870 2010-01-21 19:17:22Z andy $
+# $Id: RemotePlaylist.pm 30561 2010-04-13 07:09:20Z ayoung $
 
 # This is an emulation of the Slim::Schema::Playlist API for remote tracks
 
@@ -46,6 +46,11 @@ sub getNextEntry {
 	my ( $self, $args ) = @_;
 	
 	my $playlist = $args->{playlist} || $self;
+	
+	# Bug 16052: protect against empty apparent playlists
+	if (!$playlist->can('tracks')) {
+		return;
+	}
 	
 	for my $track ( $playlist->tracks ) {
 		my $type = $track->content_type;

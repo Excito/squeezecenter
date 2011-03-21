@@ -5,7 +5,7 @@ package Slim::Utils::PluginManager;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 #
-# $Id: PluginManager.pm 30008 2010-02-04 14:20:18Z michael $
+# $Id: PluginManager.pm 30663 2010-04-17 16:36:14Z agrundman $
 
 use strict;
 
@@ -61,7 +61,7 @@ sub init {
 		1;
 	});
 
-	if ( !$main::SLIM_SERVICE ) {
+	if ( main::WEBUI ) {
 		eval {
 			require Slim::Utils::PluginDownloader;
 			$downloader = 'Slim::Utils::PluginDownloader';

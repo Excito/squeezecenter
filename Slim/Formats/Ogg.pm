@@ -1,6 +1,6 @@
 package Slim::Formats::Ogg;
 
-# $Id: Ogg.pm 30299 2010-03-02 18:36:13Z agrundman $
+# $Id: Ogg.pm 30595 2010-04-14 18:38:17Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -270,26 +270,22 @@ sub getInitialAudioBlock {
 	return $buffer;
 }
 
-=head2 findFrameBoundaries( $fh, $offset, $seek )
+=head2 findFrameBoundaries( $fh, $offset, $time )
 
-Starts seeking from $offset (bytes relative to beginning of file) until it
-finds the next valid frame header. Returns the offset of the first and last
-bytes of the frame if any is found, otherwise (0, 0).
-
-If the caller does not request an array context, only the first (start) position is returned.
+Seeks to the Ogg block containing the sample at $time.
 
 The only caller is L<Slim::Player::Source> at this time.
 
 =cut
 
 sub findFrameBoundaries {
-	my ($class, $fh, $offset) = @_;
+	my ( $class, $fh, $offset, $time ) = @_;
 
-	if (!defined $fh || !defined $offset) {
+	if ( !defined $fh || !defined $time ) {
 		return 0;
 	}
 	
-	return Audio::Scan->find_frame_fh( ogg => $fh, $offset );
+	return Audio::Scan->find_frame_fh( ogg => $fh, int($time * 1000) );
 }
 
 sub canSeek { 1 }

@@ -1,6 +1,6 @@
 package Slim::Networking::Async::HTTP;
 
-# $Id: HTTP.pm 30050 2010-02-06 01:52:45Z agrundman $
+# $Id: HTTP.pm 30720 2010-04-30 18:38:33Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -149,6 +149,9 @@ sub send_request {
 		$self->request->protocol( 'HTTP/1.0' );
 	}
 	
+	# XXX until we support chunked encoding, force 1.0
+	$self->request->protocol('HTTP/1.0');
+	
 	$self->add_headers();
 	
 	$self->write_async( {
@@ -226,6 +229,9 @@ sub _format_request {
 	if ( ref $content_ref ) {
 		push @h, $$content_ref;
 	}
+	
+	# XXX until we support chunked encoding, force 1.0
+	$self->socket->http_version('1.0');
 	
 	my $request = $self->socket->format_request(
 		$self->request->method,

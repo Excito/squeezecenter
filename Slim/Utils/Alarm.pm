@@ -620,7 +620,8 @@ sub sound {
 
 		if ($currentVolume != $self->volume) {
 			main::DEBUGLOG && $log->debug("Changing volume from $currentVolume to " . $self->volume);
-			$client->volume($self->volume);
+			# Bug 15662: use mixer command to change volume so that synced volumes are correctly set
+			$client->execute(['mixer', 'volume', $self->volume]);
 		}
 
 		# Play alarm playlist, falling back to the current playlist if undef
@@ -1955,7 +1956,7 @@ sub _fadeInSeconds {
 sub _alarmEnd {
 	my $request = shift;
 
-	my $client = $request->client;
+	my $client = $request->client || return;
 	
 	# Ignore unexpected notifications
 	if ($request->isNotCommand([['pause', 'stop', 'power']])

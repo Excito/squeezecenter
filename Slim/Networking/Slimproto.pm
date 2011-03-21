@@ -1,6 +1,6 @@
 package Slim::Networking::Slimproto;
 
-# $Id: Slimproto.pm 28543 2009-09-16 16:59:06Z andy $
+# $Id: Slimproto.pm 30594 2010-04-14 18:20:10Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -595,6 +595,10 @@ sub _disco_handler {
 			$client->logStreamEvent( 'disconnect', { reason => $reasons{$reason} } );
 		}
 	}
+	
+	if ($reason) {
+		$log->warn('Unexpected data stream disconnect type: ', $reasons{$reason});
+	}
 
 	if ($reason
 	
@@ -632,18 +636,12 @@ sub _disco_handler {
 			# then give the controller the opportunity to retry the stream
 			# by signalling with the third param to to playerStreamingFailed.
 			# We still expect to get STMd/STMo notifications.
-			$log->warn('Unexpected data stream disconnect type: ', $reasons{$reason});
 			$client->controller()->playerStreamingFailed($client, $reasons{$reason}, 'errorDisconnect');
 		}
 		else {
 			$client->failedDirectStream( $reasons{$reason} );
 		}
-	} else {
-		
-		if ($reason) {
-			$log->warn('Unexpected data stream disconnect type: ', $reasons{$reason});
-		}
-		
+	} else {		
 		$client->statHandler('EoS');
 	}
 }

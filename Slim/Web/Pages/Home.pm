@@ -1,6 +1,6 @@
 package Slim::Web::Pages::Home;
 
-# $Id: Home.pm 29765 2010-01-11 12:45:57Z michael $
+# $Id: Home.pm 30554 2010-04-12 14:48:00Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -170,6 +170,9 @@ sub home {
 	my $conditions = \%Slim::Web::Pages::pageConditions;
 	
 	for my $menu ( keys %Slim::Web::Pages::additionalLinks ) {
+		
+		next if $menu eq 'apps';
+
 		my @sorted = sort {
 			(
 				$menu !~ /(?:my_apps)/ &&

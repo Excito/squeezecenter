@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::MMS;
 
-# $Id: MMS.pm 29380 2009-11-20 17:03:00Z ayoung $
+# $Id: MMS.pm 30790 2010-05-19 11:49:58Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -339,13 +339,13 @@ sub parseMetadata {
 		# Buffer partial packets
 		if ( $status == META_STATUS_PARTIAL ) {
 			$md .= $metadata;
-			$song->wmaMetaData($metadata);
+			$song->wmaMetaData($md);
 			main::DEBUGLOG && $log->is_debug && $log->debug( "ASF_Command_Media: Buffered partial packet, len " . length($metadata) );
 			return;
 		}
 		elsif ( $status == META_STATUS_FINAL ) {		
 			# Prepend previous chunks, if any
-			$metadata = $song->wmaMetaData() . $metadata;
+			$metadata = $md . $metadata;
 			$song->wmaMetaData(undef);
 		
 			# Strip first byte if it is a length byte
@@ -390,6 +390,7 @@ sub parseMetadata {
 					$song->pluginData( wmaMeta => {
 						title => $1,
 					} );
+					Slim::Music::Info::setCurrentTitle($url, $1, $client);
 				};
 				
 				# Delay metadata according to buffer size if we already have metadata
@@ -419,6 +420,7 @@ sub parseMetadata {
 				my $cb = sub {
 					$song->pluginData( wmaMeta => $meta );
 					$song->pluginData( wmaHasData => 1 );
+					Slim::Music::Info::setCurrentTitle($url, $meta->{title}, $client) if $meta->{title};
 				};
 				
 				# Delay metadata according to buffer size if we already have metadata
@@ -444,6 +446,7 @@ sub parseMetadata {
 				my $cb = sub {
 					$song->pluginData( wmaMeta => $meta );
 					$song->pluginData( wmaHasData => 1 );
+					Slim::Music::Info::setCurrentTitle($url, $meta->{title}, $client) if $meta->{title};
 				};
 				
 				# Delay metadata according to buffer size if we already have metadata
@@ -494,6 +497,10 @@ sub setMetadata {
 			url      => $url,
 			duration => int($ms / 1000),
 		} );
+		
+		if ( my $song = $client->streamingSong() ) {
+			$song->duration($ms / 1000);
+		}
 	}
 	
 	# Set title if available

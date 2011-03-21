@@ -1,6 +1,6 @@
 package Slim::Formats::AIFF;
 
-# $Id: AIFF.pm 29014 2009-10-26 20:19:20Z andy $
+# $Id: AIFF.pm 30804 2010-05-21 04:07:41Z agrundman $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -65,6 +65,11 @@ sub getTag {
 	$tags->{SAMPLESIZE} = $info->{bits_per_sample};
 	$tags->{BLOCKALIGN} = $info->{block_align};
 	$tags->{ENDIAN}     = 1;
+	
+	# Support AIFC little-endian files
+	if ( $info->{compression_type} && $info->{compression_type} eq 'sowt' ) {
+		$tags->{ENDIAN} = 0;
+	}
 	
 	# Map ID3 tags if file has them
 	if ( $info->{id3_version} ) {

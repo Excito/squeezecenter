@@ -111,8 +111,21 @@ sub alarmPlaylistsQuery {
 								playlisturl => $choice->{url} || 0, # send 0 for "current playlist"
 							},
 						},
+						preview => {
+							title   => $choice->{title},
+							cmd	=> [ 'playlist', 'preview' ],
+							params  => {
+								url	=>	$choice->{url}, 
+								title	=>	$choice->{title},
+							},
+						},
 					},
 				};
+				if ( ! $choice->{url} ) {
+					$subitem->{actions}->{preview} = {
+						cmd => [ 'play' ],
+					};
+				}
 	
 				
 				if ($typeRef->{singleItem}) {
@@ -147,6 +160,7 @@ sub alarmPlaylistsQuery {
 	
 	$request->addResult("offset", $start);
 	$request->addResult("count", $cnt);
+	$request->addResult('window', { textareaToken => 'SLIMBROWSER_ALARM_SOUND_HELP' } );
 	$request->setStatusDone;
 }
 
@@ -912,6 +926,10 @@ sub artistsQuery {
 			$id += 0;
 			
 			my $textKey = substr($obj->namesort, 0, 1);
+			# Bug 11070: Don't display large V at beginning of browse Artists
+			if ($count_va && $chunkCount == 0) {
+				$textKey = " ";
+			}
 
 			if ($menuMode){
 				$request->addResultLoop($loopname, $chunkCount, 'text', $obj->name);
