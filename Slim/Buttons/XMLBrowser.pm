@@ -1,6 +1,6 @@
 package Slim::Buttons::XMLBrowser;
 
-# $Id: XMLBrowser.pm 28627 2009-09-24 12:22:32Z andy $
+# $Id: XMLBrowser.pm 31779 2011-01-19 21:02:29Z agrundman $
 
 # Copyright 2005-2009 Logitech.
 
@@ -610,7 +610,7 @@ sub gotOPML {
 			# XXX: refresh that item?
 			if ( my $nextWindow = $item->{nextWindow} ) {
 				# Ignore special nextWindow values used by SP
-				if ( $nextWindow !~ /^(?:home|parent)$/ ) {		
+				if ( $nextWindow !~ /^(?:home|parent|nowPlaying)$/ ) {		
 					while ( Slim::Buttons::Common::mode($client) ) {
 						Slim::Buttons::Common::popModeRight($client);
 						if ( $client->modeParam('windowId') eq $nextWindow ) {

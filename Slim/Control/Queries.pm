@@ -1163,9 +1163,9 @@ sub displaystatusQuery_filter {
 	return 0 if !$request->isCommand([['displaynotify']]);
 
 	# retrieve the clientid, abort if not about us
-	my $clientid = $request->clientid();
-	return 0 if !defined $clientid || !defined $self->clientid();
-	return 0 if $clientid ne $self->clientid();
+	my $clientid   = $request->clientid() || return 0;
+	my $myclientid = $self->clientid() || return 0; 
+	return 0 if $clientid ne $myclientid;
 
 	my $subs  = $self->getParam('subscribe');
 	my $type  = $request->getParam('_type');
@@ -3429,16 +3429,12 @@ sub sleepQuery {
 # the filter function decides, based on a notified request, if the status
 # query must be re-executed.
 sub statusQuery_filter {
-
-	$log->debug('statusQuery_filter()');
-
 	my $self = shift;
 	my $request = shift;
 	
 	# retrieve the clientid, abort if not about us
-	my $clientid = $request->clientid();
-	my $myclientid = $self->clientid();
-	return 0 if !defined $clientid || !defined $myclientid;
+	my $clientid   = $request->clientid() || return 0;
+	my $myclientid = $self->clientid() || return 0;
 	
 	# Bug 10064: playlist notifications get sent to everyone in the sync-group
 	if ($request->isCommand([['playlist', 'newmetadata']]) && (my $client = $request->client)) {
@@ -3702,6 +3698,10 @@ sub statusQuery {
 		# send client pref for alarm snooze
 		my $alarm_snooze_seconds = $prefs->client($client)->get('alarmSnoozeSeconds');
 		$request->addResult('alarm_snooze_seconds', defined $alarm_snooze_seconds ? $alarm_snooze_seconds + 0 : 540);
+
+		# send client pref for alarm timeout
+		my $alarm_timeout_seconds = $prefs->client($client)->get('alarmTimeoutSeconds');
+		$request->addResult('alarm_timeout_seconds', defined $alarm_timeout_seconds ? $alarm_timeout_seconds + 0 : 300);
 
 		# send which presets are defined
 		my $presets = $prefs->client($client)->get('presets');
@@ -4808,12 +4808,6 @@ sub _addJivePlaylistControls {
 		$request->addResultLoop($loop, $count, 'icon-id', '/html/images/playlistsave.png');
 		$request->addResultLoop($loop, $count, 'input', $input);
 		$request->addResultLoop($loop, $count, 'actions', $actions);
-	}
-	
-	# Bug 7110, move images
-	if ( main::SLIM_SERVICE ) {
-		use Slim::Networking::SqueezeNetwork;
-		$request->addResultLoop( $loop, $count, 'icon', Slim::Networking::SqueezeNetwork->url('/static/jive/images/blank.png', 1) );
 	}
 }
 

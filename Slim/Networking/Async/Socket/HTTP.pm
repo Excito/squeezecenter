@@ -1,6 +1,6 @@
 package Slim::Networking::Async::Socket::HTTP;
 
-# $Id: HTTP.pm 30416 2010-03-25 13:51:32Z agrundman $
+# $Id: HTTP.pm 31688 2010-12-23 20:40:49Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -71,12 +71,12 @@ sub sysread {
 
 	if ( !${*$self}{'parsed_status_line'} ) {
 		if ( ${*$self}{'httpnb_save'} =~ /^(HTTP|ICY)/ ) {
-			my $icy = ${*$self}{'httpnb_save'} =~ s/ICY/HTTP\/1.0/;
+			my $icy = ${*$self}{'httpnb_save'} =~ s/^ICY/HTTP\/1.0/;
 			${*$self}{'parsed_status_line'} = 1;
 			
 			if ( $icy ) {
 				$n += 5;
-				$_[1] =~ s/ICY/HTTP\/1.0/;
+				$_[1] =~ s/^ICY/HTTP\/1.0/;
 			}
 		}
 	}

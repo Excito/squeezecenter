@@ -75,7 +75,7 @@ sub reconnect {
 		# playing/paused.
 	    
 		my $state = $client->playerData->playmode;
-		if ( $state =~ /^(?:PLAYING|PAUSED)/ ) {
+		if ( $state && $state =~ /^(?:PLAYING|PAUSED)/ ) {
 			main::INFOLOG && $sourcelog->is_info && $sourcelog->info( $client->id . " current state is $state, resuming" );
 			
 			$reconnect = 1;
@@ -1089,7 +1089,7 @@ sub sendFrame {
 	my $frame;
 	
 	# Compress all graphic frames on SN, saves a huge amount of bandwidth
-	if ( main::SLIM_SERVICE && $type eq 'grfe' && $client->hasCompression ) {
+	if ( main::SLIM_SERVICE && ($type eq 'grfe' || $type eq 'grfg') && $client->hasCompression ) {
 		# Bug 8250, firmware bug in TP breaks if compressed frame sent for screen 2
 		# so for now disable all compression for TP
 		if ( $client->deviceid == 5 ) {

@@ -1,6 +1,6 @@
 package Slim::Plugin::Napster::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 30719 2010-04-30 17:00:17Z agrundman $
+# $Id: ProtocolHandler.pm 31439 2010-10-15 13:49:40Z agrundman $
 
 # Napster handler for napster:// URLs.
 
@@ -514,6 +514,8 @@ sub _gotBulkMetadata {
 	
 	# Update the playlist time so the web will refresh, etc
 	$client->currentPlaylistUpdateTime( Time::HiRes::time() );
+	
+	Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
 }
 
 sub _gotBulkMetadataError {

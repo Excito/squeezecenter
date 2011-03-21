@@ -1,6 +1,6 @@
 package Slim::Player::Song;
 
-# $Id: Song.pm 30114 2010-02-09 22:29:57Z agrundman $
+# $Id: Song.pm 31693 2010-12-23 22:29:08Z adrian $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -366,7 +366,7 @@ sub open {
 	my $format = Slim::Music::Info::contentType($track);
 
 	if ($handler->can('formatOverride')) {
-		$format = $handler->formatOverride;
+		$format = $handler->formatOverride($self);
 	}
 	
 	# get transcoding command & stream-mode

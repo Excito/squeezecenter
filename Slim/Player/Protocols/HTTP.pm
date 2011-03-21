@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::HTTP;
 
-# $Id: HTTP.pm 30791 2010-05-19 12:15:49Z agrundman $
+# $Id: HTTP.pm 30844 2010-06-04 11:34:22Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -188,6 +188,10 @@ sub parseMetadata {
 			if ($artworkUrl) {
 				my $cache = Slim::Utils::Cache->new( 'Artwork', 1, 1 );
 				$cache->set( "remote_image_$url", $artworkUrl, 3600 );
+				
+				if ( my $song = $client->playingSong() ) {
+					$song->pluginData( httpCover => $artworkUrl );
+				}
 				
 				main::DEBUGLOG && $directlog->debug("Updating stream artwork to $artworkUrl");
 			};

@@ -1,6 +1,6 @@
 package Slim::Player::Source;
 
-# $Id: Source.pm 30393 2010-03-19 13:30:04Z ayoung $
+# $Id: Source.pm 31646 2010-12-17 01:46:51Z blblack $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -41,7 +41,12 @@ sub progress {
 	my $songduration = playingSongDuration($client);
 
 	return 0 unless $songduration;
-	return songTime($client) / $songduration;
+
+	my $songtime = songTime($client);
+
+	return 0 unless defined($songtime);
+
+	return $songtime / $songduration;
 }
 
 sub songTime {
@@ -54,8 +59,8 @@ sub _returnPlayMode {
 	# Should reall find out if the player is active in the sync-group but too expensive
 	return 'stop' if !$_[1]->power();
 	
-	my $returnedmode = $controller->isPaused ? 'pause'
-						: $controller->isStopped ? 'stop' : 'play';
+	my $returnedmode = $controller->isStopped ? 'stop'
+						: $controller->isPaused ? 'pause' : 'play';
 	return $returnedmode;
 }
 

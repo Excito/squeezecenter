@@ -1,6 +1,6 @@
 # Main Squeezebox Server strings file
 
-# $Id: strings.txt 30611 2010-04-15 04:28:28Z mherger $
+# $Id: strings.txt 31792 2011-01-20 14:02:54Z mherger $
 
 #
 # This tab-delimited file contains all the text strings used in Squeezebox Server
@@ -87,19 +87,19 @@ CREDITS
 	ZH_CN	Kok-Bin Lee
 
 COPYRIGHT
-	CS	© 2001-2010 Logitech Verze 7.5.1
-	DA	© 2001-2010 Logitech - version 7.5.1
-	DE	© 2001-2010 Logitech Version 7.5.1
-	EN	© 2001-2010 Logitech Version 7.5.1
-	ES	© 2001-2010 Logitech versión 7.5.1
-	FI	© 2001-2010 Logitech-versio 7.5.1
-	FR	© 2001-2010 Logitech Version 7.5.1
-	IT	© 2001-2010 Logitech Versione 7.5.1
-	NL	© 2001-2010 Logitech Versie 7.5.1
-	NO	© 2001–2010 Logitech versjon 7.5.1
-	PL	© 2001-2010 Logitech wersja 7.5.1
-	RU	© Logitech, 2001-2010. Версия 7.5.1
-	SV	© 2001–2010 Logitech Version 7.5.1
+	CS	© 2001-2010 Logitech Verze 7.5.3
+	DA	© 2001-2010 Logitech - version 7.5.3
+	DE	© 2001-2010 Logitech Version 7.5.3
+	EN	© 2001-2010 Logitech Version 7.5.3
+	ES	© 2001-2010 Logitech versión 7.5.3
+	FI	© 2001-2010 Logitech-versio 7.5.3
+	FR	© 2001-2010 Logitech Version 7.5.3
+	IT	© 2001-2010 Logitech Versione 7.5.3
+	NL	© 2001-2010 Logitech Versie 7.5.3
+	NO	© 2001–2010 Logitech versjon 7.5.3
+	PL	© 2001-2010 Logitech wersja 7.5.3
+	RU	© Logitech, 2001-2010. Версия 7.5.3
+	SV	© 2001–2010 Logitech Version 7.5.3
 
 COPYRIGHT_LOGITECH
 	CS	© 2001-2010 Logitech
@@ -117,19 +117,19 @@ COPYRIGHT_LOGITECH
 	SV	© 2001-2010 Logitech
 
 VERSION
-	CS	Verze 7.5.1 / r%s
-	DA	Version 7.5.1 / r%s
-	DE	Version 7.5.1 / r%s
-	EN	Version 7.5.1 / r%s
-	ES	Versión 7.5.1 / r%s
-	FI	Versio 7.5.1 / r%s
-	FR	Version 7.5.1 / r%s
-	IT	Versione 7.5.1 / r%s
-	NL	Versie 7.5.1 / r%s
-	NO	Versjon 7.5.1 / r%s
-	PL	Wersja 7.5.1 / r%s
-	RU	Версия 7.5.1/r%s
-	SV	Version 7.5.1 / r%s
+	CS	Verze 7.5.3 / r%s
+	DA	Version 7.5.3 / r%s
+	DE	Version 7.5.3 / r%s
+	EN	Version 7.5.3 / r%s
+	ES	Versión 7.5.3 / r%s
+	FI	Versio 7.5.3 / r%s
+	FR	Version 7.5.3 / r%s
+	IT	Versione 7.5.3 / r%s
+	NL	Versie 7.5.3 / r%s
+	NO	Versjon 7.5.3 / r%s
+	PL	Wersja 7.5.3 / r%s
+	RU	Версия 7.5.3/r%s
+	SV	Version 7.5.3 / r%s
 
 CHOOSE_A_LANGUAGE
 	CS	Zvolte prosím jazyk
@@ -1411,7 +1411,7 @@ SLEEPING_IN
 	DE	Schlafmodus in
 	EN	Sleeping in
 	ES	Suspensión en
-	FI	Nukun myöhään
+	FI	Uniajastin
 	FR	Mise en veille dans
 	HE	מצב שינה ב
 	IT	Sospendi fra
@@ -3072,17 +3072,20 @@ UNSUPPORTED_SAMPLE_RATE
 	SV	Samplingsfrekvensen stöds ej
 
 PLAYLIST_NO_ITEMS_FOUND
-	DA	Fejl: Ingen elementer i spillelisten
+	CS	Chyba: V seznamu skladeb nebyly nalezeny žádné položky
+	DA	Fejl: Der er ikke noget på afspilningslisten
 	DE	Fehler: Wiedergabeliste ist leer
 	EN	Error: No items found in playlist
 	ES	Error: No se encontraron elementos en la lista de reproducción
+	FI	Virhe: soittoluettelosta ei löytynyt kohteita
 	FR	Erreur: rien dans la liste de lecture
 	HE	שגיאה: לא נמצאו פריטים ברשימת ההשמעה
-	IT	Errore: nessun elemento trovato nell'elenco di riproduzione
+	IT	Errore: nessun elemento trovato nella playlist
 	NL	Fout: Geen items in playlist gevonden
 	NO	Feil: Spillelisten er tom
-	SV	Fel: Spellistan är tom
-	ZH_CN	失误：播放表为空
+	PL	Błąd: nie znaleziono elementów na liście odtwarzania
+	RU	Ошибка: не найдены элементы плей-листа
+	SV	Fel: Spellistan är tom.
 
 PLAYLIST_PROBLEM_CONNECTING
 	DA	Fejl: Kan ikke tilslutte for at hente spillelisten
@@ -3799,7 +3802,7 @@ SETUP_SCROLLRATE_DESC
 	CS	Můžete nastavit rychlost, jakou se bude rolující text pohybovat přes obrazovku. Rychlost rolování udává dobu mezi obnovením zobrazení. U přehrávače s grafickým displejem lze toto upravit v kombinaci s hodnotou Scroll Pixels a nastavit rychlost a kvalitu rolování (text se bude pohybovat podle Scroll Pixels jednou za každou sekundu Scroll Rate). U přehrávače se znakovým displejem se udává doba před rolováním k následujícímu znaku. Zadejte v sekundách hodnotu doby mezi obnovením. Nižší čísla znamenají rychlejší rolování. Výchozí hodnota je 0,15 sekund pro jednořádkový, 0,1 sekundy pro velký text.
 	DA	Du kan justere hvor hurtigt teksten ruller hen over displayet. Rullehastigheden er bestemmende for hvor lang tid der går mellem at displayet opdateres. På afspillere med et grafisk display kan hastigheden kombineres med hvor mange pixel der rulles. De to indstillinger bestemmer tilsammen hastigheden og billedkvaliteten: Teksten vil rulle det angivne antal pixel hver gang der er gået det angivne antal sekunder. På en afspiller med et tegndisplay er indstillingen bestemmende for hvor lang tid der går før der rulles til det næste tegn. Du skal angive tidsrummet mellem hver opdatering i sekunder. Et lavt tal giver en hurtigere hastighed. 0,15 sekund er standard ved enkeltlinjer, 0,1 sekund for stor skrift.
 	DE	Sie können festlegen, wie schnell sich die Laufschrift bewegt. Die Laufschriftgeschwindigkeit bestimmt die Zeit, die zwischen Aktualisierungen des Display vergeht. Bei Playern mit grafischem Display können Sie diese Einstellung zusammen mit 'Laufschrift: Pixel' anpassen, um das optimale Ergebnis zu erzielen. Der Text bewegt sich um den Wert in Pixeln pro als Geschwindigkeit angegebenem Intervall. Auf Playern mit Zeichendisplay wird die Länge der Zeit bis zum nächsten Zeichen festgelegt. Geben Sie den gewünschten Wert in Sekunden ein. Ein niedrigerer Wert hat eine höhere Geschwindigkeit zur Folge. Der Standardwert für eine Zeile ist 0,15 für zwei Zeilen 0,1 Sekunden.
-	EN	You can adjust the rate at which scrolling text moves across the screen. The Scroll Rate defines the length of time between display updates.  On a player with a graphical display this can be adjusted in combination with Scroll Pixels to set the speed and quality of scrolling (the text will move by Scroll Pixels once every Scroll Rate seconds).  On a player with a character display this defines the length of time before scrolling to the next character.  Enter a value, in seconds, for the amount of time between updates.  Lower numbers make scrolling faster.  0.15 seconds is the default for single-line, 0.1 seconds for large text.
+	EN	You can adjust the rate at which scrolling text moves across the screen. The Scroll Rate defines the length of time between display updates.  On a player with a graphical display this can be adjusted in combination with Scroll Pixels to set the speed and quality of scrolling (the text will move by Scroll Pixels once every Scroll Rate seconds).  On a player with a character display this defines the length of time before scrolling to the next character.  Enter a value, in seconds, for the amount of time between updates.  Lower numbers make scrolling faster.  0.033 seconds is the default.
 	ES	Se puede ajustar la velocidad a la que el texto se desplaza por la pantalla. La velocidad de desplazamiento define el tiempo que se tarda entre actualizaciones de pantalla. En un reproductor con una pantalla gráfica, se puede ajustar junto con Píxeles de desplazamiento para establecer la velocidad y la calidad de desplazamiento (el texto se moverá según el valor de Píxeles de desplazamiento en cada valor en segundos de Velocidad de desplazamiento). En un reproductor con una pantalla de caracteres, esto define la duración antes del desplazamiento al próximo carácter. Introduzca un valor, en segundos, para el tiempo de espera entre actualizaciones. Los número bajos hacen que el desplazamiento sea más rápido. 0,15 segundos es el valor predeterminado para una sola línea; 0,1 segundos para texto grande.
 	FI	Voi säätää millä nopeudella teksti vierii ruudulla. Vieritysnopeus määrittelee ruudunpäivitysten välisen ajan. Graafisen näytön omaavissa soittimissa, tätä voidaan säätää vierityspikselien kanssa vierityksen laadun määrittämiseksi. Merkkipohjaisissa näytöissä, tämä määrittelee kuinka kauan odotetaan, ennenkuin vieritetään seuraavaan merkkiin. Syötä arvo sekunneissa. Pienemmät arvot nopeuttavat vieritystä. 0.15 on yksirivisen näytön oletusarvo ja 0.1 suuren tekstin.
 	FR	Vous pouvez ajuster la vitesse de défilement du texte à l'écran. La vitesse de défilement permet de définir l'intervalle de temps entre les actualisations de l'écran. Pour une platine dotée d'un affichage graphique, vous pouvez ajuster cette valeur en combinaison avec la valeur de Pixels de défilement pour définir la vitesse et la qualité du défilement. Le texte se déplace d'un certain nombre de pixels après le nombre de secondes défini. Pour une platine dotée d'un affichage par caractères, cette valeur définit l'intervalle de temps avant le défilement vers le caractère suivant. Spécifiez une valeur en secondes pour cet intervalle. Plus la valeur est faible, plus le défilement est rapide. La valeur par défaut est 0,15 s pour l'affichage sur une seule ligne et 0,1 s pour la grande police.
@@ -7815,6 +7818,18 @@ SETUP_BROWSEAGELIMIT_DESC
 	PL	Wybierz liczbę najnowszych albumów podczas wyszukiwania nowej muzyki. Wartość domyślna wynosi 100.
 	RU	Выберите число последних альбомов, отображаемых при просмотре новой музыки. По умолчанию — 100
 	SV	Välj antalet nya album som ska visas när du söker efter ny musik. Standard är 100.
+
+SETUP_DBHIGHMEM
+	EN	Database Memory Config
+
+SETUP_DBHIGHMEM_DESC
+	EN	If your server has enough memory, you can obtain better performance by increasing the amount of memory available to the database. Changing this option requires a server restart.
+
+SETUP_DBHIGHMEM_NORMAL
+	EN	Normal
+
+SETUP_DBHIGHMEM_HIGH
+	EN	High (recommended for machines with 1+ GB RAM)
 
 SETUP_DISABLESTATISTICS
 	CS	Statistika knihovny
@@ -16835,7 +16850,7 @@ SETUP_SCROLLPIXELS_DESC
 	CS	U přehrávače s grafickým displejem můžete upravit počet pixelů (bodů), o které bude přehrávač rolovat během každého intervalu zadaného výše. Toto číslo nastavte společně s Rychlostí rolování (Scroll Rate) a upravte rychlost a kvalitu rolování.  Malé hodnoty s nízkými rychlostmi rolování vypadají dobře, ale vyžadují server o vyšším výkonu a nezahlcenou síť. Pokud máte pochybnosti, ponechte výchozí hodnotu 7 pixelů.  (Min 1, Max 20).
 	DA	På afspillere med et grafisk display kan du justere hvor mange pixel (punkter) teksten skal rulle i hvert af de intervaller du angav ovenfor. Sammen med indstillingen for rullehastighed bestemmer denne indstilling hvor hurtigt og i hvilken kvalitet teksten ruller hen over displayet. En lav værdi her kombineret med en lav rullehastighed vil få teksten til at se godt ud på displayet, men det kræver en kraftigere server og et netværk uden for meget trafik. Hvis du er i tvivl, bør du bruge standardindstillingen på 7 pixel (minimum er 1, maksimum er 20).
 	DE	Bei Playern mit grafischem Display können Sie festlegen, um wie viele Pixel pro oben definiertem Intervall sich die Laufschrift bewegen soll. Kombinieren Sie diese Einstellung mit der Laufschriftgeschwindigkeit, um das beste Ergebnis zu erzielen. Beachten Sie, dass geringere Werte bei einer langsameren Geschwindigkeit zwar besser aussehen, aber einen Server mit höherer Leistung und ein gering belastetes Netzwerk erfordern. Belassen Sie im Zweifelsfall den Standardwert von 7 Pixeln. (Min. 1, Max. 20).
-	EN	On a player with a graphical display you can adjust the number of pixels (dots) that the player scrolls in each interval defined above.  Adjust this in conjunction with the Scroll Rate to adjust scrolling speed and quality.  Note that small values with low Scroll Rates look good, but require a higher performance server and uncongested network.  If in doubt leave as the default of 7 pixels.  (Min 1, Max 20).
+	EN	On a player with a graphical display you can adjust the number of pixels (dots) that the player scrolls in each interval defined above.  Adjust this in conjunction with the Scroll Rate to adjust scrolling speed and quality.  If in doubt leave as the default of 2 or 3 pixels.  (Min 1, Max 20).
 	ES	En un reproductor con una pantalla gráfica, se puede ajustar el número de píxeles (puntos) que el reproductor desplaza en cada intervalo definido anteriormente. Para ajustar la velocidad y la calidad de desplazamiento, ajuste este valor junto con la velocidad de desplazamiento. Tenga en cuenta que los valores pequeños con velocidades de desplazamiento bajas se ven bien, pero requieren un servidor con mejor rendimiento y una red sin congestiones. En caso de duda, deje el valor predeterminado de 7 píxeles. (Mínimo:1, máximo: 20).
 	FI	Jos soittimessa on graafinen näyttö, voit säätää, kuinka monta kuvapistettä soittimen näytössä vieritetään aina yllä määritetyin väliajoin.  Voit säätää vierityksen nopeutta ja tarkkuutta säätämällä tätä arvoa yhdessä vieritysnopeuden kanssa.  Huomaa, että pieni vieritysnopeus näyttää hyvältä, mutta vaatii enemmän suorituskykyä palvelimelta ja ruuhkatonta verkkoa.  Jos et ole varma, jätä arvo oletukseen, seitsemään kuvapisteeseen.  (pienin arvo 1, suurin 20)
 	FR	Sur une platine équipée d'un afficheur graphique, vous pouvez ajuster le nombre de points, ou pixels, dont la platine avance à chaque intervalle défini précédemment. Ajustez cette valeur en même temps que la Vitesse de défilement ci-dessus. Notez que des valeurs trop faibles augmentent la fluidité de l'affichage mais requièrent un serveur et un réseau performants. Dans le doute, conservez la valeur par défaut, de 7 pixels. (Min 1, Max 20).
@@ -20378,8 +20393,9 @@ PROGRESS_IMPORTER_NO_INFO
 	SV	Det finns ingen förloppsinformation för den föregående sökningen tillgänglig.
 
 TOTAL_TIME
+# SLT: please not that this isn't the total time of a playlist, but of the scanning process
 	CS	Celkem doba:
-	DA	Samlet spilletid:
+	DA	Samlet tid:
 	DE	Laufzeit:
 	EN	Total Time:
 	ES	Tiempo total:

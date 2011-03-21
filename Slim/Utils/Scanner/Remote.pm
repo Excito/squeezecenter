@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner::Remote;
 
-# $Id: Remote.pm 30561 2010-04-13 07:09:20Z ayoung $
+# $Id: Remote.pm 31352 2010-09-17 13:07:08Z agrundman $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -223,7 +223,7 @@ sub scanURL {
 		}
 	}
 	
-	my $timeout = preferences('server')->get('remotestreamtimeout') || 10;
+	my $timeout = preferences('server')->get('remotestreamtimeout');
 	
 	my $send = sub {
 		my $http = Slim::Networking::Async::HTTP->new;
@@ -440,6 +440,17 @@ sub readRemoteHeaders {
 			$http->read_body( {
 				readLimit   => 128 * 1024,
 				onBody      => \&parseWMAHeader,
+				passthrough => [ $track, $args ],
+			} );
+		}
+		elsif ( !main::SLIM_SERVICE && $type eq 'aac' ) {
+			# Bug 16379, AAC streams require extra processing to check for the samplerate
+			
+			main::DEBUGLOG && $log->is_debug && $log->debug('Reading AAC header');
+			
+			$http->read_body( {
+				readLimit   => 4 * 1024,
+				onBody      => \&parseAACHeader,
 				passthrough => [ $track, $args ],
 			} );
 		}
@@ -668,6 +679,33 @@ sub parseWMAHeader {
 			metadata  => $wma,
 			headers	  => $http->response->headers,
 		};
+	}
+	
+	# All done
+	$cb->( $track, undef, @{$pt} );
+}
+
+sub parseAACHeader {
+	my ( $http, $track, $args ) = @_;
+	
+	my $client = $args->{client};
+	my $cb	   = $args->{cb} || sub {};
+	my $pt	   = $args->{pt} || [];
+	
+	my $header = $http->response->content;
+	
+	my $fh = File::Temp->new();
+	$fh->write( $header, length($header) );
+	$fh->seek(0, 0);
+	
+	my $aac = Audio::Scan->scan_fh( aac => $fh );
+	
+	if ( my $samplerate = $aac->{info}->{samplerate} ) {
+		if ( $samplerate <= 24000 ) { # XXX remove when Audio::Scan is updated to 0.84
+			$samplerate *= 2;
+		}
+		$track->samplerate($samplerate);
+		main::DEBUGLOG && $log->is_debug && $log->debug("AAC samplerate: $samplerate");
 	}
 	
 	# All done

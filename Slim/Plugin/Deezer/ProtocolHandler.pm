@@ -1,6 +1,6 @@
 package Slim::Plugin::Deezer::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 30836 2010-05-28 20:13:33Z agrundman $
+# $Id: ProtocolHandler.pm 31439 2010-10-15 13:49:40Z agrundman $
 
 use strict;
 use base qw(Slim::Player::Protocols::HTTP);
@@ -379,8 +379,8 @@ sub _gotTrack {
 	# Cache the rest of the track's metadata
 	my $icon = Slim::Plugin::Deezer::Plugin->_pluginDataFor('icon');
 	my $meta = {
-		artist    => $info->{artist},
-		album     => $info->{album},
+		artist    => $info->{artist_name},
+		album     => $info->{album_name},
 		title     => $info->{title},
 		cover     => $info->{cover} || $icon,
 		duration  => $info->{duration},
@@ -635,6 +635,8 @@ sub _gotBulkMetadata {
 	
 	# Update the playlist time so the web will refresh, etc
 	$client->currentPlaylistUpdateTime( Time::HiRes::time() );
+	
+	Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
 }
 
 sub _gotBulkMetadataError {

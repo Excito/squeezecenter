@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Namespace;
 
-# $Id: Namespace.pm 28933 2009-10-19 18:23:09Z andy $
+# $Id: Namespace.pm 31053 2010-07-13 17:43:53Z agrundman $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -211,8 +211,8 @@ sub client {
 	# opimised due to frequency of being called
 	return unless $_[1];
 	
-	if ( $_[0]->{'clients'}->{ $_[1]->id } ) {
-		return $_[0]->{'clients'}->{ $_[1]->id };
+	if ( my $client = $_[0]->{'clients'}->{ $_[1]->id } ) {
+		return $client;
 	}
 	
 	my $cprefs = Slim::Utils::Prefs::Client->new($_[0], $_[1]);
