@@ -1,6 +1,6 @@
 package Slim::Utils::Log;
 
-# $Id: Log.pm 30141 2010-02-12 10:42:47Z mherger $
+# $Id: Log.pm 31037 2010-07-12 14:20:55Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Dan Sully, Logitech.
 # This program is free software; you can redistribute it and/or
@@ -135,6 +135,10 @@ sub init {
 	if ( !main::ISWINDOWS && !$ENV{NYTPROF} ) {
 		$config{'log4perl.appender.server.recreate'}              = 1;
 		$config{'log4perl.appender.server.recreate_check_signal'} = 'USR1';
+	}
+	else {
+		$config{'log4perl.appender.server.recreate'}              = 0;
+		$config{'log4perl.appender.server.recreate_check_signal'} = '';
 	}
 	
 	# Change to syslog if requested

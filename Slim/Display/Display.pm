@@ -1,6 +1,6 @@
 package Slim::Display::Display;
 
-# $Id: Display.pm 28762 2009-10-03 02:21:16Z andy $
+# $Id: Display.pm 31698 2011-01-01 17:01:33Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -57,7 +57,7 @@ my $prefs = preferences('server');
 #   0 = no scrolling
 #   1 = server side normal scrolling
 #   2 = server side ticker mode
-#  3+ = <reserved for client side scrolling>
+#   3 = client-side scrolling
 
 my $log = logger('player.display');
 
@@ -68,8 +68,8 @@ our $defaultPrefs = {
 	'scrollMode'           => 0,
 	'scrollPause'          => 3.6,
 	'scrollPauseDouble'    => 3.6,
-	'scrollRate'           => 0.15,
-	'scrollRateDouble'     => 0.1,
+	'scrollRate'           => 0.033,
+	'scrollRateDouble'     => 0.033,
 	'alwaysShowCount'      => 1,
 };
 
@@ -535,14 +535,22 @@ sub scrollInit {
 	                        # 2 = scroll to scrollend and then end animation (causing new update)
 
 	my $client = $display->client;
+	my $cprefs = $prefs->client($client);
 
 	my $ticker = ($screen->{scroll} == 2);
 
-	my $refresh = $prefs->client($client)->get($display->linesPerScreen() == 1 ? 'scrollRateDouble': 'scrollRate'  );
-	my $pause   = $prefs->client($client)->get($display->linesPerScreen() == 1 ? 'scrollPauseDouble': 'scrollPause');
+	my $refresh = $cprefs->get($display->linesPerScreen() == 1 ? 'scrollRateDouble': 'scrollRate'    );
+	my $pause   = $cprefs->get($display->linesPerScreen() == 1 ? 'scrollPauseDouble': 'scrollPause'  );
+	my $pixels  = $cprefs->get($display->linesPerScreen() == 1 ? 'scrollPixelsDouble': 'scrollPixels');
 
 	my $now = Time::HiRes::time();
 	my $start = $now + ($ticker ? 0 : (($pause > 0.5) ? $pause : 0.5));
+	
+	# Adjust scrolling params for ticker mode, we don't want the server scrolling at 30fps
+	if ($ticker) {
+		$refresh = 0.15;
+		$pixels = 7;
+	}
 
 	my $scroll = {
 		'scrollstart'   => $screen->{scrollstart},
@@ -563,7 +571,6 @@ sub scrollInit {
 
 	if (defined($screen->{bitsref})) {
 		# graphics display
-		my $pixels = $prefs->client($client)->get($display->linesPerScreen() == 1 ? 'scrollPixelsDouble': 'scrollPixels');
 		$scroll->{shift} = $pixels * $display->bytesPerColumn() * $screen->{scrolldir};
 		$scroll->{scrollHeader} = $display->scrollHeader($screenNo);
 		$scroll->{scrollFrameSize} = length($display->scrollHeader) + $display->screenBytes($screenNo);
@@ -607,7 +614,54 @@ sub scrollInit {
 
 	$display->scrollData($screenNo, $scroll);
 	$display->scrollState($screenNo, $ticker ? 2 : 1);
-	$display->scrollUpdate($scroll);
+	
+	if (!$ticker && $client->hasScrolling) {
+		# Start client-side scrolling
+		$display->scrollState($screenNo, 3);
+		
+		# First send the scrollable data frame
+		# Note: length of $data header must be even!
+		my $header = pack 'ccNNnnn',
+			$screenNo,
+			($scroll->{dir} == 1 ? 1 : 2),
+			$pause * 1000,
+			$refresh * 1000,
+			$pixels,
+			$scroll->{scrollonce},    # repeat flag
+			$scroll->{scrollend} / 4; # width of scroll area in pixels
+		
+		# slimproto has a max packet size of 3000 bytes, so we may need to send multiple packets
+		# for a long scrolling frame
+		my $scrollbits = ${$scroll->{scrollbitsref}};
+		my $length = length $scrollbits;
+		my $offset = 0;
+		
+		while ($length > 0) {
+			if ( $length > 1280 ) { # split up into normal max grf size
+				$length = 1280;
+			}
+			
+			my $data = $header . pack('n', $offset) . substr( $scrollbits, 0, $length, '' );
+			
+			$client->sendFrame( grfs => \$data );
+			$offset += $length;			
+			$length = length $scrollbits;
+		}
+		
+		# Next send the background frame, display will be updated after it is received
+		# and scrolling will begin.
+		# Note: also must have an even length
+		my $data2 = pack 'nn',
+			$screenNo,
+			$screen->{overlaystart}[$screen->{scrollline}] / 4; # width of scrollable area
+		
+		$data2 .= ${$scroll->{bitsref}};
+		$client->sendFrame( grfg => \$data2 );
+	}
+	else {
+		# server-side scrolling
+		$display->scrollUpdate($scroll);
+	}
 }
 
 # stop server side scrolling
@@ -616,7 +670,7 @@ sub scrollStop {
 	my $screenNo = shift;
 	my $scroll = $display->scrollData($screenNo) || return;
 
-	Slim::Utils::Timers::killSpecific($scroll->{timer});
+	delete $scroll->{timer};
 
 	$display->scrollState($screenNo, 0);
 	$display->scrollData($screenNo, undef);
@@ -644,9 +698,20 @@ sub scrollUpdateBackground {
 
 	$scroll->{overlaystart} = $screen->{overlaystart}[$screen->{scrollline}];
 
-	# force update of screen for if paused, otherwise rely on scrolling to update
-	if ($scroll->{paused}) {
-		$display->scrollUpdateDisplay($scroll);
+	# If we're doing client-side scrolling, send a new background frame
+	if ($display->scrollState($screenNo) == 3) {
+		my $data = pack 'nn',
+			$screenNo,
+			$scroll->{overlaystart} / 4; # width of scrollable area
+
+		$data .= ${$scroll->{bitsref}};
+		$display->client->sendFrame( grfg => \$data );
+	}
+	else {
+		# force update of screen for if paused, otherwise rely on scrolling to update
+		if ($scroll->{paused}) {
+			$display->scrollUpdateDisplay($scroll);
+		}
 	}
 }
 
@@ -677,6 +742,20 @@ sub scrollUpdate {
 
 	# update display
 	$display->scrollUpdateDisplay($scroll);
+	
+	# We use a direct EV timer here because this is a high-frequency repeating
+	# timer, and we can take advantage of EV's built-in repeating timer mode
+	# which isn't supported via the Slim::Utils::Timers API
+	my $timer = $scroll->{timer};
+	if ( !$timer ) {
+		$timer = $scroll->{timer} = EV::timer_ns(
+			0,
+			0,
+			sub { scrollUpdate($display, $scroll) },
+		);
+		# Make it a high priority timer
+		$timer->priority(2);
+	}
 
 	my $timenow = Time::HiRes::time();
 
@@ -684,8 +763,6 @@ sub scrollUpdate {
 		# called during pause phase - don't scroll
 		$scroll->{paused} = 1;
 		$scroll->{refreshTime} = $scroll->{pauseUntil};
-		$scroll->{timer} = Slim::Utils::Timers::setHighTimer($display, $scroll->{pauseUntil}, \&scrollUpdate, $scroll);
-
 	} else {
 		# update refresh time and skip frame if running behind actual timenow
 		do {
@@ -708,6 +785,7 @@ sub scrollUpdate {
 					$scroll->{offset} = $scroll->{scrollstart};
 					$scroll->{paused} = 1;
 					$scroll->{inhibitsaver} = 0;
+					$timer->stop;
 					if ($scroll->{scrollonceend}) {
 						# schedule endAnimaton to kill off scrolling and display new screen
 						$display->animateState(6) unless ($display->animateState() == 5);
@@ -725,9 +803,10 @@ sub scrollUpdate {
 				$scroll->{inhibitsaver} = 0;
 			}
 		}
-		# fast timer during scroll
-		$scroll->{timer} = Slim::Utils::Timers::setHighTimer($display, $scroll->{refreshTime}, \&scrollUpdate, $scroll);
 	}
+	
+	$timer->set( 0, $scroll->{refreshTime} - $timenow );
+	$timer->again;
 }
 
 sub endAnimation {

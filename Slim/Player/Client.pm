@@ -1,6 +1,6 @@
 package Slim::Player::Client;
 
-# $Id: Client.pm 30383 2010-03-17 12:21:17Z ayoung $
+# $Id: Client.pm 31559 2010-11-30 21:44:39Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -1445,6 +1445,8 @@ sub maxSupportedSamplerate {
 sub canDecodeRhapsody { 0 };
 
 sub hidden { 0 }
+
+sub hasScrolling { 0 }
 
 sub apps {
 	my $client = shift;

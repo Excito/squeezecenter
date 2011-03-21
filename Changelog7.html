@@ -1,4 +1,65 @@
-<h2><a name="v7.5.1" id="v7.5.1"></a>Version 7.5.1</h2>
+<h2><a name="v7.5.3" id="v7.5.3"></a>Version 7.5.3</h2>
+<ul>
+	<li>Firmware updates:</li>
+	<ul>
+		<li>Boom - Version 52<br />	
+			Squeezebox 2/3 - Version 132<br />
+			Transporter - Version 82<br />
+			Receiver - Version 67
+		</li>
+		<ul>
+			<li>Reduced network traffic while connected to a server, especially MySB.</li>
+			<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16760">#16760</a> - 24/96 files on Transporter can cause popping during scrolling/visualizer</li>
+		</ul>
+	</ul>
+	<br />
+	
+	<li>New Services:</li>
+	<ul>
+		<li>Support for Spotify (Radio and Touch players only).</li>
+		<li>Support for WiMP.</li>
+	</ul>
+	<br />
+
+	<li>Platform Support:</li>
+	<ul>
+		<li>Perl 5.12 is now supported on Linux, enabling the newest distributions to work out of the box.</li>
+	</ul>
+	<br />
+
+	<li>Bug Fixes:</li>
+	<ul>
+		<li>Fixed a bug where connecting to MySB from the player UI would always incorrectly use a DNS lookup, leaving the player stuck on MySB.</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16183">#16183</a> - Pandora genre stations can cause blank screen</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16379">#16379</a> - aac->pcm using faad is wrong at non-44.1 samplerates</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16331">#16331</a> - SB Radio: Fix for random battery charging sound.</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16452">#16452</a> - forward slashes in artist and track names after import</li>
+	</ul>
+	<br />
+</ul>
+
+<h2><a name="v7.5.2" id="v7.5.2"></a>Version 7.5.2 - 2010-12-20</h2>
+<ul>
+	<li>Firmware updates:</li>
+	<ul>
+		<li>Boom - Version 51<br />	
+			Squeezebox 2/3 - Version 131<br />
+			Transporter - Version 81<br />
+			Receiver - Version 66
+		</li>
+		<ul>
+			<li>Boom: Discrete IR codes for power_on, power_off and line_in</li>
+			<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=3932">#3932</a> - Transporter: Discrete IR codes for power_on, power_off and digital_inputs</li>
+			<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=4622">#4622</a> - Client-side smooth text scrolling</li>
+			<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=4682">#4682</a> - Send WOL while in connecting state and receiving discrete power_on IR code</li>
+			<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=12319">#12319</a> - Boom: Change RTC alarm time to 1 hour (was 1 minute)</li>
+			<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16667">#16667</a> - Rhapsody stream failures</li>
+		</ul>
+	</ul>
+	<br />
+</ul>
+
+<h2><a name="v7.5.1" id="v7.5.1"></a>Version 7.5.1 - 2010-06-10</h2>
 <ul>
 	
 	<li>New Features:</li>
@@ -32,6 +93,7 @@
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16186">#16186</a> - ALAC transcoding support broken for ReadyNAS Sparc</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16238">#16238</a> - iTunes plugin incorrectly scans ALAC files as "Quicktime Movie" files</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16243">#16243</a> - AIFC (AIFF little-endian) files no longer play correctly</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16582">#16582</a> - Playback may stop at end of first track when one synced player is off</li>
 	</ul>
 	<br />
 </ul>

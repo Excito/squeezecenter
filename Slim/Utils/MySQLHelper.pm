@@ -1,6 +1,6 @@
 package Slim::Utils::MySQLHelper;
 
-# $Id: MySQLHelper.pm 29591 2009-12-11 15:57:30Z michael $
+# $Id: MySQLHelper.pm 31488 2010-11-03 17:58:52Z agrundman $
 
 =head1 NAME
 
@@ -133,8 +133,10 @@ Creates a MySQL config file from the L<my.tt> template in the MySQL directory.
 
 sub createConfig {
 	my ($class, $cacheDir) = @_;
-
-	my $ttConf = catdir($class->mysqlDir, 'my.tt');
+	
+	my $highmem = $prefs->get('dbhighmem') || 0;
+	
+	my $ttConf = catdir($class->mysqlDir, $highmem ? 'my-highmem.tt' : 'my.tt');
 	my $output = catdir($cacheDir, 'my.cnf');
 
 	my %config = (
@@ -337,6 +339,8 @@ sub changeCollation {
 			contributors
 			genres
 			tracks
+			playlist_track
+			tracks_persistent
 		);
 
 		for my $table ( @tables ) {

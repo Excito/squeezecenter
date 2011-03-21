@@ -1,6 +1,6 @@
 package Slim::Utils::Misc;
 
-# $Id: Misc.pm 30042 2010-02-05 21:09:36Z andy $
+# $Id: Misc.pm 31155 2010-08-03 20:39:47Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -1341,6 +1341,21 @@ Round a number to an integer
 sub round {
 	my $number = shift;
 	return int($number + .5 * ($number <=> 0));
+}
+
+=head2 min ( )
+
+Return the minimum value from a list supplied as an array reference
+
+=cut
+
+# Smaller and faster than Math::VecStat::min
+
+sub min {
+  my $v = $_[0];
+  my $m = $v->[0];
+  foreach (@$v) { $m = $_ if $_ < $m; }
+  return $m;
 }
 
 =head1 SEE ALSO

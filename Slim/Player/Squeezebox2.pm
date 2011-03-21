@@ -1,6 +1,6 @@
 package Slim::Player::Squeezebox2;
 
-# $Id: Squeezebox2.pm 30260 2010-02-26 08:42:31Z ayoung $
+# $Id: Squeezebox2.pm 31559 2010-11-30 21:44:39Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -87,6 +87,11 @@ sub hasServ { 1 };
 # SN only, this checks that the player's firmware version supports compression
 sub hasCompression {
 	return shift->revision >= 80;
+}
+
+# Do we have support for client-side scrolling?
+sub hasScrolling {
+	return shift->revision >= 131;
 }
 
 sub model {

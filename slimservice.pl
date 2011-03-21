@@ -1,4 +1,4 @@
-#!/opt/sdi/bin/perl -w
+#!/opt/sdi/bin/perl
 
 # Squeezebox Server Copyright (C) 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -96,7 +96,7 @@ BEGIN {
 	
 	require SDI::Service::Model::DBI;
 	require SDI::Util::ClassDBIBase;
-	SDI::Service::Model::DBI->init( $sn_config->{database} );
+	SDI::Service::Model::DBI->init( $sn_config );
 	
 	require SDI::Util::Memcached;
 	SDI::Util::Memcached->new( $sn_config->{memcached} );
@@ -222,7 +222,7 @@ our @AUTHORS = (
 );
 my $prefs        = preferences('server');
 
-our $VERSION     = '7.5.1-sn';
+our $VERSION     = '7.5.3-sn';
 our $REVISION    = undef;
 our $audiodir    = undef;
 our $playlistdir = undef;
@@ -320,7 +320,7 @@ sub init {
 		};
 	
 		$SIG{USR2} = sub {
-			DB::disable_profile();
+			DB::finish_profile();
 			warn "Profiling disabled...\n";
 		};
 	}

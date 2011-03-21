@@ -243,6 +243,13 @@ sub hasLineIn {
 	return 1;
 }
 
+# SN only, this checks that the player's firmware version supports compression
+sub hasCompression { 1 }
+
+# Do we have support for client-side scrolling?
+sub hasScrolling {
+	return shift->revision >= 51;
+}
 
 sub maxTreble {	return 23; }
 sub minTreble {	return -23; }
@@ -488,13 +495,7 @@ sub setRTCTime {
 	
 	if ( main::SLIM_SERVICE ) {
 		# Adjust for the user's timezone
-		my $timezone = $prefs->client($client)->get('timezone') 
-			|| $client->playerData->userid->timezone 
-			|| 'America/Los_Angeles';
-
-		my $dt = DateTime->now( 
-			time_zone => $timezone
-		);
+		my $dt = $client->datetime;
 		
 		$sec  = $dt->sec;
 		$min  = $dt->min;

@@ -1,6 +1,6 @@
 package Slim::Networking::Async;
 
-# $Id: Async.pm 30042 2010-02-05 21:09:36Z andy $
+# $Id: Async.pm 31352 2010-09-17 13:07:08Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -43,7 +43,7 @@ sub open {
 	}
 	
 	# Timeout defaults to the Radio Station Timeout pref
-	$args->{Timeout} ||= preferences('server')->get('remotestreamtimeout') || 10;
+	$args->{Timeout} ||= preferences('server')->get('remotestreamtimeout');
 
 	# Skip async DNS if we know the IP address or are using a proxy (skipDNS)
 	if ( $args->{skipDNS} || $args->{PeerAddr} || Slim::Utils::Network::ip_is_ipv4( $args->{Host} ) ) {

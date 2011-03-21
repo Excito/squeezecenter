@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Base;
 
-# $Id: Base.pm 29804 2010-01-14 14:46:05Z andy $
+# $Id: Base.pm 31508 2010-11-09 15:44:35Z agrundman $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -82,7 +82,7 @@ sub get_SN {
 	
 		# More special handling for alarm prefs, ugh
 		elsif ( $key =~ /^alarm/ && !ref $value ) {
-			if ( $key !~ /alarmfadeseconds|alarmsEnabled/ ) {
+			if ( $key !~ /alarmfadeseconds|alarmsEnabled|alarmSnoozeSeconds|alarmTimeoutSeconds|alarmsaver/ ) {
 				$value = [ $value ];
 			}
 		}

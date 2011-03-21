@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs;
 
-# $Id: Prefs.pm 30409 2010-03-24 14:57:32Z mherger $
+# $Id: Prefs.pm 31586 2010-12-05 18:39:56Z agrundman $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -137,6 +137,7 @@ sub init {
 		'dbsource'              => $default_dbsource,
 		'dbusername'            => 'slimserver',
 		'dbpassword'            => '',
+		'dbhighmem'             => 0,
 		'cachedir'              => \&defaultCacheDir,
 		'librarycachedir'       => \&defaultCacheDir,
 		'securitySecret'        => \&makeSecuritySecret,
@@ -192,7 +193,7 @@ sub init {
 		'webproxy'              => \&Slim::Utils::OSDetect::getProxy,
 		'httpport'              => 9000,
 		'bufferSecs'            => 3,
-		'remotestreamtimeout'   => 5,
+		'remotestreamtimeout'   => 15,
 		'maxWMArate'            => 9999,
 		'tcpConnectMaximum'	    => 30,             # not on web page
 		'udpChunkSize'          => 1400,           # only used for Slimp3
@@ -668,6 +669,19 @@ sub init {
 		} );
 	}
 	
+	# Update scrolling prefs for client-side scrolling
+	$prefs->migrateClient( 14, sub {
+		my ( $cprefs, $client ) = @_;
+		
+		if ( $client->isa('Slim::Player::Squeezebox2') ) {
+			$cprefs->set( scrollRate         => 0.033 );
+			$cprefs->set( scrollRateDouble   => 0.033 );
+			$cprefs->set( scrollPixels       => 2 );
+			$cprefs->set( scrollPixelsDouble => 3 );
+		}
+		
+		1;
+	} );	
 
 	# initialise any new prefs
 	$prefs->init(\%defaults);
