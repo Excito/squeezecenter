@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Base;
 
-# $Id: Base.pm 25577 2009-03-17 14:14:06Z andy $
+# $Id: Base.pm 28189 2009-08-14 19:33:36Z andy $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -47,21 +47,20 @@ sub get_SC {
 }
 
 sub get_SN {
-	my ( $class, $key ) = ( shift, shift );
-	
-	my $value = $class->{prefs}->{ $key };
-	
 	if ( main::SLIM_SERVICE ) {
+		my ( $class, $key ) = ( shift, shift );
+	
+		my $value = $class->{prefs}->{ $key };
+		
 		# Callers can force retrieval from the database
 		my $force = shift;
-		
+	
 		# Can override the model
 		my $model = shift;
-	
+
 		if ( !defined $value || $force ) {
-		
+	
 			if ( $class->{clientid} ) {
-				
 				# Prepend namespace to key if it's not 'server'
 				my $nskey = $key;
 				if ( $class->namespace ne 'server' ) {
@@ -69,31 +68,31 @@ sub get_SN {
 					$ns =~ s/\./_/g;
 					$nskey = $ns . '_' . $key;
 				}
-				
+			
 				$value = $class->getFromDB( $nskey, $model );
 
 				$class->{prefs}->{ $key } = $value;
 			}
 		}
-		
+	
 		# Special handling for disabledirsets when there is only one disabled item
 		if ( $key eq 'disabledirsets' && !ref $value ) {
 			$value = [ $value ];
 		}
-		
+	
 		# More special handling for alarm prefs, ugh
 		elsif ( $key =~ /^alarm/ && !ref $value ) {
 			if ( $key !~ /alarmfadeseconds|alarmsEnabled/ ) {
 				$value = [ $value ];
 			}
 		}
-		
+	
 		if ( wantarray && ref $value eq 'ARRAY' ) {
 			return @{$value};
 		}
-	}
 	
-	return $value;
+		return $value;
+	}
 }
 
 =head2 getFromDB( $prefname )
@@ -102,7 +101,7 @@ SLIM_SERVICE only. Pulls a pref from the database.
 
 =cut
 
-sub getFromDB {
+sub getFromDB { if ( main::SLIM_SERVICE ) { # optimize out for SC
 	my ( $class, $key, $model ) = @_;
 	
 	my $client = Slim::Player::Client::getClient( $class->{clientid} ) || return;
@@ -132,9 +131,8 @@ sub getFromDB {
 		if ( !defined $value ) {
 			# NULL in DB is indicates empty string
 			$value = '';
-		}
-			
-		if ( $value =~ s/^json:// ) {
+		}	
+		elsif ( $value =~ s/^json:// ) {
 			$value = eval { from_json($value) };
 			if ( $@ ) {
 				$log->error( $client->id . " Bad JSON pref $key: $@" );
@@ -146,14 +144,26 @@ sub getFromDB {
 		# array pref
 		$value = [];
 		for my $pref ( @prefs ) {
-			$value->[ $pref->idx ] = $pref->value;
+			my $pv = $pref->value;
+			if ( !defined $pv ) {
+				$pv = '';
+			}
+			elsif ( $pv =~ s/^json:// ) {
+				$pv = eval { from_json($pv) };
+				if ( $@ ) {
+					$log->error( $client->id . " Bad JSON pref $key: $@" );
+					$pv = ''
+				}
+			}
+			
+			$value->[ $pref->idx ] = $pv;
 		}
 	}
 	else {
 		# nothing found
 	}
 
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug( sprintf( 
 			"getFromDB: retrieved client pref %s-%s = %s",
 			$client->id, $key, (defined($value) ? $value : 'undef')
@@ -161,7 +171,7 @@ sub getFromDB {
 	}
 	
 	return $value;
-}
+} }
 
 =head2 exists( $prefname )
 
@@ -233,7 +243,7 @@ sub set {
 
 	if ( $valid && ( main::SLIM_SERVICE || $pref !~ /^_/ ) ) {
 
-		if ( $log->is_debug ) {
+		if ( main::DEBUGLOG && $log->is_debug ) {
 			$log->debug(
 				sprintf(
 					"setting %s:%s:%s to %s",
@@ -261,7 +271,7 @@ sub set {
 		
 		if ( !defined $old || !defined $new || $old ne $new || ref $new ) {
 			
-			if ( main::SLIM_SERVICE && blessed($client) ) {
+			if ( main::SLIM_SERVICE && blessed($client) && $client->playerData ) {
 				# Skip param lets routines like initPersistedPrefs avoid writing right back to the db
 				my $skip = shift || 0;
 
@@ -278,9 +288,6 @@ sub set {
 					if ( ref $new eq 'ARRAY' ) {
 						SDI::Service::Model::PlayerPref->quick_update_array( $client->playerData, $nspref, $new );
 					}
-					elsif ( ref $new eq 'HASH' ) {
-						SDI::Service::Model::PlayerPref->quick_update( $client->playerData, $nspref, 'json:' . to_json( $new ) );
-					}
 					else {
 						SDI::Service::Model::PlayerPref->quick_update( $client->playerData, $nspref, $new );
 					}
@@ -289,7 +296,7 @@ sub set {
 
 			if ( (my $obj = $class->_obj) || !main::SLIM_SERVICE ) {
 				for my $func ( @{$change} ) {
-					if ( $log->is_debug ) {
+					if ( main::DEBUGLOG && $log->is_debug ) {
 						$log->debug('executing on change function ' . Slim::Utils::PerlRunTime::realNameForCodeRef($func) );
 					}
 				
@@ -298,11 +305,14 @@ sub set {
 			}
 		}
 
-		if (!main::SCANNER) {
-			Slim::Control::Request::notifyFromArray(
-				$clientid ? $client : undef,
-				['prefset', $namespace, $pref, $new]
-			);
+		if ( !main::SCANNER && !main::SLIM_SERVICE ) {
+			# Don't spam Request queue during init
+			if ( !$main::inInit ) {
+				Slim::Control::Request::notifyFromArray(
+					$clientid ? $client : undef,
+					['prefset', $namespace, $pref, $new]
+				);
+			}
 		}
 
 		return wantarray ? ($new, 1) : $new;
@@ -313,7 +323,8 @@ sub set {
 			$log->warn(
 				sprintf(
 					"attempting to set %s:%s:%s to %s - invalid value",
-					$namespace, $clientid, $pref, defined $new ? Data::Dump::dump($new) : 'undef'
+					$namespace, $clientid, $pref, 
+						main::DEBUGLOG ? (defined $new ? Data::Dump::dump($new) : 'undef') : ''
 				)
 			);
 		}
@@ -326,7 +337,7 @@ sub set {
 # sets all prefs passed in first, then runs all onchange handlers
 # This avoids extra db queries when a change handler uses a pref not yet loaded
 
-sub bulkSet {
+sub bulkSet { if ( main::SLIM_SERVICE ) { # optimize out for SC
 	my ( $class, $prefs ) = @_;
 	
 	my $root = $class->_root;
@@ -336,10 +347,25 @@ sub bulkSet {
 	my $set = sub {
 		my ( $pref, $new ) = @_;
 		
+		my @ret;
+		
 		my $valid = $class->validate($pref, $new);
 		
 		if ( $valid ) {
 			my $old = $class->{prefs}->{ $pref };
+			
+			if ( ref $new eq 'ARRAY' ) {
+				for ( @{$new} ) {
+					if ( s/^json:// ) {
+						$_ = eval { from_json($_) };
+						$_ = '' if $@;
+					}
+				}
+			}
+			elsif ( $new =~ s/^json:// ) {
+				$new = eval { from_json($new) };
+				$new = '' if $@;
+			}
 			
 			# If old pref was an array but new is not, force it to stay an array
 			if ( ref $old eq 'ARRAY' && !ref $new ) {
@@ -353,8 +379,8 @@ sub bulkSet {
 				if ( my $obj = $class->_obj ) {
 					my $change = $root->{onchange}->{ $pref };
 					for my $func ( @{$change} ) {
-						return sub {
-							$log->is_debug && $log->debug(
+						push @ret, sub {
+							main::DEBUGLOG && $log->is_debug && $log->debug(
 								'executing on change function ' . Slim::Utils::PerlRunTime::realNameForCodeRef($func)
 							);
 							
@@ -365,31 +391,33 @@ sub bulkSet {
 			}
 		}
 		
-		return;
+		return @ret;
 	};
 
 	for my $key ( keys %{$prefs} ) {
-		my $cb;
+		my @cb;
 		if ( scalar @{ $prefs->{$key} } == 1 ) {
 			# scalar pref
-			$cb = $set->( $key, $prefs->{$key}->[0] );
+			@cb = $set->( $key, $prefs->{$key}->[0] );
 		}
 		else {
 			# array pref
-			$cb = $set->( $key, $prefs->{$key} );
+			@cb = $set->( $key, $prefs->{$key} );
 		}
-		push @handlers, $cb if $cb;
+		for my $cb ( @cb ) {
+			push @handlers, $cb if defined $cb;
+		}
 	}
 	
 	for my $func ( @handlers ) {
 		eval { $func->(); };
 		if ( $@ && $log->is_debug ) {
 			my $handler = Slim::Utils::PerlRunTime::realNameForCodeRef($func);
-			$log->debug( "Error running bulkSet change handler $handler: $@" );
+			main::DEBUGLOG && $log->debug( "Error running bulkSet change handler $handler: $@" );
 			Slim::Utils::Misc::bt();
 		}
 	}
-}
+} }
 
 sub _obj {}
 
@@ -427,7 +455,7 @@ sub init {
 				$value = $hash->{ $pref };
 			}
 
-			if ( $log->is_info ) {
+			if ( main::DEBUGLOG && $log->is_info ) {
 				$log->info(
 					"init " . $class->_root->{'namespace'} . ":" 
 					. ($class->{'clientid'} || '') . ":" . $pref 
@@ -459,7 +487,7 @@ sub remove {
 
 	while (my $pref  = shift) {
 
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(
 				"removing " . $class->_root->{'namespace'} . ":" . ($class->{'clientid'} || '') . ":" . $pref
 			);
@@ -474,10 +502,12 @@ sub remove {
 		if ( main::SLIM_SERVICE && $class->{clientid} ) {
 			# Remove the pref from the database
 			my $client = Slim::Player::Client::getClient( $class->{clientid} );
-			SDI::Service::Model::PlayerPref->sql_clear_array->execute(
-				$client->playerData->id,
-				$pref,
-			);
+			if ( $client->playerData ) {
+				SDI::Service::Model::PlayerPref->sql_clear_array->execute(
+					$client->playerData->id,
+					$pref,
+				);
+			}
 		}
 	}
 
@@ -508,13 +538,13 @@ Clears all preferences. SLIM_SERVICE only.
 
 =cut
 
-sub clear {
+sub clear { if ( main::SLIM_SERVICE ) { # optimize out for SC
 	my $class = shift;
 	
 	for my $pref ( keys %{ $class->{prefs} } ) {
 		delete $class->{prefs}->{$pref};
 	}
-}
+} }
 
 =head2 hasValidator( $pref )
 
@@ -574,7 +604,7 @@ sub AUTOLOAD {
 
 	if ($optimiseAccessors) {
 
-		if ( $log->is_debug ) {
+		if ( main::DEBUGLOG && $log->is_debug ) {
 			$log->debug(
 				  "creating accessor for " 
 				. $class->_root->{'namespace'} . ":" 

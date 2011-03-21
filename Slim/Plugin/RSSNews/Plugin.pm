@@ -1,7 +1,7 @@
 package Slim::Plugin::RSSNews::Plugin;
 
 # RSS News Browser
-# Copyright 2006-2007 Logitech
+# Copyright 2006-2009 Logitech
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -32,11 +32,63 @@ my $log = Slim::Utils::Log->addLogCategory({
 	'description'  => getDisplayName(),
 });
 
-if ( !main::SLIM_SERVICE ) {
+if ( !main::SLIM_SERVICE && !$::noweb ) {
  	require Slim::Plugin::RSSNews::Settings;
 }
 
 my $prefs = preferences('plugin.rssnews');
+
+use constant FEED_VERSION => 3; # bump this number when changing the defaults below
+
+# Default feed list
+sub DEFAULT_FEEDS {[
+	{
+		name  => 'BBC News World Edition',
+		value => 'http://news.bbc.co.uk/rss/newsonline_world_edition/front_page/rss.xml',
+	},
+	{
+		name  => 'CNET News.com',
+		value => 'http://news.com.com/2547-1_3-0-5.xml',
+	},
+	{
+		name  => 'New York Times Home Page',
+		value => 'http://www.nytimes.com/services/xml/rss/nyt/HomePage.xml',
+	},
+	{
+		name  => 'Slashdot',
+		value => 'http://rss.slashdot.org/Slashdot/slashdot',
+	},
+	{
+		name  => 'Yahoo! News: Business',
+		value => 'http://rss.news.yahoo.com/rss/business',
+	},
+];}
+
+# migrate old prefs across
+$prefs->migrate(1, sub {
+	my @names  = @{Slim::Utils::Prefs::OldPrefs->get('plugin_RssNews_names') || [] };
+	my @values = @{Slim::Utils::Prefs::OldPrefs->get('plugin_RssNews_feeds') || [] };
+	my @feeds;
+
+	for my $name (@names) {
+		push @feeds, { 'name' => $name, 'value' => shift @values };
+	}
+
+	if (@feeds) {
+		$prefs->set('feeds', \@feeds);
+		$prefs->set('modified', 1);
+	}
+
+	$prefs->set('items_per_feed', Slim::Utils::Prefs::OldPrefs->get('plugin_RssNews_items_per_feed') || 3);
+
+	1;
+});
+
+# migrate to latest version of default feeds if they have not been modified
+$prefs->migrate(FEED_VERSION, sub {
+	$prefs->set('feeds', DEFAULT_FEEDS()) unless $prefs->get('modified');
+	1;
+});
 
 # $refresh_sec is the minimum time in seconds between refreshes of the ticker from the RSS.
 # Please do not lower this value. It prevents excessive queries to the RSS.
@@ -48,11 +100,11 @@ my $savers = {};
 sub initPlugin {
 	my $class = shift;
 
-	$log->info("Initializing.");
+	main::INFOLOG && $log->info("Initializing.");
 
 	$class->SUPER::initPlugin();
 
-	if ( !main::SLIM_SERVICE ) {
+if ( !main::SLIM_SERVICE && !$::noweb ) {
 		Slim::Plugin::RSSNews::Settings->new;
 	}
 
@@ -79,7 +131,7 @@ sub initPlugin {
 		return;
 	}
 
-	if ($log->is_debug) {
+	if (main::DEBUGLOG && $log->is_debug) {
 
 		$log->debug("RSS Feed Info:");
 
@@ -97,6 +149,9 @@ sub initPlugin {
 sub getDisplayName {
 	return 'PLUGIN_RSSNEWS';
 }
+
+# Don't add this item to any menu
+sub playerMenu { }
 
 sub getFunctions {
 	return {};
@@ -143,7 +198,7 @@ sub setMode {
 sub cliQuery {
 	my $request = shift;
 	
-	$log->info("Begin Function");
+	main::INFOLOG && $log->info("Begin Function");
 	
 	# Get OPML list of feeds from cache
 	my $cache = Slim::Utils::Cache->new();
@@ -225,7 +280,7 @@ sub leaveScreenSaverRssNews {
 
 	delete $savers->{$client};
 	
-	$log->info("Leaving screensaver mode");
+	main::INFOLOG && $log->info("Leaving screensaver mode");
 }
 
 sub tickerUpdate {
@@ -265,7 +320,7 @@ sub getNextFeed {
 	
 	my $url = $feeds[$index - 1]->{'value'};
 	
-	$log->info("Fetching next feed: $url");
+	main::INFOLOG && $log->info("Fetching next feed: $url");
 	
 	if ( !$savers->{$client}->{current_feed} ) {
 		$client->update( {
@@ -297,7 +352,8 @@ sub gotNextFeed {
 	}
 	
 	$savers->{$client}->{current_feed} = $feed;
-	
+	$savers->{$client}->{current_url}  = $params->{'url'};
+
 	tickerUpdateContinue( $client );
 }
 
@@ -386,7 +442,7 @@ sub blankLines {
 
 	my $parts = {
 		'line'   => [ $savers->{$client}->{line1} || '' ],
-		'ticker' => [],
+		'ticker' => [ undef, '' ],
 	};
 
 	# check after the update calling this function is complete to see if ticker is empty
@@ -410,6 +466,7 @@ sub tickerLines {
 
 	# the current RSS feed
 	my $feed = $savers->{$client}->{current_feed};
+	my $url  = $savers->{$client}->{current_url};
 
 	assert( ref $feed eq 'HASH', "current rss feed not set\n");
 
@@ -419,77 +476,89 @@ sub tickerLines {
 	if ( !defined $current_items ) {
 
 		$current_items = {
-			$feed => {
+			$url => {
 				'next_item'  => 0,
 				'first_item' => 0,
 			},
 		};
 
 	}
-	elsif ( !defined $current_items->{$feed} ) {
+	elsif ( !defined $current_items->{$url} ) {
 
-		$current_items->{$feed} = {
+		$current_items->{$url} = {
 			'next_item'  => 0,
 			'first_item' => 0
 		};
 	}
-	
+
 	# add item to ticker or display error and wait for tickerUpdate to retrieve news
 	if ( defined $feed ) {
 	
-		my $line1 = Slim::Formats::XML::unescapeAndTrim( $feed->{'title'} );
-		my $i     = $current_items->{$feed}->{'next_item'};
-		
-		my $title       = $feed->{'items'}->[$i]->{'title'};
-		my $description = $feed->{'items'}->[$i]->{'description'} || '';
+		my $i = $current_items->{$url}->{'next_item'};
 
-		# How to display items shown by screen saver.
-		# %1\$s is item 'number'	XXX: number not used?
-		# %2\$s is item title
-		# %3\%s is item description
-		my $screensaver_item_format = "%2\$s -- %3\$s";
+		# handle case of feed index no longer being valid (feed refetched with less items)
+		if (!defined $feed->{'items'}->[$i]) {
+			$i = 0;
+			$current_items->{$url}->{'first_item'} = 0;
+		}
+
+		my $line1 = Slim::Formats::XML::unescapeAndTrim( $feed->{'title'} );
+		my $line2;
 		
+		my $title       = Slim::Formats::XML::unescapeAndTrim( $feed->{'items'}->[$i]->{'title'} );
+		my $description = Slim::Formats::XML::unescapeAndTrim( $feed->{'items'}->[$i]->{'description'} );
+
+		if ($title && $description) {
+
+			$line2 = "$title -- $description";
+
+		} elsif ($title) {
+
+			$line2 = $title;
+
+		} elsif ($description) {
+
+			$line2 = $description;
+
+		} else {
+
+			$line2 = '';
+		}
+
 		# we need to limit the number of characters we add to the ticker, 
 		# because the server could crash rendering on pre-SqueezeboxG displays.
 		my $screensaver_chars_per_item = 1024;
-
-		my $screensaver_items_per_feed = $prefs->get('items_per_feed') || 3;
-		
-		my $line2 = sprintf(
-			$screensaver_item_format,
-			$i + 1,
-			Slim::Formats::XML::unescapeAndTrim($title),
-			Slim::Formats::XML::unescapeAndTrim($description)
-		);
 
 		if ( length $line2 > $screensaver_chars_per_item ) {
 
 			$line2 = substr $line2, 0, $screensaver_chars_per_item;
 
-			$log->debug("Screensaver character limit exceeded - truncating.");
+			main::DEBUGLOG && $log->debug("Screensaver character limit exceeded - truncating.");
 		}
 
-		$current_items->{$feed}->{'next_item'} = $i + 1;
+		$current_items->{$url}->{'next_item'} = $i + 1;
 
-		if ( !exists( $feed->{'items'}->[ $current_items->{$feed}->{'next_item'} ] ) ) {
+		my $screensaver_items_per_feed = $prefs->get('items_per_feed') || 3;
 
-			$current_items->{$feed}->{'next_item'}  = 0;
-			$current_items->{$feed}->{'first_item'} -= ($i + 1);
+		if ( !exists( $feed->{'items'}->[ $current_items->{$url}->{'next_item'} ] ) ) {
+
+			$current_items->{$url}->{'next_item'}  = 0;
+			$current_items->{$url}->{'first_item'} -= ($i + 1);
 
 			if ( $screensaver_items_per_feed >= ($i + 1) ) {
 
 				$new_feed_next = 1;
 
-				$current_items->{$feed}->{'first_item'} = 0;
+				$current_items->{$url}->{'first_item'} = 0;
 			}
 		}
 
-		if ( ($current_items->{$feed}->{'next_item'} - 
-		      $current_items->{$feed}->{'first_item'}) >= $screensaver_items_per_feed ) {
+		if ( ($current_items->{$url}->{'next_item'} - 
+		      $current_items->{$url}->{'first_item'}) >= $screensaver_items_per_feed ) {
 
 			# displayed $screensaver_items_per_feed of this feed, move on to next saving position
 			$new_feed_next = 1;
-			$current_items->{$feed}->{'first_item'} = $current_items->{$feed}->{'next_item'};
+			$current_items->{$url}->{'first_item'} = $current_items->{$url}->{'next_item'};
 		}
 
 		my $format = preferences('server')->get('timeFormat');

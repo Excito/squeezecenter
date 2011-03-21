@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -19,23 +19,65 @@ use FindBin qw($Bin);
 use lib $Bin;
 
 use constant SLIM_SERVICE => 0;
-use constant SCANNER => 1;
+use constant SCANNER      => 1;
+use constant RESIZER      => 0;
+use constant TRANSCODING  => 0;
+use constant PERFMON      => 0;
+use constant DEBUGLOG     => ( grep { /--nodebuglog/ } @ARGV ) ? 0 : 1;
+use constant INFOLOG      => ( grep { /--noinfolog/ } @ARGV ) ? 0 : 1;
+use constant SB1SLIMP3SYNC=> 0;
+use constant ISWINDOWS    => ( $^O =~ /^m?s?win/i ) ? 1 : 0;
+use constant ISMAC        => ( $^O =~ /darwin/i ) ? 1 : 0;
 
 # Tell PerlApp to bundle these modules
 if (0) {
-	require 'auto/Compress/Zlib/autosplit.ix';
+	require 'auto/Compress/Raw/Zlib/autosplit.ix';
 }
 
 BEGIN {
+	# With EV, only use select backend
+	# I have seen segfaults with poll, and epoll is not stable
+	$ENV{LIBEV_FLAGS} = 1;
+
+	# set the AnyEvent model
+	$ENV{PERL_ANYEVENT_MODEL} ||= 'EV';
+	
 	use Slim::bootstrap;
 	use Slim::Utils::OSDetect;
 
-	Slim::bootstrap->loadModules([qw(version Time::HiRes DBD::mysql DBI HTML::Parser XML::Parser::Expat YAML::Syck)], []);
+	Slim::bootstrap->loadModules([qw(version Time::HiRes DBI DBD::mysql HTML::Parser XML::Parser::Expat YAML::Syck)], []);
+	
+	require File::Basename;
+	require File::Copy;
+	require File::Slurp;
+	require HTTP::Request;
+	require JSON::XS::VersionOneAndTwo;
+	require LWP::UserAgent;
+	
+	import JSON::XS::VersionOneAndTwo;
 };
+
+# Force XML::Simple to use XML::Parser for speed. This is done
+# here so other packages don't have to worry about it. If we
+# don't have XML::Parser installed, we fall back to PurePerl.
+# 
+# Only use XML::Simple 2.15 an above, which has support for pass-by-ref
+use XML::Simple qw(2.15);
+
+eval {
+	local($^W) = 0;      # Suppress warning from Expat.pm re File::Spec::load()
+	require XML::Parser; 
+};
+
+if (!$@) {
+	$XML::Simple::PREFERRED_PARSER = 'XML::Parser';
+}
 
 use Getopt::Long;
 use File::Path;
 use File::Spec::Functions qw(:ALL);
+use EV;
+use AnyEvent;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -45,26 +87,40 @@ use Slim::Music::MusicFolderScan;
 use Slim::Music::PlaylistFolderScan;
 use Slim::Player::ProtocolHandlers;
 use Slim::Utils::Misc;
-use Slim::Utils::MySQLHelper;
 use Slim::Utils::OSDetect;
 use Slim::Utils::PluginManager;
 use Slim::Utils::Progress;
 use Slim::Utils::Scanner;
 use Slim::Utils::Strings qw(string);
 
-our $VERSION     = '7.3.3';
+if ( INFOLOG || DEBUGLOG ) {
+    require Data::Dump;
+	require Slim::Utils::PerlRunTime;
+}
+
+our $VERSION     = '7.4.0';
 our $REVISION    = undef;
 our $BUILDDATE   = undef;
 
+our $prefs;
+our $progress;
+
+# Remember if the main server is running or not, to avoid LWP timeout delays
+my $serverDown = 0;
+
+my $sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass();
+eval "use $sqlHelperClass";
+die $@ if $@;
+
 sub main {
 
-	our ($rescan, $playlists, $wipe, $itunes, $musicip, $force, $cleanup, $prefsFile, $progress, $priority);
-	our ($quiet, $logfile, $logdir, $logconf, $debug, $help);
+	our ($rescan, $playlists, $wipe, $itunes, $musicip, $force, $cleanup, $prefsFile, $priority);
+	our ($quiet, $json, $logfile, $logdir, $logconf, $debug, $help);
 
 	our $LogTimestamp = 1;
 	our $noweb = 1;
 
-	my $prefs = preferences('server');
+	$prefs = preferences('server');
 	my $musicmagic;
 
 	$prefs->readonly;
@@ -87,12 +143,18 @@ sub main {
 		'logconfig=s'  => \$logconf,
 		'debug=s'      => \$debug,
 		'quiet'        => \$quiet,
+		'json=s'       => \$json,
 		'LogTimestamp!'=> \$LogTimestamp,
 		'help'         => \$help,
 	);
 
 	if (defined $musicmagic && !defined $musicip) {
 		$musicip = $musicmagic;
+	}
+	
+	# Start a fresh scanner.log on every scan
+	if ( my $file = Slim::Utils::Log->scannerLogFile() ) {
+		unlink $file if -e $file;
 	}
 
 	Slim::Utils::Log->init({
@@ -116,10 +178,10 @@ sub main {
 	STDOUT->autoflush(1);
 
 	my $log = logger('server');
-
+	
 	($REVISION, $BUILDDATE) = Slim::Utils::Misc::parseRevision();
 
-	$log->error("Starting SqueezeCenter scanner (v$VERSION, r$REVISION, $BUILDDATE)");
+	$log->error("Starting Squeezebox Server scanner (v$VERSION, r$REVISION, $BUILDDATE) perl $]");
 
 	# Bring up strings, database, etc.
 	initializeFrameworks($log);
@@ -161,7 +223,7 @@ sub main {
 
 	#checkDataSource();
 
-	$log->info("SqueezeCenter Scanner done init...\n");
+	main::INFOLOG && $log->info("Squeezebox Server Scanner done init...\n");
 
 	# Take the db out of autocommit mode - this makes for a much faster scan.
 	Slim::Schema->storage->dbh->{'AutoCommit'} = 0;
@@ -184,7 +246,7 @@ sub main {
 
 	if ($wipe) {
 
-		eval { Slim::Schema->txn_do(sub { Slim::Schema->wipeAllData }) };
+		eval { Slim::Schema->wipeAllData; };
 
 		if ($@) {
 			logError("Failed when calling Slim::Schema->wipeAllData: [$@]");
@@ -195,6 +257,7 @@ sub main {
 		# Clear the artwork cache, since it will contain cached items with IDs
 		# that are no longer valid.  Just delete the directory because clearing the
 		# cache takes too long
+		$log->error('Removing artwork cache...');
 		my $artworkCacheDir = catdir( $prefs->get('cachedir'), 'Artwork' );
 		eval { rmtree( $artworkCacheDir ); };
 	}
@@ -240,7 +303,7 @@ sub main {
 	} else {
 
 		# Run mergeVariousArtists, artwork scan, etc.
-		eval { Slim::Schema->txn_do(sub { Slim::Music::Import->runScanPostProcessing }) }; 
+		eval { Slim::Music::Import->runScanPostProcessing; }; 
 
 		if ($@) {
 
@@ -265,26 +328,23 @@ sub main {
 sub initializeFrameworks {
 	my $log = shift;
 
-	$log->info("SqueezeCenter OSDetect init...");
+	main::INFOLOG && $log->info("Squeezebox Server OSDetect init...");
 
 	Slim::Utils::OSDetect::init();
 	Slim::Utils::OSDetect::getOS->initSearchPath();
 
-	# initialize SqueezeCenter subsystems
-	$log->info("SqueezeCenter settings init...");
+	# initialize Squeezebox Server subsystems
+	main::INFOLOG && $log->info("Squeezebox Server settings init...");
 
 	Slim::Utils::Prefs::init();
 
 	Slim::Utils::Prefs::makeCacheDir();	
 
-	$log->info("SqueezeCenter strings init...");
+	main::INFOLOG && $log->info("Squeezebox Server strings init...");
 
 	Slim::Utils::Strings::init(catdir($Bin,'strings.txt'), "EN");
 
-	# $log->info("SqueezeCenter MySQL init...");
-	# Slim::Utils::MySQLHelper->init();
-
-	$log->info("SqueezeCenter Info init...");
+	main::INFOLOG && $log->info("Squeezebox Server Info init...");
 
 	Slim::Music::Info::init();
 	
@@ -320,6 +380,7 @@ Command line options:
 	--itunes       Run the iTunes Importer.
 	--musicip      Run the MusicIP Importer.
 	--progress     Show a progress bar of the scan.
+	--json FILE    Write progress information to a JSON file.
 	--prefsdir     Specify alternative preferences directory.
 	--priority     set process priority from -20 (high) to 20 (low)
 	--logfile      Send all debugging messages to the specified logfile.
@@ -350,6 +411,12 @@ sub initClass {
 	}
 }
 
+sub progressJSON {
+	my $data = shift;
+	
+	File::Slurp::write_file( $::json, to_json($data) );
+}
+
 sub cleanup {
 
 	# Make sure to flush anything in the database to disk.
@@ -357,6 +424,7 @@ sub cleanup {
 		Slim::Music::Import->setIsScanning(0);
 
 		Slim::Schema->forceCommit;
+		
 		Slim::Schema->disconnect;
 	}
 }

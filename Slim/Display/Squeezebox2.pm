@@ -1,11 +1,11 @@
 package Slim::Display::Squeezebox2;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Squeezebox2.pm 24733 2009-01-22 11:01:35Z michael $
+# $Id: Squeezebox2.pm 26931 2009-06-07 03:53:36Z michael $
 
 =head1 NAME
 
@@ -415,8 +415,15 @@ sub clientAnimationComplete {
 	# Ensures scrolling is started by setting a timer to call update in 0.5 seconds
 	my $display = shift;
 
-	$display->animateState(2);
 	$display->updateMode(0);
+
+	# process any defered showBriefly
+	if ($display->animateState == 7) {
+		$display->showBriefly($display->sbDeferred->{parts}, $display->sbDeferred->{args});
+		return;
+	}
+
+	$display->animateState(2);
 	Slim::Utils::Timers::setTimer($display, Time::HiRes::time() + 1.0, \&Slim::Display::Display::update);
 }
 

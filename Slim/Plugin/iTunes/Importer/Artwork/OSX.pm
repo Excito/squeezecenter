@@ -99,7 +99,7 @@ sub exportSingleArtwork {
 	if ( $status =~ /^OK (.+)/ ) {
 		my $file = $1;
 		
-		$log->is_debug && $log->debug( $status );
+		main::DEBUGLOG && $log->is_debug && $log->debug( $status );
 		
 		return $file;
 	}
@@ -113,9 +113,6 @@ sub exportSingleArtwork {
 sub finishArtworkExport {
 	my ( $class, $cachedir ) = @_;
 	
-	# XXX: Not sure we want to close iTunes here, what if the user is using it?
-	return;
-	
 	# Tell iTunes to quit if we had to start it
 	my $osa    = Slim::Utils::Misc::findbin('osascript');
 	my $script = Slim::Utils::Misc::findbin('itartwork.scpt');
@@ -128,7 +125,7 @@ sub finishArtworkExport {
 	my $status = <$proc>;
 	chomp $status;
 	
-	$log->is_debug && $log->debug($status);
+	main::DEBUGLOG && $log->is_debug && $log->debug($status);
 }
 
 1;

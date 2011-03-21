@@ -1,11 +1,11 @@
 package Slim::Display::Transporter;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Transporter.pm 24733 2009-01-22 11:01:35Z michael $
+# $Id: Transporter.pm 26931 2009-06-07 03:53:36Z michael $
 
 =head1 NAME
 

@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::Network;
 
-# $Id: Network.pm 22967 2008-08-29 19:43:10Z andy $
+# $Id: Network.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -17,20 +17,15 @@ use Slim::Utils::Prefs;
 my $prefs = preferences('server');
 
 sub name {
-	return Slim::Web::HTTP::protectName('NETWORK_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('NETWORK_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/server/networking.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/server/networking.html');
 }
 
 sub prefs {
 	my @prefs = qw(webproxy httpport bufferSecs remotestreamtimeout maxWMArate noupnp);
-
-	# Bug 2724 - only show the mDNS settings if we have a binary for it.
-	if (Slim::Utils::Misc::findbin('mDNSResponderPosix')) {
-		push @prefs, 'mDNSname';
-	}
 
 	# only show following for SLIMP3
 	if ($Slim::Player::SLIMP3::SLIMP3Connected) {

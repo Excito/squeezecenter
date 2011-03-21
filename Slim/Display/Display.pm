@@ -1,8 +1,8 @@
 package Slim::Display::Display;
 
-# $Id: Display.pm 24135 2008-11-27 15:10:52Z andy $
+# $Id: Display.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -51,6 +51,7 @@ my $prefs = preferences('server');
 #   4 = server side bumpUp/Down                             x             x 
 #   5 = server side showBriefly                             x             x        x
 #   6 = clear scrolling (scrollonce and end scrolling mode) x             x        x
+#   7 = defered showBriefly (mid client side push/bump)                            x
 #
 # scrollState: (per screen)
 #   0 = no scrolling
@@ -78,7 +79,7 @@ $prefs->setValidate('num', qw(scrollRate scrollRateDouble scrollPause scrollPaus
 {
 	__PACKAGE__->mk_accessor('rw', 'client'); # Note: Always keep client as the first accessor
 	__PACKAGE__->mk_accessor('rw',   qw(updateMode screen2updateOK animateState renderCache currBrightness
-										lastVisMode sbCallbackData sbOldDisplay sbName displayStrings notifyLevel hideVisu));
+										lastVisMode sbCallbackData sbOldDisplay sbName sbDeferred displayStrings notifyLevel hideVisu));
 	__PACKAGE__->mk_accessor('arraydefault', 1, qw(scrollState scrollData widthOverride));
 }
 
@@ -225,7 +226,14 @@ sub showBriefly {
 
 	my $client = $display->client;
 
-	if ($log->is_info) {
+	# if called during client animation, then stash params for later when animation completes and return immediately
+	if ($display->animateState == 1 || $display->animateState == 7) {
+		$display->sbDeferred({ parts => $parts, args => $args});
+		$display->animateState(7);
+		return;
+	}
+
+	if (main::INFOLOG && $log->is_info) {
 		my ($line, $subr) = (caller(1))[2,3];
 		($line, $subr) = (caller(2))[2,3] if $subr eq 'Slim::Player::Player::showBriefly';
 		$log->info(sprintf "caller %s (%d) %s ", $subr, $line, $display->updateMode() == 2 ? '[Blocked]' : '');
@@ -241,7 +249,7 @@ sub showBriefly {
 		return;
 	}
 
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug( Data::Dump::dump($parts) );
 	}
 
@@ -487,7 +495,7 @@ sub curLines {
 		}
 	}
 
-	if ($log->is_info) {
+	if (main::INFOLOG && $log->is_info) {
 
 		my $source = Slim::Utils::PerlRunTime::realNameForCodeRef($linefunc);
 		my ($line, $sub, @subs);
@@ -498,8 +506,8 @@ sub curLines {
 			push @subs, $sub;
 		} while ($sub && $sub =~ /Slim::Display|Slim::Player::Player::update|Slim::Player::Player::push/);
 
-		$log->info(sprintf "lines $source [%s($line)]", join(", ", @subs));
-		$log->debug( Data::Dump::dump($parts) );
+		main::INFOLOG && $log->info(sprintf "lines $source [%s($line)]", join(", ", @subs));
+		main::DEBUGLOG && $log->debug( Data::Dump::dump($parts) );
 	}
 
 	return $parts;
@@ -562,9 +570,16 @@ sub scrollInit {
 		if (!$ticker) {
 			$scroll->{scrollbitsref} = $screen->{scrollbitsref};
 		} else {
-			my $tickerbits = (chr(0) x $screen->{overlaystart}[$screen->{scrollline}]) . ${$screen->{scrollbitsref}};
+			my $padbits = chr(0) x $screen->{overlaystart}[$screen->{scrollline}];
+			my $tickerbits;
+			if ($scroll->{dir} == 1) {
+				$tickerbits = $padbits . ${$screen->{scrollbitsref}};
+				$scroll->{scrollend} += $screen->{overlaystart}[$screen->{scrollline}];
+			} else {
+				$tickerbits = ${$screen->{scrollbitsref}} . $padbits;
+				$scroll->{scrollend} -= $screen->{overlaystart}[$screen->{scrollline}];
+			}
 			$scroll->{scrollbitsref} = \$tickerbits;
-			$scroll->{scrollend} += $screen->{overlaystart}[$screen->{scrollline}];
 		}
 
 	} elsif (defined($screen->{lineref})) {
@@ -645,11 +660,11 @@ sub scrollTickerTimeLeft {
 		return (0, 0);
 	} 
 
-	my $todisplay = $scroll->{scrollend} - $scroll->{offset};
-	my $completeTime = $todisplay / ($scroll->{shift} / $scroll->{refreshInt});
+	my $todisplay = $scroll->{dir} == 1 ? $scroll->{scrollend} - $scroll->{offset} : $scroll->{offset} + $scroll->{overlaystart};
+	my $completeTime = $todisplay / (abs($scroll->{shift}) / $scroll->{refreshInt});
 
-	my $notdisplayed = $todisplay - $scroll->{overlaystart};
-	my $queueTime = ($notdisplayed > 0) ? $notdisplayed / ($scroll->{shift} / $scroll->{refreshInt}) : 0;
+	my $notdisplayed = $scroll->{dir} == 1 ? $todisplay - $scroll->{overlaystart} : $scroll->{offset};
+	my $queueTime = ($notdisplayed > 0) ? $notdisplayed / (abs($scroll->{shift}) / $scroll->{refreshInt}) : 0;
 
 	return ($completeTime, $queueTime);
 }

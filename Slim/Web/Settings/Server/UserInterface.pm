@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::UserInterface;
 
-# $Id: UserInterface.pm 20892 2008-06-18 15:21:37Z andy $
+# $Id: UserInterface.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -17,11 +17,11 @@ use Slim::Utils::Prefs;
 my $prefs = preferences('server');
 
 sub name {
-	return Slim::Web::HTTP::protectName('INTERFACE_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('INTERFACE_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/server/interface.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/server/interface.html');
 }
 
 sub prefs {

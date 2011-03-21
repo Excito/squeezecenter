@@ -2,7 +2,7 @@ package Slim::Plugin::Favorites::OpmlFavorites;
 
 # An opml based favorites handler
 
-# $Id: OpmlFavorites.pm 22939 2008-08-28 16:42:33Z andy $
+# $Id: OpmlFavorites.pm 28189 2009-08-14 19:33:36Z andy $
 
 use strict;
 
@@ -51,16 +51,31 @@ sub new {
 	return $favs;
 }
 
-sub filename {
+sub migrate {
 	my $class = shift;
 
-	my $dir = $prefsServer->get('playlistdir');
-
-	if (!-w $dir) {
-
-		$dir = $prefsServer->get('cachedir');
+	my $file = $class->filename();
+	if (! -f $file) {
+		foreach ($prefsServer->get('playlistdir'), $prefsServer->get('cachedir')) {
+			my $oldfile = $class->filename($_);
+			if (-f $oldfile) {
+				require File::Copy;
+				File::Copy::move($oldfile, $file);
+				last;
+			}
+		}
 	}
+}
 
+sub filename {
+	my $class = shift;
+	my $dir = shift;
+	
+	# Shortcut if filename supplied
+	return $dir if ($dir && -f $dir);
+
+	$dir ||= Slim::Utils::OSDetect::dirsFor('prefs');
+	
 	return catdir($dir, "favorites.opml");
 }
 
@@ -132,7 +147,7 @@ sub _loadOldFavorites {
 
 	my $toplevel = $class->toplevel;
 
-	$log->info("No opml favorites file found - loading old favorites");
+	main::INFOLOG && $log->info("No opml favorites file found - loading old favorites");
 
 	my @urls   = @{Slim::Utils::Prefs::OldPrefs->get('favorite_urls')   || []};
 	my @titles = @{Slim::Utils::Prefs::OldPrefs->get('favorite_titles') || []} ;
@@ -199,7 +214,7 @@ sub add {
 	my $title  = shift;
 	my $type   = shift;
 	my $parser = shift;
-	my $hotkey = shift; # pick next available hotkey for this url
+	my $hotkey = shift; # legacy param left in for compat, no longer used
 	my $icon   = shift;
 
 	if (!$url) {
@@ -213,8 +228,8 @@ sub add {
 
 	$url =~ s/\?sessionid.+//i;	# Bug 3362, ignore sessionID's within URLs (Live365)
 
-	if ( $log->is_info ) {
-		$log->info(sprintf("url: %s title: %s type: %s parser: %s hotkey: %s icon: %s", $url, $title, $type, $parser, $hotkey, $icon));
+	if ( main::INFOLOG && $log->is_info ) {
+		$log->info(sprintf("url: %s title: %s type: %s parser: %s icon: %s", $url, $title, $type, $parser, $icon));
 	}
 
 	# if it is already a favorite, don't add it again return the existing entry
@@ -223,9 +238,9 @@ sub add {
 		my $index = $class->{'url-index'}->{ $url };
 		my $entry = $class->entry($index);
 
-		$log->info("Url already exists in favorites as index $index");
+		main::INFOLOG && $log->info("Url already exists in favorites as index $index");
 
-		return wantarray ? ($index, $entry->{'hotkey'}) : $index;
+		return $index;
 	}
 
 	my $entry = {
@@ -242,15 +257,6 @@ sub add {
 		delete $entry->{'type'};
 	}
 
-	if ($hotkey) {
-		for my $i (1..9, 0) {
-			if (!defined $class->{'hotkey-index'}->{ $i }) {
-				$entry->{'hotkey'} = $i;
-				last;
-			}
-		}
-	}
-
 	$entry->{'icon'} = $icon || $class->icon($url);
 
 	# add it to end of top level
@@ -258,7 +264,7 @@ sub add {
 
 	$class->save;
 
-	return wantarray ? (scalar @{$class->toplevel} - 1, $entry->{'hotkey'}) : scalar @{$class->toplevel} - 1;
+	return scalar @{$class->toplevel} - 1;
 }
 
 sub hasUrl {
@@ -275,16 +281,15 @@ sub findUrl {
 	$url =~ s/\?sessionid.+//i;	# Bug 3362, ignore sessionID's within URLs (Live365)
 
 	my $index = $class->{'url-index'}->{ $url };
-	my $hotkey = $class->{'url-hotkey'}->{ $url };
 
 	if (defined $index) {
 
-		$log->info("Match $url at index $index");
+		main::INFOLOG && $log->info("Match $url at index $index");
 
-		return wantarray ? ($index, $hotkey) : $index;
+		return $index;
 	}
 
-	$log->info("No match for $url");
+	main::INFOLOG && $log->info("No match for $url");
 
 	return undef;
 }
@@ -319,12 +324,13 @@ sub deleteIndex {
 
 		splice @{$pos}, $i, 1;
 
-		$log->info("Removed entry at index $index");
+		main::INFOLOG && $log->info("Removed entry at index $index");
 
 		$class->save;
 	}
 }
 
+# This method is here only to support migration of old hotkeys (presets)
 sub hotkeys {
 	my $class = shift;
 
@@ -335,49 +341,11 @@ sub hotkeys {
 			'key'   => $key,
 			'used'  => $class->{'hotkey-index'}->{ $key } ? 1 : 0,
 			'title' => $class->{'hotkey-title'}->{ $key },
+			'index' => $class->{'hotkey-index'}->{ $key },
 		};
 	}
 
 	return \@keys;
-}
-
-sub hasHotkey {
-	my $class = shift;
-	my $key   = shift;
-
-	return $class->{'hotkey-index'}->{ $key };
-}
-
-sub setHotkey {
-	my $class = shift;
-	my $index = shift;
-	my $key   = shift;
-
-	if (defined $key && $class->{'hotkey-index'}->{ $key }) {
-
-		$log->warn("Hotkey $key already used - not setting");
-		return;
-	}
-
-	my ($pos, $i) = $class->level($index, 'contains');
-
-	if (ref @{$pos}[ $i ] eq 'HASH') {
-
-		if (defined $key) {
-			
-			@{$pos}[ $i ]->{'hotkey'} = $key;
-
-			$log->info("Setting hotkey $key for index $index");
-
-		} else {
-
-			delete @{$pos}[ $i ]->{'hotkey'};
-
-			$log->info("Deleting hotkey for index $index");
-		}
-
-		$class->save;
-	}
 }
 
 1;

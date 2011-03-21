@@ -2,7 +2,7 @@ package Slim::Web::Settings::Player::Display;
 
 # $Id: Basic.pm 10633 2006-11-09 04:26:27Z kdf $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -17,11 +17,11 @@ use Slim::Utils::Strings qw(string);
 my $prefs = preferences('server');
 
 sub name {
-	return Slim::Web::HTTP::protectName('DISPLAY_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('DISPLAY_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/player/display.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/player/display.html');
 }
 
 sub needsClient {
@@ -131,8 +131,11 @@ sub getFontOptions {
 
 	for my $font (@{Slim::Display::Lib::Fonts::fontnames()}) {
 
-		if ($height && $height == Slim::Display::Lib::Fonts::fontheight("$font.2") &&
-			Slim::Display::Lib::Fonts::fontchars("$font.2") > 255 ) {
+		my $fontHeight = Slim::Display::Lib::Fonts::fontheight("$font.2");
+		my $fontChars  = Slim::Display::Lib::Fonts::fontchars("$font.2");
+
+		if ($height && $fontHeight && $height == $fontHeight &&
+			$fontChars && $fontChars > 255 ) {
 
 			$fonts->{$font} = Slim::Utils::Strings::getString($font);
 		}

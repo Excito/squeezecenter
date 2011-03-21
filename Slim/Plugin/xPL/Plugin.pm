@@ -1,6 +1,6 @@
 package Slim::Plugin::xPL::Plugin;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -11,7 +11,7 @@ package Slim::Plugin::xPL::Plugin;
 # GNU General Public License for more details.
 #
 #
-# xPL Protocol Support Plugin for SqueezeCenter
+# xPL Protocol Support Plugin for Squeezebox Server
 # http://www.xplproject.org.uk/
 
 # $Id: Plugin.pm 10841 2006-12-03 16:57:58Z adrian $
@@ -20,7 +20,9 @@ use strict;
 use IO::Socket;
 use Scalar::Util qw(blessed);
 
-use Slim::Plugin::xPL::Settings;
+if ( !main::SLIM_SERVICE && !$::noweb ) {
+	require Slim::Plugin::xPL::Settings;
+}
 
 use Slim::Music::Info;
 use Slim::Utils::Log;
@@ -43,6 +45,12 @@ my $log = Slim::Utils::Log->addLogCategory({
 
 my $prefs = preferences('plugin.xpl');
 
+$prefs->migrate(1, sub {
+	$prefs->set('interval', Slim::Utils::Prefs::OldPrefs->get('xplinterval') || 5);
+	$prefs->set('ir', Slim::Utils::Prefs::OldPrefs->get('xplir') || 'none');
+	1;
+});
+
 ################################################################################
 # PLUGIN CODE
 ################################################################################
@@ -50,7 +58,9 @@ my $prefs = preferences('plugin.xpl');
 # plugin: initialize xPL support
 sub initPlugin {
 
-	Slim::Plugin::xPL::Settings->new;
+	if ( !main::SLIM_SERVICE && !$::noweb ) {
+		Slim::Plugin::xPL::Settings->new;
+	}
 
 	$localip = Slim::Utils::Network::hostAddr();
 
@@ -304,7 +314,7 @@ sub sendXplHBeatMsg {
 	if ($client->isPlaying()) {
 		$playmode = "playing";
 
-		my $track = Slim::Schema->rs('Track')->objectForUrl({
+		my $track = Slim::Schema->objectForUrl({
 			'url'      => Slim::Player::Playlist::song($client),
 			'create'   => 1,
 			'readTags' => 1,
@@ -395,7 +405,7 @@ sub sendxplmsg {
 		logError("Caught exception when trying to ->send: [$@]");
 	}
 
-	$log->debug("Sending [$msg]");
+	main::DEBUGLOG && $log->debug("Sending [$msg]");
 
 	close $sockUDP;
 }
@@ -584,21 +594,21 @@ sub xplExecuteCallback {
 
 	if ($request->isCommand([['client'], ['new']])) {
 
-		$log->debug("Got new client.");
+		main::DEBUGLOG && $log->debug("Got new client.");
 		
 		sendXplHBeatMsg($client);
 	}
 	
 	elsif ($request->isCommand([['power']])) {
 
-		$log->debug("Callback for power.");
+		main::DEBUGLOG && $log->debug("Callback for power.");
 		
 		sendXplHBeatMsg($client, 1);
 	}
 	
 	elsif ($request->isCommand([['button']]) && ($xpl_ir eq 'buttons' || $xpl_ir eq 'both')) {
 
-		$log->debug("Callback for button.");
+		main::DEBUGLOG && $log->debug("Callback for button.");
 
 		my $param = $request->getParam('_buttoncode');
 
@@ -607,7 +617,7 @@ sub xplExecuteCallback {
 	
 	elsif ($request->isCommand([['ir']]) && ($xpl_ir eq 'raw' || $xpl_ir eq 'both')) {
 
-		$log->debug("Callback for IR.");
+		main::DEBUGLOG && $log->debug("Callback for IR.");
 		
 		my $param = $request->getParam('_ircode');
 
@@ -616,14 +626,14 @@ sub xplExecuteCallback {
 
 	elsif ($request->isCommand([['playlist'], ['newsong']])) {
 
-		$log->debug("Callback for newsong.");
+		main::DEBUGLOG && $log->debug("Callback for newsong.");
 
 		sendXplHBeatMsg($client, 1);
 	}
 
 	elsif ($request->isCommand([['stop']]) || $request->isCommand([['mode'], ['stop']])) {
 
-		$log->debug("Callback for stop.");
+		main::DEBUGLOG && $log->debug("Callback for stop.");
 
 		sendXplHBeatMsg($client, 1);
 	}

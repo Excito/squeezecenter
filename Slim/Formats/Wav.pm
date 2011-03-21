@@ -1,8 +1,8 @@
 package Slim::Formats::Wav;
 
-# $Id: Wav.pm 23947 2008-11-17 17:15:34Z awy $
+# $Id: Wav.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -10,96 +10,93 @@ package Slim::Formats::Wav;
 use strict;
 use base qw(Slim::Formats);
 
-use Audio::Wav;
-use MP3::Info;
+use Audio::Scan;
 
+use Slim::Formats::MP3;
 use Slim::Utils::Log;
+
+my %tagMapping = (
+	IART => 'ARTIST',
+	ICMT => 'COMMENT',
+	ICRD => 'YEAR',
+	IGNR => 'GENRE',
+	INAM => 'TITLE',
+	IPRD => 'ALBUM',
+	TRCK => 'TRACKNUM',
+	ITRK => 'TRACKNUM',
+);
 
 sub getTag {
 	my $class = shift;
 	my $file  = shift || return {};
-
-	# This hash will map the keys in the tag to their values.
-	my $tags = {};
-
-	# bogus files are considered empty
-	$tags->{'SIZE'} ||= 0;
-	$tags->{'SECS'} ||= 0;
-
-	my $bail = undef;
-	my $wav  = Audio::Wav->new();
 	
-	$wav->set_error_handler(sub {
-		my %parameters = @_;
-
-		if ( $parameters{'warning'} ) {
-
-			# This is a non-critical warning
-			logger('formats.audio')->warn("Warning: $parameters{'filename'}: $parameters{'message'}");
-
-		} else {
-
-			# Critical error!
-			$bail = 1;
-
-			logError("$parameters{'filename'}: $parameters{'message'}");
-		}
-	});
-
-	my $read = $wav->read($file);
-
-	if (!$bail) {
-
-		my $details = $read->details();
-		my $wavtags = $read->get_info();
-		
-		if ($wavtags) { 
-			$tags->{'ALBUM'} = $wavtags->{'product'};
-			$tags->{'GENRE'} = $wavtags->{'genre'};
-			$tags->{'ARTIST'} = $wavtags->{'artist'};
-			$tags->{'TITLE'} = $wavtags->{'name'};
-			$tags->{'COMMENT'} = $wavtags->{'comment'};
-			$tags->{'TRACKNUM'} = $wavtags->{'track'};
-		}
-		elsif ( $details->{'id3_offset'} ) {
-			# Look for ID3 tags in the file starting at id3 offset
-			open my $fh, '<&=', $read->{'handle'};
-			seek $fh, 0, 0;
-			MP3::Info::_get_v2tag( $fh, 2, 0, $tags, $details->{'id3_offset'} );
-			close $fh;
-		}
-		
-		# Add other details about the file
-		$tags->{'OFFSET'} = $read->offset();
-		$tags->{'SIZE'}   = $read->length();
-		$tags->{'SECS'}   = $read->length_seconds();
-		$tags->{'RATE'}   = $details->{'sample_rate'};
-		$tags->{'BITRATE'} = $details->{'bytes_sec'} * 8;
-		$tags->{'CHANNELS'} = $details->{'channels'};
-		$tags->{'SAMPLESIZE'} = $details->{'bits_sample'};
-		$tags->{'BLOCKALIGN'} = $details->{'block_align'};
-		$tags->{'ENDIAN'} = 0;
+	my $s = Audio::Scan->scan( $file );
+	
+	my $info = $s->{info};
+	my $tags = $s->{tags};
+	
+	return unless $info->{song_length_ms};
+	
+	# Add file info
+	$tags->{OFFSET}     = $info->{audio_offset};
+	$tags->{SIZE}       = $info->{file_size};
+	$tags->{SECS}       = $info->{song_length_ms} / 1000;
+	$tags->{RATE}       = $info->{samplerate};
+	$tags->{BITRATE}    = $info->{bitrate};
+	$tags->{CHANNELS}   = $info->{channels};
+	$tags->{SAMPLESIZE} = $info->{bits_per_sample};
+	$tags->{BLOCKALIGN} = $info->{block_align};
+	$tags->{ENDIAN}     = 0;
+	
+	# Map ID3 tags if file has them
+	if ( $info->{id3_version} ) {
+		$tags->{TAGVERSION} = $info->{id3_version};
 	}
+	
+	$class->doTagMapping($tags);
 
 	return $tags;
 }
 
-# bug 10012; disable so that WAV/PCM confusion does not cause bad audio
-#sub getInitialAudioBlock {
-#	my ($class, $fh, $track) = @_;
-#	my $length = $track->audio_offset() || return undef;
-#	
-#	open(my $localFh, '<&=', $fh);
-#	
-#	seek($localFh, 0, 0);
-#	logger('player.source')->debug("Reading initial audio block: length $length");
-#	read ($localFh, my $buffer, $length);
-#	seek($localFh, 0, 0);
-#	close($localFh);
-#	
-#	return $buffer;
-#}
-#
-#sub canSeek {1}
+sub getInitialAudioBlock {
+	my ($class, $fh, $track) = @_;
+	
+	# bug 10026: do not provide header when streaming as PCM
+	print(${*$fh}{'streamFormat'}, "\n");
+	if (${*$fh}{'streamFormat'} eq 'pcm') {
+		return '';
+	}
+	
+	my $length = $track->audio_offset() || return undef;
+	
+	open(my $localFh, '<&=', $fh);
+	
+	seek($localFh, 0, 0);
+	main::DEBUGLOG && logger('player.source')->debug("Reading initial audio block: length $length");
+	read ($localFh, my $buffer, $length);
+	seek($localFh, 0, 0);
+	close($localFh);
+	
+	return $buffer;
+}
+
+sub doTagMapping {
+	my ( $class, $tags ) = @_;
+	
+	while ( my ($old, $new) = each %tagMapping ) {
+		if ( exists $tags->{$old} ) {
+			$tags->{$new} = delete $tags->{$old};
+		}
+	}
+	
+	# Map ID3 tags if any
+	if ( $tags->{TAGVERSION} ) {
+		Slim::Formats::MP3->doTagMapping($tags);
+	}
+}
+
+*getCoverArt = \&Slim::Formats::MP3::getCoverArt;
+
+sub canSeek { 1 }
 
 1;

@@ -1,8 +1,8 @@
 package Slim::Networking::Slimproto;
 
-# $Id: Slimproto.pm 25681 2009-03-24 15:03:19Z andy $
+# $Id: Slimproto.pm 28543 2009-09-16 16:59:06Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,9 +13,7 @@ use Slim::Utils::Errno;
 use FindBin qw($Bin);
 use Socket qw(inet_ntoa SOMAXCONN);
 use IO::Socket qw(sockaddr_in);
-#use FileHandle;
 use Sys::Hostname;
-use File::Spec::Functions qw(:ALL);
 use Math::VecStat;
 use Scalar::Util qw(blessed);
 
@@ -46,7 +44,8 @@ if ( main::SLIM_SERVICE ) {
 	$deviceids[2] = undef;
 }
 
-my $forget_disconnected_time = 60; # disconnected clients will be forgotten unless they reconnect before this
+# Bug 10443: Increase this from 60s to 300s to allow recovery during the full extent of buffered data
+my $forget_disconnected_time = 300; # disconnected clients will be forgotten unless they reconnect before this
 
 my $check_all_clients_time = 5; # how often to look for disconnected clients
 my $check_time;                 # time scheduled for next check_all_clients
@@ -139,7 +138,7 @@ sub init {
 	$check_time = time() + $check_all_clients_time;
 	Slim::Utils::Timers::setTimer( undef, $check_time, \&check_all_clients );
 
-	$log->info("Squeezebox protocol listening on port $listenerport");
+	main::INFOLOG && $log->info("Squeezebox protocol listening on port $listenerport");
 }
 
 sub slimproto_accept {
@@ -187,10 +186,10 @@ sub slimproto_accept {
 	Slim::Networking::Select::addRead($clientsock, \&client_readable, 1); # processed during idleStreams
 	Slim::Networking::Select::addError($clientsock, \&slimproto_close);
 
-	$log->info("Accepted connection from: [$ipport{$clientsock}]");
+	main::INFOLOG && $log->info("Accepted connection from: [$ipport{$clientsock}]");
 
 	# Set a timer to close the connection if we haven't recieved a HELO in 5 seconds.
-	$log->info("Setting timer in 5 seconds to close bogus connection");
+	main::INFOLOG && $log->info("Setting timer in 5 seconds to close bogus connection");
 
 	Slim::Utils::Timers::setTimer($clientsock, Time::HiRes::time () + 5, \&slimproto_close, $clientsock);
 }
@@ -209,7 +208,7 @@ sub check_all_clients {
 			next;
 		}
 		
-		if ( $log->is_debug ) {
+		if ( main::DEBUGLOG && $log->is_debug ) {
 			$log->debug(sprintf("Checking if %s is still alive", $client->id));
 		}
 		
@@ -219,7 +218,7 @@ sub check_all_clients {
 		# disconnect client if we haven't heard from it in 3 poll intervals and no time travel
 		if ( $last_heard >= $check_all_clients_time * 3 && $now - $check_time <= $check_all_clients_time ) {
 
-			if ( $log->is_info ) {
+			if ( main::INFOLOG && $log->is_info ) {
 				$log->info(sprintf("Haven't heard from %s in %d seconds, closing connection",
 					$client->id,
 					$last_heard,
@@ -243,7 +242,7 @@ sub slimproto_close {
 	my $clientsock = shift;
 	my $reconnect  = shift;
 
-	$log->info("connection closed");
+	main::INFOLOG && $log->info("connection closed");
 
 	# stop selecting
 	Slim::Networking::Select::removeRead($clientsock);
@@ -259,12 +258,16 @@ sub slimproto_close {
 		delete $heartbeat{ $client->id };
 		delete $latency{ $client };
 		delete $latencyList{ $client };
+		
+		$client->tcpsock(undef);
 
 		# If we're closing an old socket for a reconnecting client, we don't
 		# need to do any of this disconnect stuff
 		if ( !$reconnect ) {
 			# check client not forgotten and this is the active slimproto socket for this client
 			if ( Slim::Player::Client::getClient( $client->id ) ) {
+				
+				$client->disconnected(1);
 			
 				# notify of disconnect
 				Slim::Control::Request::notifyFromArray($client, ['client', 'disconnect']);
@@ -279,6 +282,7 @@ sub slimproto_close {
 
 				# set timer to forget client
 				if ( $forget_disconnected_time ) {
+					main::INFOLOG && $log->is_info && $log->info("setting timer to forget client in $forget_disconnected_time secs");
 					Slim::Utils::Timers::setTimer($client, time() + $forget_disconnected_time, \&forget_disconnected_client);
 				}
 				else {
@@ -296,7 +300,7 @@ sub slimproto_close {
 sub forget_disconnected_client {
 	my $client = shift;
 
-	$log->info("forgetting disconnected client");
+	main::INFOLOG && $log->info("forgetting disconnected client");
 
 	Slim::Control::Request::executeRequest($client, ['client', 'forget']);
 }
@@ -310,11 +314,11 @@ sub client_writeable {
 	# just ignore if it shouldn't exist.
 	return unless (defined($ipport{$clientsock})); 
 	
-	$log->debug("client writeable: " . $ipport{$clientsock});
+	main::DEBUGLOG && $log->debug("client writeable: " . $ipport{$clientsock});
 
 	if (!($clientsock->connected)) {
 
-		$log->info("connection closed by peer in writeable.");
+		main::INFOLOG && $log->info("connection closed by peer in writeable.");
 
 		slimproto_close($clientsock);		
 		return;
@@ -326,7 +330,7 @@ sub client_readable {
 
 	if ( !$s->connected ) {
 
-		$log->info("connection closed by peer in readable.");
+		main::INFOLOG && $log->info("connection closed by peer in readable.");
 
 		slimproto_close($s);		
 		return;
@@ -343,7 +347,7 @@ sub client_readable {
 					
 					# Check for previous partial data
 					if ( my $partial = delete ${*$s}{_partial} ) {
-						if ( $log->is_debug ) {
+						if ( main::DEBUGLOG && $log->is_debug ) {
 							$log->debug( "Client sent additional header / data: " . Data::Dump::dump($buf) );
 						}
 						
@@ -352,7 +356,7 @@ sub client_readable {
 					
 					# Make sure we have at op and len
 					if ( length($buf) < 8 ) {
-						if ( $log->is_debug ) {
+						if ( main::DEBUGLOG && $log->is_debug ) {
 							$log->debug( "Client sent partial header: " . Data::Dump::dump($buf) );
 						}
 
@@ -367,7 +371,7 @@ sub client_readable {
 					# Now having read len, make sure that all the data is available
 					if ( length($buf) < $len + 8 ) {
 
-						if ( $log->is_debug ) {
+						if ( main::DEBUGLOG && $log->is_debug ) {
 							my $partial = substr $buf, 8;
 							$log->debug( "Client sent partial data: $op / $len / " . Data::Dump::dump($partial) );
 						}
@@ -388,7 +392,7 @@ sub client_readable {
 						return;
 					}
 					
-					if ( $log->is_debug ) {
+					if ( main::DEBUGLOG && $log->is_debug ) {
 						$log->debug( "Slimproto frame: $op, len: $len" );
 					}
 				
@@ -405,7 +409,10 @@ sub client_readable {
 								$handler_ref->( $client, \$data );
 							}
 							else {
-								$log->error( "client_readable: Client not found for slimproto msg op: $op" );
+								if ( $s->peeraddr ) {
+									$log->error( "Client not found for slimproto msg op: $op", ' from ', inet_ntoa($s->peeraddr) );
+								}
+								slimproto_close($s);
 							}
 						}
 					}
@@ -417,7 +424,7 @@ sub client_readable {
 				return;				
 			}
 			else {
-				$log->info("half-close from client: $ipport{$s}");
+				main::INFOLOG && $log->info("half-close from client: $ipport{$s}");
 
 				slimproto_close($s);
 				return;
@@ -427,7 +434,7 @@ sub client_readable {
 			next;
 		}
 		else {
-			$log->info( "Error reading from client: $!" );
+			main::INFOLOG && $log->info( "Error reading from client: $!" );
 			
 			slimproto_close($s);
 			return;
@@ -511,7 +518,7 @@ sub _ir_handler {
 
 	Slim::Hardware::IR::enqueue($client, $irCode, $irTime) if $client->irenable();
 
-	if ( $faclog->is_debug ) {
+	if ( main::DEBUGLOG && $faclog->is_debug ) {
 		$faclog->debug(sprintf("FACTORYTEST\tevent=ir\tmac=%s\tcode=%s", $client->id, $irCode));
 	}
 }
@@ -520,7 +527,7 @@ sub _raw_ir_handler {
 	my $client = shift;
 	my $data_ref = shift;
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info("Raw IR, " . (length($$data_ref)/4)."samples");
 	}
 
@@ -546,7 +553,7 @@ sub _http_response_handler {
 	my $data_ref = shift;
 
 	# HTTP stream headers
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info("Squeezebox got HTTP response:\n$$data_ref");
 	}
 
@@ -560,7 +567,7 @@ sub _debug_handler {
 	my $client = shift;
 	my $data_ref = shift;
 
-	if ( $firmlog->is_info ) {
+	if ( main::INFOLOG && $firmlog->is_info ) {
 		$firmlog->info(sprintf("[%s] %s", $client->id, $$data_ref));
 	}
 }
@@ -580,7 +587,7 @@ sub _disco_handler {
 	
 	my $reason = unpack('C', $$data_ref);
 
-	$log->info("Squeezebox got disconnection on the data channel: $reasons{$reason}");
+	main::INFOLOG && $log->info("Squeezebox got disconnection on the data channel: $reasons{$reason}");
 	
 	# SN may want to log connection errors
 	if ( main::SLIM_SERVICE ) {
@@ -620,7 +627,17 @@ sub _disco_handler {
 			}
 		}
 		
-		$client->failedDirectStream( $reasons{$reason} );
+		if ($reason && $client->isPlaying(1)) {
+			# If we get an error disconnect and we are already playing
+			# then give the controller the opportunity to retry the stream
+			# by signalling with the third param to to playerStreamingFailed.
+			# We still expect to get STMd/STMo notifications.
+			$log->warn('Unexpected data stream disconnect type: ', $reasons{$reason});
+			$client->controller()->playerStreamingFailed($client, $reasons{$reason}, 'errorDisconnect');
+		}
+		else {
+			$client->failedDirectStream( $reasons{$reason} );
+		}
 	} else {
 		
 		if ($reason) {
@@ -635,7 +652,7 @@ sub _http_body_handler {
 	my $client = shift;
 	my $data_ref = shift;
 
-	$log->info("Squeezebox got body response");
+	main::INFOLOG && $log->info("Squeezebox got body response");
 
 	if ($client->can('directBodyFrame')) {
 		$client->directBodyFrame($$data_ref);
@@ -651,7 +668,7 @@ sub _stat_handler {
 	# Bug 3881, 6350, ignore stat response if player is not in the heartbeat
 	# list, i.e. it is upgrading firmware
 	if ( !exists $heartbeat{ $client->id } ) {
-		$log->debug( 'Ignoring stat response, player ' . $client->id . ' is not in heartbeat list' );
+		main::DEBUGLOG && $log->debug( 'Ignoring stat response, player ' . $client->id . ' is not in heartbeat list' );
 		return;
 	}
 	
@@ -716,9 +733,13 @@ sub _stat_handler {
 		$status{$client}->{'server_timestamp'},
 		$status{$client}->{'error_code'},
 	) = unpack ('a4CCCNNNNnNNNNnNNn', $$data_ref);
+
+	my $len = length($$data_ref);
 	
-	if ( length($$data_ref) != 57 ) {
+	if ( $len != 53 && $len != 57 ) {
 		# Older firmware that doesn't report error_code
+		# 57 = current firmware (4 junk bytes)
+		# 53 = future firmware (correct length)
 		$status{$client}->{'error_code'} = 0;
 	}
 		
@@ -731,7 +752,7 @@ sub _stat_handler {
 
 		$latency{$client} = Math::VecStat::min($latencyList{$client}) if (@{$latencyList{$client}} >= LATENCY_LIST_MIN);
 		
-		if ( $log->is_debug ) {
+		if ( main::DEBUGLOG && $log->is_debug ) {
 			$log->debug(
 				$client->id() . " latency=$latency{$client}, from ("
 				. join(', ', @{$latencyList{$client}}) . ')'
@@ -773,24 +794,20 @@ sub _stat_handler {
 		$client->outputBufferFullness($status{$client}->{'output_buffer_fullness'});
 	}
 
-	$::perfmon && ($client->isPlaying()) && $client->bufferFullnessLog()->log($client->usage()*100);
-	$::perfmon && ($status{$client}->{'signal_strength'} <= 100) &&
-		$client->signalStrengthLog()->log($status{$client}->{'signal_strength'});
-	
-	if ( $faclog->is_debug ) {
+	if ( main::DEBUGLOG && $faclog->is_debug ) {
 		$faclog->debug(sprintf("FACTORYTEST\tevent=stat\tmac=%s\tsignalstrength=%s",
 			$client->id, $status{$client}->{'signal_strength'}
 		));
 	}
 	
-	if ($log->is_info) {
+	if (main::INFOLOG && $log->is_info) {
 		$log->info(sprintf("%s: STAT-%s: fullness=%d, output_fullness=%d, elapsed=%.3f",
 			$client->id(), $status{$client}->{'event_code'}, $status{$client}->{'fullness'},
 			$status{$client}->{'output_buffer_fullness'} || -1,
 			defined($status{$client}->{'elapsed_milliseconds'}) ? $status{$client}->{'elapsed_milliseconds'} /1000 : -1  ))
 	}
 
-	if ($log->is_debug) {
+	if (main::DEBUGLOG && $log->is_debug) {
 
 		my $msg = join("\n", 
 			$client->id() . " Squeezebox stream status:",
@@ -844,7 +861,7 @@ sub _stat_handler {
 		if ($status{$client}->{'elapsed_milliseconds'}) {
 			$apparentStreamStartTime = $statusTime - ($status{$client}->{'elapsed_milliseconds'} / 1000);
 		} else {
-			$apparentStreamStartTime = $client->apparentStreamStartTime($statusTime);
+			$apparentStreamStartTime = Slim::Player::SB1SliMP3Sync::apparentStreamStartTime($client, $statusTime) if main::SB1SLIMP3SYNC;
 		}
 		if ($apparentStreamStartTime) {
 			$client->publishPlayPoint( $statusTime, $apparentStreamStartTime, undef );
@@ -876,10 +893,9 @@ sub _update_request_handler {
 	my $data_ref = shift;
 
 	# THIS IS ONLY FOR SDK5.X-BASED FIRMWARE OR LATER
-	$log->info("Client requests firmware update.");
+	main::INFOLOG && $log->info("Client requests firmware update.");
 
 	$client->unblock();
-	Slim::Hardware::IR::forgetQueuedIR($client);
 	
 	# Bug 3881, stop watching this client
 	delete $heartbeat{ $client->id };
@@ -914,7 +930,7 @@ sub _http_metadata_handler {
 	my $client = shift;
 	my $data_ref = shift;
 
-	if ( $psdlog->is_info ) {
+	if ( main::INFOLOG && $psdlog->is_info ) {
 		$psdlog->info("metadata (len: ". length($$data_ref) .")");
 	}
 
@@ -928,11 +944,11 @@ sub _bye_handler {
 	my $data_ref = shift;
 
 	# THIS IS ONLY FOR THE OLD SDK4.X UPDATER
-	$log->info("Saying goodbye");
+	main::INFOLOG && $log->info("Saying goodbye");
 
 	if ($$data_ref eq chr(1)) {
 
-		$log->info("Going out for upgrade...");
+		main::INFOLOG && $log->info("Going out for upgrade...");
 
 		# give the player a chance to get into upgrade mode
 		sleep(2);
@@ -941,12 +957,14 @@ sub _bye_handler {
 	}
 } 
 
+my $warnNoSB1Support = 0;
+
 sub _hello_handler {
 	my $s = shift;
 	my $data_ref = shift;
 	
 	# killing timer once we get a valid hello 	 
-	$log->info("Killing bogus player timer."); 	 
+	main::INFOLOG && $log->info("Killing bogus player timer."); 	 
  
 	Slim::Utils::Timers::killOneTimer($s, \&slimproto_close);
 
@@ -955,7 +973,7 @@ sub _hello_handler {
 	# Newer player fw reports a uuid. With uuid, length is 36; without uuid, length is 20
 	my $data_ref_length = length( $$data_ref);
 
-	if( $data_ref_length == 36) {
+	if( $data_ref_length >= 36) {
 		(	$deviceid, $revision, 
 			$mac[0], $mac[1], $mac[2], $mac[3], $mac[4], $mac[5], $uuid,
 			$wlan_channellist, $bytes_received_H, $bytes_received_L, $lang
@@ -971,14 +989,24 @@ sub _hello_handler {
 	$reconnect = $wlan_channellist & 0x4000;
 	$wlan_channellist = sprintf('%04x', $wlan_channellist & 0x3fff);
 
-	if (defined($bytes_received_H)) {
+	if (defined($bytes_received_H) && defined($bytes_received_L)) {
 		$bytes_received = $bytes_received_H * 2**32 + $bytes_received_L; 
+	}
+	
+	my $capabilities;
+	my $syncgroupid;
+	if ($data_ref_length > 36) {
+		$capabilities = substr($$data_ref, 36);
+		
+		if ($capabilities =~ /SyncgroupID=(\d{10})/) {
+			$syncgroupid = $1 + 0;
+		}
 	}
 
 	my $mac = join(':', @mac);
 	my $id  = $mac;
 
-	if ($log->is_info) {
+	if (main::INFOLOG && $log->is_info) {
 
 		$log->info(join(' ', 
 			"Squeezebox says hello: ",
@@ -990,15 +1018,13 @@ sub _hello_handler {
 			"reconnect: $reconnect",
 			"wlan_channellist: $wlan_channellist",
 			"lang: $lang",
+			(defined($bytes_received) ? " bytes_received: $bytes_received" : ''),
+			($capabilities ? " capabilities: $capabilities" : ''),
 		));
 
-		if (defined($bytes_received)) {
-
-			$log->info("Squeezebox also says: bytes_received: $bytes_received");
-		}
 	}
 
-	if ( $faclog->is_debug ) {
+	if ( main::DEBUGLOG && $faclog->is_debug ) {
 		$faclog->debug(sprintf("FACTORYTEST\tevent=helo\tmac=%s\tdeviceid=%s\trevision=%s\ttwlan_channellist=%s",
 			$mac, $deviceid, $revision, $wlan_channellist
 		));
@@ -1016,7 +1042,7 @@ sub _hello_handler {
 
 	if (!defined($deviceids[$deviceid])) {
 
-		$log->info("unknown device id $deviceid in HELO frame! Closing connection.");
+		main::INFOLOG && $log->info("unknown device id $deviceid in HELO frame! Closing connection.");
 
 		my $frame = pack('n', 4) . 'dsco';
 		Slim::Networking::Select::writeNoBlock( $s, \$frame);
@@ -1045,19 +1071,28 @@ sub _hello_handler {
 
 	} elsif ($deviceids[$deviceid] eq 'squeezebox') {	
 
-		$client_class  = 'Slim::Player::Squeezebox1';
-
-		if ($bitmapped) {
-
-			$display_class = 'Slim::Display::SqueezeboxG';
-
+		if (main::SB1SLIMP3SYNC) {
+			$client_class  = 'Slim::Player::Squeezebox1';
+	
+			if ($bitmapped) {
+	
+				$display_class = 'Slim::Display::SqueezeboxG';
+	
+			} else {
+	
+				$display_class = 'Slim::Display::Text';
+			}
+			
+			# Load SB1 hardware module only if needed
+			require Slim::Hardware::mas35x9;
 		} else {
-
-			$display_class = 'Slim::Display::Text';
+			if (!$warnNoSB1Support) {
+				logWarning("Forgetting client, SB1 support not included.");
+				$warnNoSB1Support = 1;
+			}
+			slimproto_close($s);
+			return;
 		}
-		
-		# Load SB1 hardware module only if needed
-		require Slim::Hardware::mas35x9;
 
 	} elsif ($deviceids[$deviceid] eq 'softsqueeze') {
 
@@ -1077,21 +1112,16 @@ sub _hello_handler {
 	} elsif ($deviceids[$deviceid] eq 'squeezeslave') {
 
 		$client_class = 'Slim::Player::SqueezeSlave';
-		$display_class = 'Slim::Display::NoDisplay';
+		$display_class = 'Slim::Display::Text';
 
-	} elsif ($deviceids[$deviceid] eq 'controller') {
-
-		$client_class  = 'Slim::Player::Controller';
-		$display_class = 'Slim::Display::NoDisplay';
-
-	} elsif ($deviceids[$deviceid] eq 'squeezeplay') {
+	} elsif ($deviceids[$deviceid] eq 'squeezeplay' || $deviceids[$deviceid] eq 'controller') {
 
 		$client_class  = 'Slim::Player::SqueezePlay';
 		$display_class = 'Slim::Display::NoDisplay';
 
 	} else {
 
-		$log->info("Unknown device type for $deviceid in HELO frame! Closing connection");
+		main::INFOLOG && $log->info("Unknown device type for $deviceid in HELO frame! Closing connection");
 
 		my $frame = pack('n', 4) . 'dsco';
 		Slim::Networking::Select::writeNoBlock( $s, \$frame);
@@ -1100,7 +1130,7 @@ sub _hello_handler {
 	}
 	
 	if ( main::SLIM_SERVICE ) {		
-		# SqueezeNetwork clients use a different client class
+		# mysqueezebox.com clients use a different client class
 		# Note: Other player classes use SNClient directly
 		if ( $client_class eq 'Slim::Player::Squeezebox2' ) {
 			$client_class = 'SDI::Service::Player::SqueezeNetworkClient';
@@ -1109,7 +1139,7 @@ sub _hello_handler {
 
 	if (defined $client && blessed($client) && blessed($client) ne $client_class) {
 
-		$log->info("Forgetting client, it is not a $client_class");
+		main::INFOLOG && $log->info("Forgetting client, it is not a $client_class");
 
 		$client->forgetClient();
 
@@ -1117,7 +1147,7 @@ sub _hello_handler {
 	}
 
 	if (defined $client && blessed($client->display) && blessed($client->display) ne $display_class) {
-		$log->info("Change display for $client_class to $display_class");
+		main::INFOLOG && $log->info("Change display for $client_class to $display_class");
 		$client->display->forgetDisplay();
 
 		Slim::bootstrap::tryModuleLoad($display_class);
@@ -1133,7 +1163,7 @@ sub _hello_handler {
 
 	if (!defined($client)) {
 
-		$log->info("Creating new client, id: $id ipport: $ipport{$s}");
+		main::INFOLOG && $log->info("Creating new client, id: $id ipport: $ipport{$s}");
 
 		Slim::bootstrap::tryModuleLoad($client_class);
 
@@ -1158,26 +1188,26 @@ sub _hello_handler {
 			$log->logdie("FATAL: Couldn't load module: $display_class: [$@]");
 		}
 		
-		# Set default language from firmware language on SN
-		if ( main::SLIM_SERVICE && !preferences('server')->client($client)->get('language')) {
+		# Set language from firmware language on SN
+		if ( main::SLIM_SERVICE ) {
 			preferences('server')->client($client)->set( language => $lang );
 		}
 
 		$client->display( $display_class->new($client) );
 
 		$client->macaddress($mac);
-		$client->init;
-		$client->reconnect($paddr, $revision, $s, 0);  # don't "reconnect" if the player is new.
+		$client->init($deviceids[$deviceid], $capabilities, $syncgroupid);
+		$client->reconnect($paddr, $revision, $s, 0, undef, $syncgroupid);  # don't "reconnect" if the player is new.
 
 	} else {
 
-		$log->info("Hello from existing client: $id on ipport: $ipport{$s}");
+		main::INFOLOG && $log->info("Hello from existing client: $id on ipport: $ipport{$s}");
 
 		my $oldsock = $client->tcpsock();
 
 		if (defined($oldsock) && exists($sock2client{$oldsock})) {
 		
-			if ( $log->is_info ) {
+			if ( main::INFOLOG && $log->is_info ) {
 				$log->info("Closing previous socket to client: $id on ipport: ".
 					join(':', inet_ntoa($oldsock->peeraddr), $oldsock->peerport)
 				);
@@ -1190,10 +1220,17 @@ sub _hello_handler {
 		
 		# Reset isUpgrading flag now that the player has come back
 		$client->isUpgrading(0);
+		
+		# Check display is valid
+		if ( !$client->display ) {
+			$client->display( $display_class->new($client) );
+			$client->display->init;
+		}
 
-		$client->reconnect($paddr, $revision, $s, $reconnect, $bytes_received);
+		$client->reconnect($paddr, $revision, $s, $reconnect, $bytes_received, $syncgroupid, $capabilities);
 
 		# notify of reconnect
+		$client->disconnected(0);
 		Slim::Control::Request::notifyFromArray($client, ['client', 'reconnect']);
 
 	}
@@ -1231,7 +1268,7 @@ sub _hello_handler {
 				sub {
 					my $jives = $client->playerData->active_jives();
 			
-					if ( $firmlog->is_debug ) {
+					if ( main::DEBUGLOG && $firmlog->is_debug ) {
 						$firmlog->debug(
 							"Ray needs upgrade, active jives: " . Data::Dump::dump($jives)
 						)
@@ -1239,7 +1276,7 @@ sub _hello_handler {
 			
 					for my $jive ( @{$jives} ) {
 						if ( $jive->{rev} =~ /r(?:1220|1425)$/ ) { # MP firmware
-							$firmlog->debug('Not updating Ray, MP Jive is connected');
+							main::DEBUGLOG && $firmlog->debug('Not updating Ray, MP Jive is connected');
 							return;
 						}
 					}
@@ -1310,7 +1347,7 @@ sub _button_handler {
 
 	Slim::Hardware::IR::enqueue($client, $button, $time);
 
-	$log->info("Hard button: $button time: $time");
+	main::INFOLOG && $log->info("Hard button: $button time: $time");
 } 
 
 sub _knob_handler {
@@ -1330,11 +1367,11 @@ sub _knob_handler {
 
 	if ($knobSync != $sync) {
 
-		$log->info("Stale knob sync code: $position (old: $oldPos) time: $time sync: $sync");
+		main::INFOLOG && $log->info("Stale knob sync code: $position (old: $oldPos) time: $time sync: $sync");
 		return;
 	}
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf("knob position: $position (old: %s) time: $time\n", defined $oldPos ? $oldPos : 'undef'));
 	}
 

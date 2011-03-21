@@ -1,8 +1,8 @@
 package Slim::Buttons::Synchronize;
 
-# $Id: Synchronize.pm 23877 2008-11-10 11:26:58Z mherger $
+# $Id: Synchronize.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -13,14 +13,12 @@ Slim::Buttons::Synchronize
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Synchronize> is the SqueezeCenter module to handle a player UI 
+L<Slim::Buttons::Synchronize> is the Squeezebox Server module to handle a player UI 
 for synchronizing groups of players, and reporting the current status of sync groups
 
 =cut
 
 use strict;
-use File::Spec::Functions qw(:ALL);
-use File::Spec::Functions qw(updir);
 
 our %functions = ();
 

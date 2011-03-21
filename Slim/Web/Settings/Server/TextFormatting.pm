@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::TextFormatting;
 
-# $Id: TextFormatting.pm 23830 2008-11-06 10:18:47Z mherger $
+# $Id: TextFormatting.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -15,11 +15,11 @@ use Slim::Utils::Prefs;
 my $prefs = preferences('server');
 
 sub name {
-	return Slim::Web::HTTP::protectName('FORMATTING_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('FORMATTING_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/server/formatting.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/server/formatting.html');
 }
 
 sub prefs {

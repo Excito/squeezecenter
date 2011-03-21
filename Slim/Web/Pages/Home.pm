@@ -1,8 +1,8 @@
 package Slim::Web::Pages::Home;
 
-# $Id: Home.pm 23855 2008-11-08 16:09:44Z andy $
+# $Id: Home.pm 28610 2009-09-23 12:08:16Z michael $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -19,23 +19,24 @@ use Slim::Utils::Strings;
 use Slim::Networking::Discovery::Server;
 use Slim::Networking::SqueezeNetwork;
 
+require Slim::Plugin::Base;
+
 my $prefs = preferences('server');
 
 sub init {
 	my $class = shift;
 	
-	Slim::Web::HTTP::addPageFunction(qr/^$/, sub {$class->home(@_)});
-	Slim::Web::HTTP::addPageFunction(qr/^home\.(?:htm|xml)/, sub {$class->home(@_)});
-	Slim::Web::HTTP::addPageFunction(qr/^index\.(?:htm|xml)/, sub {$class->home(@_)});
-	Slim::Web::HTTP::addPageFunction(qr/^switchserver\.(?:htm|xml)/, sub {$class->switchServer(@_)});
+	Slim::Web::Pages->addPageFunction(qr/^$/, sub {$class->home(@_)});
+	Slim::Web::Pages->addPageFunction(qr/^home\.(?:htm|xml)/, sub {$class->home(@_)});
+	Slim::Web::Pages->addPageFunction(qr/^index\.(?:htm|xml)/, sub {$class->home(@_)});
+	Slim::Web::Pages->addPageFunction(qr/^switchserver\.(?:htm|xml)/, sub {$class->switchServer(@_)});
 
 	$class->addPageLinks("help", { 'HELP_REMOTE' => "html/docs/remote.html"});
 	$class->addPageLinks("help", { 'REMOTE_STREAMING' => "html/docs/remotestreaming.html"});
-	$class->addPageLinks("help", { 'FAQ' => "http://faq.slimdevices.com/"},1);
+	$class->addPageLinks("help", { 'FAQ' => "http://mysqueezebox.com/support"},1);
 	$class->addPageLinks("help", { 'TECHNICAL_INFORMATION' => "html/docs/index.html"});
 	$class->addPageLinks("help", { 'COMMUNITY_FORUM' =>	"http://forums.slimdevices.com"});
 
-	$class->addPageLinks("plugins", { 'SOFTSQUEEZE' => "html/softsqueeze/index.html"});
 	$class->addPageLinks("plugins", { 'MUSICSOURCE' => "switchserver.html"});
 
 	$class->addPageLinks('icons', { 'MUSICSOURCE' => 'html/images/ServiceProviders/squeezenetwork.png' });
@@ -76,18 +77,25 @@ sub home {
 	$params->{'nosetup'}  = 1 if $::nosetup;
 	$params->{'noserver'} = 1 if $::noserver;
 	$params->{'newVersion'} = $::newVersion if $::newVersion;
+	$params->{'newVersion'} ||= Slim::Utils::PluginManager->message;
 
-	if (!exists $Slim::Web::Pages::additionalLinks{"browse"}) {
-		$class->addPageLinks("browse", {'BROWSE_BY_ARTIST' => "browsedb.html?hierarchy=contributor,album,track&amp;level=0"});
-		$class->addPageLinks("browse", {'BROWSE_BY_GENRE'  => "browsedb.html?hierarchy=genre,contributor,album,track&amp;level=0"});
-		$class->addPageLinks("browse", {'BROWSE_BY_ALBUM'  => "browsedb.html?hierarchy=album,track&amp;level=0"});
-		$class->addPageLinks("browse", {'BROWSE_BY_YEAR'   => "browsedb.html?hierarchy=year,album,track&amp;level=0"});
-		$class->addPageLinks("browse", {'BROWSE_NEW_MUSIC' => "browsedb.html?hierarchy=age,track&amp;level=0"});
-	}
-
-	if (!exists $Slim::Web::Pages::additionalLinks{"search"}) {
-		$class->addPageLinks("search", {'SEARCHMUSIC' => "livesearch.html"});
-		$class->addPageLinks("search", {'ADVANCEDSEARCH' => "advanced_search.html"});
+	if (Slim::Schema::hasLibrary()) {
+		if (!exists $Slim::Web::Pages::additionalLinks{"browse"}) {
+			$class->addPageLinks("browse", {'BROWSE_BY_ARTIST' => "browsedb.html?hierarchy=contributor,album,track&amp;level=0"});
+			$class->addPageLinks("browse", {'BROWSE_BY_GENRE'  => "browsedb.html?hierarchy=genre,contributor,album,track&amp;level=0"});
+			$class->addPageLinks("browse", {'BROWSE_BY_ALBUM'  => "browsedb.html?hierarchy=album,track&amp;level=0"});
+			$class->addPageLinks("browse", {'BROWSE_BY_YEAR'   => "browsedb.html?hierarchy=year,album,track&amp;level=0"});
+			$class->addPageLinks("browse", {'BROWSE_NEW_MUSIC' => "browsedb.html?hierarchy=age,track&amp;level=0"});
+		}
+	
+		if (!exists $Slim::Web::Pages::additionalLinks{"search"}) {
+			$class->addPageLinks("search", {'SEARCHMUSIC' => "livesearch.html"});
+			$class->addPageLinks("search", {'ADVANCEDSEARCH' => "advanced_search.html"});
+		}
+		
+		$params->{'hasLibrary'} = 1;
+	} else {
+		$params->{'hasLibrary'} = 0;
 	}
 
 	if (!exists $Slim::Web::Pages::additionalLinks{"help"}) {
@@ -109,7 +117,7 @@ sub home {
 	}
 
 	# Show playlists if any exists
-	if ($prefs->get('playlistdir') || Slim::Schema->rs('Playlist')->getPlaylists->count) {
+	if ($prefs->get('playlistdir') || (Slim::Schema::hasLibrary && Slim::Schema->rs('Playlist')->getPlaylists->count)) {
 
 		$class->addPageLinks("browse", {'SAVED_PLAYLISTS' => "browsedb.html?hierarchy=playlist,playlistTrack&amp;level=0"});
 	}
@@ -194,9 +202,8 @@ sub home {
 		};
 	}
 
-	$class->addPlayerList($client, $params);
-	
-	$class->addLibraryStats($params);
+	Slim::Web::Pages::Common->addPlayerList($client, $params);
+	Slim::Web::Pages::Common->addLibraryStats($params);
 
 	return Slim::Web::HTTP::filltemplatefile($template, $params);
 }
@@ -207,8 +214,7 @@ sub switchServer {
 	if (lc($params->{'switchto'}) eq 'squeezenetwork' 
 		|| $params->{'switchto'} eq Slim::Utils::Strings::string('SQUEEZENETWORK')) {
 
-		# Bug 7254, don't tell Ray to reconnect to SN
-		if ( $client->deviceid != 7 ) {
+		if ( _canSwitch($client) ) {
 			Slim::Utils::Timers::setTimer(
 				$client,
 				time() + 1,
@@ -239,8 +245,7 @@ sub switchServer {
 	else {
 		$params->{servers} = Slim::Networking::Discovery::Server::getServerList();
 
-		# Bug 7254, don't tell Ray to reconnect to SN
-		if ( $client->deviceid != 7 ) {
+		if ( _canSwitch($client) ) {
 			$params->{servers}->{'SQUEEZENETWORK'} = {
 				NAME => Slim::Utils::Strings::string('SQUEEZENETWORK')	
 			}; 
@@ -251,6 +256,13 @@ sub switchServer {
 	}
 	
 	return Slim::Web::HTTP::filltemplatefile('switchserver.html', $params);
+}
+
+# Bug 7254, don't tell Ray to reconnect to SN unless it's known to be attached to the user's account
+sub _canSwitch {
+	my $client = shift;
+	
+	return ( ($client->deviceid != 7) || Slim::Networking::SqueezeNetwork::Players->is_known_player($client) );
 }
 
 1;

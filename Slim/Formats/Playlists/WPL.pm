@@ -1,8 +1,8 @@
 package Slim::Formats::Playlists::WPL;
 
-# $Id: WPL.pm 15258 2007-12-13 15:29:14Z mherger $
+# $Id: WPL.pm 28546 2009-09-17 07:45:15Z michael $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -27,7 +27,7 @@ sub read {
 
 	my @items = ();
 
-	$log->info("Parsing: $file ($url)");
+	main::INFOLOG && $log->info("Parsing: $file ($url)");
 
 	# Handles version 1.0 WPL Windows Medial Playlist files...
 	my $content = eval { XMLin($file) };
@@ -55,21 +55,27 @@ sub read {
 
 			my $entry = $entry_info->{'src'};
 
-			$log->debug("  entry from file: $entry");
+			main::DEBUGLOG && $log->debug("  entry from file: $entry");
 
-			$entry = Slim::Utils::Unicode::utf8encode_locale($entry);
+			if (main::ISWINDOWS) {
+				$entry = Win32::GetANSIPathName($entry);	
+			}
+			else {
+				$entry = Slim::Utils::Unicode::utf8encode_locale($entry);	
+			}
+
 			$entry = Slim::Utils::Misc::fixPath($entry, $baseDir);
 
 			if ($class->playlistEntryIsValid($entry, $url)) {
 
-				$log->debug("    entry: $entry");
+				main::DEBUGLOG && $log->debug("    entry: $entry");
 
 				push @items, $class->_updateMetaData($entry);
 			}
 		}
 	}
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info("Parsed " . scalar(@items) . " items from WPL");
 	}
 
@@ -79,7 +85,7 @@ sub read {
 sub write {
 	my $class   = shift;
 	my $listref = shift;
-	my $playlistname = shift || "SqueezeCenter " . Slim::Utils::Strings::string("PLAYLIST");
+	my $playlistname = shift || "Squeezebox " . Slim::Utils::Strings::string("PLAYLIST");
 	my $filename = shift;
 
 	# Handles version 1.0 WPL Windows Medial Playlist files...

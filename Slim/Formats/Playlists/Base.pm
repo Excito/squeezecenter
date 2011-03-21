@@ -1,14 +1,14 @@
 package Slim::Formats::Playlists::Base;
 
-# $Id: Base.pm 19477 2008-05-06 16:23:38Z andy $
+# $Id: Base.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License, version 2.
 
 use strict;
-use FileHandle;
+use FileHandle ();
 use IO::String;
 use Scalar::Util qw(blessed);
 
@@ -26,7 +26,7 @@ sub _updateMetaData {
 	# Update title MetaData only if its not a local file with Title information already cached.
 	if ($metadata && Slim::Music::Info::isRemoteURL($entry)) {
 
-		my $track = Slim::Schema->rs('Track')->objectForUrl($entry);
+		my $track = Slim::Schema->objectForUrl($entry);
 
 		if ((blessed($track) && $track->can('title')) || !blessed($track)) {
 
@@ -42,11 +42,11 @@ sub _updateMetaData {
 	my $track;
 
 	if ( !scalar keys %{$attributes} ) {
-		$track = Slim::Schema->rs('Track')->objectForUrl($entry);
+		$track = Slim::Schema->objectForUrl($entry);
 	}
 	
 	if ( !defined $track ) {
-		$track = Slim::Schema->rs('Track')->updateOrCreate( {
+		$track = Slim::Schema->updateOrCreate( {
 			'url'        => $entry,
 			'attributes' => $attributes,
 			'readTags'   => 1,

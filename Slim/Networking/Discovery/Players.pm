@@ -2,7 +2,7 @@ package Slim::Networking::Discovery::Players;
 
 # $Id: Players.pm 18532 2008-04-07 23:10:43Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -75,7 +75,7 @@ sub getPlayerList {
 
 =head2 fetch_players()
 
-Poll the SqueezeCenter/SlimServers in our network for lists of connected players
+Poll the Squeezebox Server/SlimServers in our network for lists of connected players
 
 =cut
 
@@ -112,18 +112,21 @@ sub _players_done {
 		return _players_error( $http );
 	}
 	
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug( "Got list of players: " . Data::Dump::dump( $res->{result}->{players_loop} ) );
 	}
 
 	_purge_player_list($server);
 
 	foreach my $player (@{$res->{result}->{players_loop}}) {
+		
 		$players->{$player->{playerid}} = {
 			name   => $player->{name} || $player->{model} . ' ' . substr($player->{playerid}, 9),
 			server => $server,
 			model  => $player->{model},
+			ttl    => time() + 2 * 60,		# remember the players no longer than two minutes
 		}
+		
 	}
 }
 
@@ -133,7 +136,7 @@ sub _players_error {
 	
 	# don't report errors when querying access protected server etc.
 	if ($error =~ /(?:401\b)/) {
-		$log->info( "Unable to get players: $error" );
+		main::INFOLOG && $log->info( "Unable to get players: $error" );
 		return;
 	}
 
@@ -151,8 +154,14 @@ sub _purge_player_list {
 	my $server = shift;
 
 	foreach my $player (keys %{$players}) {
-		if ($players->{$player}->{server} eq $server) {
+		
+		# remove players connected to ourselves
+		# or whose server has not been seen in a while
+		if ( $players->{$player}->{server} eq $server
+			|| $players->{$player}->{ttl} < time() ) {
+				
 			delete $players->{$player};
+			
 		}
 	}
 }

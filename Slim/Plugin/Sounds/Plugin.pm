@@ -1,6 +1,6 @@
 package Slim::Plugin::Sounds::Plugin;
 
-# $Id: Plugin.pm 22939 2008-08-28 16:42:33Z andy $
+# $Id: Plugin.pm 28265 2009-08-25 19:58:11Z andy $
 
 # Browse Sounds & Effects
 
@@ -23,30 +23,11 @@ sub initPlugin {
 		loop => 'Slim::Plugin::Sounds::ProtocolHandler'
 	);
 
-	my @item = ({
-			stringToken    => getDisplayName(),
-			weight         => 30,
-			id             => 'sounds',
-			node           => 'extras',
-			'icon-id'      => $class->_pluginDataFor('icon'),
-			displayWhenOff => 0,
-			window         => { titleStyle => 'album' },
-			actions => {
-				go =>          {
-							cmd => [ 'sounds', 'items' ],
-							params => {
-								menu => 'sounds',
-							},
-				},
-			},
-		});
-
-	Slim::Control::Jive::registerPluginMenu(\@item);
-
 	$class->SUPER::initPlugin(
-		feed => Slim::Networking::SqueezeNetwork->url( '/api/sounds/v1/opml' ),
-		tag  => 'sounds',
-		menu => 'plugins',
+		feed   => Slim::Networking::SqueezeNetwork->url( '/api/sounds/v1/opml' ),
+		tag    => 'sounds',
+		menu   => 'plugins',
+		is_app => 1,
 	);
 	
 	# Cache list of sounds for alarm
@@ -63,6 +44,9 @@ sub initPlugin {
 sub getDisplayName {
 	return 'PLUGIN_SOUNDS_MODULE_NAME';
 }
+
+# Don't add this item to any menu
+sub playerMenu { }
 
 # Called by Slim::Utils::Alarm to get the playlists that should be presented as options
 # for an alarm playlist.

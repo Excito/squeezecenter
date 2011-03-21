@@ -1,6 +1,6 @@
 package Slim::Plugin::LineOut::Plugin;
 
-# SqueezeCenter Copyright 2001-2008 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -21,6 +21,14 @@ my $log = Slim::Utils::Log->addLogCategory({
 	'defaultLevel' => 'ERROR',
 	'description'  => getDisplayName(),
 });
+
+sub initPlugin {
+	my $class = shift;
+
+	$class->SUPER::initPlugin();
+	
+	Slim::Web::Pages->addPageLinks("icons", { $class->getDisplayName() => $class->_pluginDataFor('icon') });
+}
 
 sub getDisplayName {
 	return 'PLUGIN_LINE_OUT'
@@ -54,8 +62,6 @@ sub webPages {
 	} else {
 		Slim::Web::Pages->addPageLinks("plugins", { 'PLUGIN_LINE_OUT' => undef });
 	}
-
-	Slim::Web::Pages->addPageLinks("icons", { $class->getDisplayName() => $class->_pluginDataFor('icon') });
 }
 
 1;

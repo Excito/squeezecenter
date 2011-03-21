@@ -1,8 +1,8 @@
 package Slim::Utils::Strings;
 
-# $Id: Strings.pm 23462 2008-10-08 12:43:12Z mherger $
+# $Id: Strings.pm 28659 2009-09-26 19:14:53Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -40,8 +40,12 @@ use Exporter::Lite;
 
 our @EXPORT_OK = qw(string cstring clientString);
 
+use Config;
+use Digest::SHA1 qw(sha1_hex);
 use POSIX qw(setlocale LC_TIME);
+use File::Slurp qw(read_file write_file);
 use File::Spec::Functions qw(:ALL);
+use JSON::XS::VersionOneAndTwo;
 use Scalar::Util qw(blessed);
 use Storable;
 
@@ -75,6 +79,18 @@ sub init {
 	if ($::checkstrings) {
 		checkChangedStrings();
 	}
+	
+	# Load cached extra strings
+	my $extraCache = catdir( $prefs->get('cachedir'), 'extrastrings.json' );
+	
+	my $cache = {};
+	if ( -e $extraCache ) {
+		$cache = eval { from_json( read_file($extraCache) ) };
+	}
+	
+	for my $string ( keys %{ $cache || {} } ) {
+		storeString( $string, $cache->{$string} );
+	}
 }
 
 =head2 loadStrings( [ $argshash ] )
@@ -97,7 +113,11 @@ sub loadStrings {
 	my ($newest, $sum, $files) = stringsFiles();
 
 	my $stringCache = catdir( $prefs->get('cachedir'),
-		Slim::Utils::OSDetect::OS() eq 'unix' ? 'stringcache' : 'strings.bin');
+		Slim::Utils::OSDetect::OS() eq 'unix' ? 'stringcache' : 'strings');
+	
+	# Add the os arch to the cache file name, to avoid crashes when going
+	# between 32-bit and 64-bit perl for example
+	$stringCache .= '.' . Slim::Utils::OSDetect::details()->{osArch} . '.bin';
 
 	my $stringCacheVersion = 2; # Version number for cache file
 	# version 2 - include the sum of string file mtimes as an additional validation check
@@ -108,12 +128,13 @@ sub loadStrings {
 		# check cache for consitency
 		my $cacheOK = 1;
 
-		$log->info("Retrieving string data from string cache: $stringCache");
+		main::INFOLOG && $log->info("Retrieving string data from string cache: $stringCache");
 
 		eval { $strings = retrieve($stringCache); };
 
 		if ($@) {
-			$log->warn("Tried loading string: $@");
+			$log->warn("Tried loading strings file ($stringCache): $@");
+			$cacheOK = 0;
 		}
 
 		if (!$@ && defined $strings &&
@@ -127,12 +148,12 @@ sub loadStrings {
 		}
 
 		# check sum of mtimes matches that stored in stringcache
-		if ($strings->{'mtimesum'} && $strings->{'mtimesum'} != $sum) {
+		if ($cacheOK && $strings->{'mtimesum'} && $strings->{'mtimesum'} != $sum) {
 			$cacheOK = 0;
 		}
 
 		# check for same list of strings files as that stored in stringcache
-		if (scalar @{$strings->{'files'}} == scalar @$files) {
+		if ($cacheOK && scalar @{$strings->{'files'}} == scalar @$files) {
 			for my $i (0 .. scalar @$files - 1) {
 				if ($strings->{'files'}[$i] ne $files->[$i]) {
 					$cacheOK = 0;
@@ -144,7 +165,7 @@ sub loadStrings {
 
 		return if $cacheOK;
 
-		$log->info("String cache contains old data - reparsing string files");
+		main::INFOLOG && $log->info("String cache contains old data - reparsing string files");
 	}
 
 	# otherwise reparse all string files
@@ -163,14 +184,14 @@ sub loadStrings {
 
 	for my $file (@$files) {
 
-		$log->info("Loading string file: $file");
+		main::INFOLOG && $log->info("Loading string file: $file");
 
 		loadFile($file, $args);
 
 	}
 
 	unless ($args->{'dontSave'}) {
-		$log->info("Storing string cache: $stringCache");
+		main::INFOLOG && $log->info("Storing string cache: $stringCache");
 		store($strings, $stringCache);
 	}
 
@@ -186,7 +207,7 @@ sub loadAdditional {
 	}
 	
 	for my $file ( @{ $strings->{files} } ) {
-		$log->info("Loading string file for additional language $lang: $file");
+		main::INFOLOG && $log->info("Loading string file for additional language $lang: $file");
 		
 		my $args = {
 			storeString => sub {
@@ -210,10 +231,12 @@ sub stringsFiles {
 
 	# server string file
 	my $serverPath = Slim::Utils::OSDetect::dirsFor('strings');
+	my @pluginDirs = Slim::Utils::PluginManager->dirsFor('strings');
+
 	push @files, catdir($serverPath, 'strings.txt');
 
 	# plugin string files
-	for my $path ( Slim::Utils::PluginManager->pluginRootDirs() ) {
+	for my $path ( @pluginDirs ) {
 		push @files, catdir($path, 'strings.txt');
 	}
 
@@ -221,12 +244,13 @@ sub stringsFiles {
 	push @files, catdir($serverPath, 'custom-strings.txt');
 
 	# plugin custom string files
-	for my $path ( Slim::Utils::PluginManager->pluginRootDirs() ) {
+	for my $path ( @pluginDirs ) {
 		push @files, catdir($path, 'custom-strings.txt');
 	}
 	
 	if ( main::SLIM_SERVICE ) {
 		push @files, catdir($serverPath, 'slimservice-strings.txt');
+		push @files, catdir($main::SN_PATH, 'docroot', 'strings.txt');
 	}
 
 	# prune out files which don't exist and find newest
@@ -251,53 +275,19 @@ sub loadFile {
 	my $file = shift;
 	my $args = shift;
 
-	my $text;
-
 	# Force the UTF-8 layer opening of the strings file.
-	#
-	# Be backwards compatible with perl 5.6.x
-	#
-	# Setting $/ to undef and slurping is much faster than join('', <STRINGS>)
-	# it also avoids creating an extra in memory copy of the string.
-	if ($] > 5.007) {
-
-		local $/ = undef;
-
-		open(STRINGS, '<:utf8', $file) || do {
-			logError("Couldn't open $file - FATAL!");
-			die;
-		};
-
-		$text = <STRINGS>;
-		close STRINGS;
-
-	} else {
-
-		# This is lexically scoped.
-		use utf8;
-		local $/ = undef;
-
-		open(STRINGS, $file) || do {
-			logError("Couldn't open $file - FATAL!");
-			die;
-		};
-
-		$text = <STRINGS>;
-
-		if (Slim::Utils::Unicode::currentLocale() =~ /^iso-8859-1/) {
-			$strings = Slim::Utils::Unicode::utf8toLatin1($text);
-		}
-
-		close STRINGS;
-	}
-
-	parseStrings(\$text, $file, $args);
+	open(my $fh, '<:utf8', $file) || do {
+		logError("Couldn't open $file - FATAL!");
+		die;
+	};
+	
+	parseStrings($fh, $file, $args);
+	
+	close $fh;
 }
 
 sub parseStrings {
-	my $text = shift;
-	my $file = shift;
-	my $args = shift;
+	my ( $fh, $file, $args ) = @_;
 
 	my $string = '';
 	my $language = '';
@@ -312,7 +302,7 @@ sub parseStrings {
 	# and mac format (\r) files
 	# It also obviates the need to strip trailing \n or \r
 	# from the end of lines
-	LINE: for my $line (split('[\n\r]', $$text)) {
+	LINE: for my $line ( <$fh> ) {
 
 		$ln++;
 
@@ -378,7 +368,7 @@ sub storeString {
 
 	if ($log->is_info && defined $strings->{$currentLang}->{$name} && defined $curString->{$currentLang} && 
 			$strings->{$currentLang}->{$name} ne $curString->{$currentLang}) {
-		$log->info("redefined string: $name in $file");
+		main::INFOLOG && $log->info("redefined string: $name in $file");
 	}
 
 	if (defined $curString->{$currentLang}) {
@@ -386,13 +376,45 @@ sub storeString {
 
 	} elsif (defined $curString->{$failsafeLang}) {
 		$strings->{$currentLang}->{$name} = $curString->{$failsafeLang};
-		$log->debug("Language $currentLang using $failsafeLang for $name in $file");
+		main::DEBUGLOG && $log->is_debug && $log->debug("Language $currentLang using $failsafeLang for $name in". defined $file ? $file : 'undefined');
 	}
 
 	if ($args->{'storeFailsafe'} && defined $curString->{$failsafeLang}) {
 
 		$strings->{$failsafeLang}->{$name} = $curString->{$failsafeLang};
 	}
+}
+
+=head2 storeExtraStrings ( $arrayref )
+
+Cache and store additional strings.  This is used by SN to send additional
+strings for apps.
+
+=cut
+
+sub storeExtraStrings {
+	my $extra = shift;
+	
+	# Cache strings to disk so they work on restart
+	my $extraCache = catdir( $prefs->get('cachedir'), 'extrastrings.json' );
+	
+	my $cache = {};
+	if ( -e $extraCache ) {
+		$cache = eval { from_json( read_file($extraCache) ) };
+		if ( $@ ) {
+			$cache = {};
+		}
+	}
+	
+	# Turn into a hash
+	$extra = { map { $_->{token} => $_->{strings} } @{$extra} };
+	
+	for my $string ( keys %{$extra} ) {
+		storeString( $string, $extra->{$string} );
+		$cache->{$string} = $extra->{$string};
+	}
+	
+	eval { write_file( $extraCache, to_json($cache) ) };
 }
 
 # access strings
@@ -477,7 +499,7 @@ sub setString {
 	my $token = uc(shift);
 	my $string = shift;
 
-	$log->debug("setString token: $token to $string");
+	main::DEBUGLOG && $log->debug("setString token: $token to $string");
 	$defaultStrings->{$token} = $string;
 }
 
@@ -539,7 +561,7 @@ sub clientStrings {
 	if (storeFailsafe() && ($display->isa('Slim::Display::Text') || $display->isa('Slim::Display::SqueezeboxG')) ) {
 
 		unless ($strings->{$failsafeLang}) {
-			$log->info("Reparsing strings as client requires failsafe language");
+			main::INFOLOG && $log->info("Reparsing strings as client requires failsafe language");
 			loadStrings({'ignoreCache' => 1});
 		}
 
@@ -567,7 +589,7 @@ sub checkChangedStrings {
 
 	for my $file (@{$strings->{'files'}}) {
 		if ((stat($file))[9] > $lastChange) {
-			$log->info("$file updated - reparsing");
+			main::INFOLOG && $log->info("$file updated - reparsing");
 			loadFile($file);
 			$reload ||= time;
 		}
@@ -581,7 +603,7 @@ sub checkChangedStrings {
 }
 
 sub setLocale {
-	my $locale = string('LOCALE' . (Slim::Utils::OSDetect::isWindows() ? '_WIN' : '') );
+	my $locale = string('LOCALE' . (main::ISWINDOWS ? '_WIN' : '') );
 	$locale .= Slim::Utils::Unicode::currentLocale() =~ /utf8/i ? '.UTF-8' : '';
 
 	setlocale( LC_TIME, $locale );

@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Player::Synchronization;
 
-# SqueezeCenter Copyright 2001-2008 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -15,11 +15,11 @@ use Slim::Utils::Strings qw(string);
 my $prefs = preferences('server');
 
 sub name {
-	return Slim::Web::HTTP::protectName('SETUP_SYNCHRONIZE');
+	return Slim::Web::HTTP::CSRF->protectName('SETUP_SYNCHRONIZE');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/player/synchronization.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/player/synchronization.html');
 }
 
 sub needsClient {

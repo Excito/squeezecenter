@@ -1,8 +1,8 @@
 package Slim::Utils::Accessor;
 
-# $Id: Accessor.pm 22988 2008-08-31 17:00:52Z andy $
+# $Id: Accessor.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -15,7 +15,7 @@ Slim::Utils::Accessor
 
 L<Slim::Utils::Accessor>
 
- Simple accessors for SqueezeCenter objects based on Class::Accessor::Faster by Marty Pauley
+ Simple accessors for Squeezebox Server objects based on Class::Accessor::Faster by Marty Pauley
  In addition to simple scalar accessors provides methods to arrays and hashes by index/key as used by Client and Display objects
 
 =cut
@@ -37,9 +37,13 @@ BEGIN {
 		$hasXS = 0;
 		eval {
 			require Class::XSAccessor::Array;
-			die if $Class::XSAccessor::Array::VERSION lt '0.05';
+			die if $Class::XSAccessor::Array::VERSION lt '1.04';
 			$hasXS = 1;
 		};
+		
+		if ( $@ ) {
+			warn "NOTE: Class::XSAccessor::Array not found, install it for better performance\n";
+		}
 	
 		return $hasXS;
 	}
@@ -94,7 +98,7 @@ sub mk_accessor {
 		if ($type eq 'rw') {
 			
 			if ( hasXS() ) {
-				Class::XSAccessor::Array::_generate_accessor(
+				Class::XSAccessor::Array::_generate_method(
 					$class,	$field,	$n, 0, 0, 'accessor',
 				);
 			}
@@ -108,7 +112,7 @@ sub mk_accessor {
 		} elsif ($type eq 'ro') {
 			
 			if ( hasXS() ) {
-				Class::XSAccessor::Array::_generate_accessor(
+				Class::XSAccessor::Array::_generate_method(
 					$class,	$field,	$n, 0, 0, 'getter',
 				);
 			}
@@ -152,6 +156,15 @@ sub mk_accessor {
 				return $_[0]->[$n]->{ $_[1] } = $_[2] if @_ == 3;
 			};
 
+		} elsif ($type eq 'rw_bt') {
+			
+			$accessor = sub {
+				return $_[0]->[$n]                    if @_ == 1;
+				if (@_ == 2) {
+					logBacktrace("$class ->$field set to $_[1]");
+					return $_[0]->[$n] = $_[1];
+				}
+			};
 		}
 
 		if ($accessor) {

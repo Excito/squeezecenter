@@ -1,6 +1,6 @@
 package Slim::Plugin::DigitalInput::Plugin;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -35,7 +35,7 @@ sub getDisplayName {
 sub initPlugin {
 	my $class = shift;
 
-	$log->info("Initializing");
+	main::INFOLOG && $log->info("Initializing");
 	
 	$class->SUPER::initPlugin();
 
@@ -72,6 +72,10 @@ sub initPlugin {
 	[1, 1, 0, \&digitalInputMenu]);
 	Slim::Control::Request::addDispatch(['setdigitalinput', '_which'],
 	[1, 0, 0, \&setDigitalInput]);
+
+	if ( !main::SLIM_SERVICE ) {
+		Slim::Web::Pages->addPageLinks("icons", { $class->getDisplayName() => $class->_pluginDataFor('icon') });
+	}
 }
 
 # Called every time Jive main menu is updated after a player switch
@@ -91,7 +95,10 @@ sub digitalInputItem {
 		node           => 'home',
 		'icon-id'      => Slim::Plugin::DigitalInput::Plugin->_pluginDataFor('icon'),
 		displayWhenOff => 0,
-		window         => { titleStyle => 'album' },
+		window         => { 
+				titleStyle => 'album',
+				'icon-id'      => Slim::Plugin::DigitalInput::Plugin->_pluginDataFor('icon'),
+		},
 		actions => {
 			go =>          {
 				player => 0,
@@ -236,10 +243,10 @@ sub updateDigitalInput {
 	$name =~ s/[{}]//g;
 	$name = $client->string($name);
 
-	$log->info("Calling addtracks on [$name] ($url)");
+	main::INFOLOG && $log->info("Calling addtracks on [$name] ($url)");
 
 	# Create an object in the database for this meta source: url.
-	my $obj = Slim::Schema->rs('Track')->updateOrCreate({
+	my $obj = Slim::Schema->updateOrCreate({
 		'url'        => $url,
 		'create'     => 1,
 		'readTags'   => 0,
@@ -322,10 +329,9 @@ sub webPages {
 	} else {
 		Slim::Web::Pages->addPageLinks("plugins", { 'PLUGIN_DIGITAL_INPUT' => undef });
 	}
-	Slim::Web::Pages->addPageLinks("icons", { $class->getDisplayName() => $class->_pluginDataFor('icon') });
 
-	Slim::Web::HTTP::addPageFunction("$urlBase/list.html", \&handleWebList);
-	Slim::Web::HTTP::addPageFunction("$urlBase/set.html", \&handleSetting);
+	Slim::Web::Pages->addPageFunction("$urlBase/list.html", \&handleWebList);
+	Slim::Web::Pages->addPageFunction("$urlBase/set.html", \&handleSetting);
 }
 
 # Draws the plugin's web page

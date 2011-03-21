@@ -2,7 +2,7 @@ package Slim::Music::PlaylistFolderScan;
 
 # $Id
 #
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -60,7 +60,7 @@ sub startScan {
 
 	if (!defined $dir || !-d $dir) {
 
-		$log->info("Skipping playlist folder scan - playlistdir is undefined.");
+		main::INFOLOG && $log->info("Skipping playlist folder scan - playlistdir is undefined.");
 
 		doneScanning();
 		return;
@@ -68,7 +68,7 @@ sub startScan {
 
 	if ($class->stillScanning) {
 
-		$log->info("Scan already in progress. Restarting");
+		main::INFOLOG && $log->info("Scan already in progress. Restarting");
 
 		$class->stillScanning(0);
 	} 
@@ -79,10 +79,10 @@ sub startScan {
 		$recurse = 1;
 	}
 
-	$log->info("Starting playlist folder scan");
+	main::INFOLOG && $log->info("Starting playlist folder scan");
 	
 	# Bug 6710, clear all 'ssp' playlists before rescanning
-	$log->info("Clearing internal ssp playlists");
+	main::INFOLOG && $log->info("Clearing internal ssp playlists");
 	Slim::Schema->rs('Playlist')->clearInternalPlaylists();
 
 	Slim::Utils::Scanner->scanDirectory({
@@ -102,7 +102,7 @@ sub doneScanning {
 	# If scan aborted, $stillScanning will already be false.
 	return if !$class->stillScanning;
 
-	$log->info("Finished background scan of playlist folder.");
+	main::INFOLOG && $log->info("Finished background scan of playlist folder.");
 
 	$class->stillScanning(0);
 

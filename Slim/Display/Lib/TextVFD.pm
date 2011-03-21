@@ -1,11 +1,11 @@
 package Slim::Display::Lib::TextVFD;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
 #
-# $Id: TextVFD.pm 15258 2007-12-13 15:29:14Z mherger $
+# $Id: TextVFD.pm 27975 2009-08-01 03:28:30Z andy $
 #
 
 =head1 NAME
@@ -66,7 +66,6 @@ my $noritakeBrightPrelude =
 
 my $vfdReset = $vfdCodeCmd . $vfdCommand{"INCSC"} . $vfdCodeCmd . $vfdCommand{"HOME"};
 
-my $spaces = ' ' x 40;
 
 my %symbolmap = (
 	'katakana' => {
@@ -86,6 +85,13 @@ my %symbolmap = (
 		'rightarrow' => chr(0x7e),
 		'hardspace' => chr(0x20),
 		'solidblock' => chr(0x1f),
+	},	
+	'squeezeslave' => {  # These are from an Imon VFD, but squeezeslave can remap for other types
+		'rightarrow' => chr(0x10),
+		'hardspace'  => chr(0x20),
+		'solidblock' => chr(0x0B),
+		'notesymbol' => chr(0x91),
+		'bell'       => chr(0x98),
 	}
 );
 
@@ -121,6 +127,21 @@ my %gracefulmap = (
 	'Zbottom'    => '/',
 	'leftvbar'   => '|',
 	'rightvbar'  => '|',
+	'rightprogress0'  => ']',
+	'rightprogress1'  => ']',
+	'rightprogress2'  => ']',
+	'rightprogress3'  => ']',
+	'rightprogress4'  => ']',
+	'leftprogress0'  => '[',
+	'leftprogress1'  => '[',
+	'leftprogress2'  => '[',
+	'leftprogress3'  => '[',
+	'leftprogress4'  => '[',
+	'middleprogress0'  => ' ',
+	'middleprogress1'  => '.',
+	'middleprogress2'  => ':',
+	'middleprogress3'  => '!',
+	'middleprogress4'  => '|',
 );
 
 sub vfdUpdate {
@@ -133,6 +154,9 @@ sub vfdUpdate {
 	my $cur = -1;
 	my $pos;
 
+	my $displaywidth = $client->display->displayWidth;
+	my $spaces = ' ' x $displaywidth;
+
 	# convert to the VFD char set
 	my $lang = $client->vfdmodel;
 	if (!$lang) { 
@@ -141,7 +165,7 @@ sub vfdUpdate {
 		$lang =~ s/[^-]*-(.*)/$1/;
 	}
 
-	$log->debug("vfdUpdate $lang\nline1: $line1\nline2: $line2\n");
+	main::DEBUGLOG && $log->debug("vfdUpdate $lang\nline1: $line1\nline2: $line2\n");
 	
 	my $brightness = $client->brightness();
 
@@ -225,7 +249,9 @@ sub vfdUpdate {
 
 		my $encodedCustom = "\x1F" . $custom . "\x1F";
 
-		if ($usedCustom < 8) { # Room to add this one
+		my $maxCustom = $lang eq "squeezeslave" ? 0 : 8; # squeezeslave doesn't allow any custom character definitions
+
+		if ($usedCustom < $maxCustom) { # Room to add this one
 
 			while(defined $customUsed{$nextChr}) {
 
@@ -248,17 +274,17 @@ sub vfdUpdate {
 
 		} else { # No space left; use a space
 
-			$log->debug("no space left: [$custom]");
+			main::DEBUGLOG && $log->debug("no space left: [$custom]");
 
 			if ($gracefulmap{$custom}) {
 
-				$log->debug("graceful: $custom -> $gracefulmap{$custom}");
+				main::DEBUGLOG && $log->debug("graceful: $custom -> $gracefulmap{$custom}");
 
 				$line =~ s/$encodedCustom/$gracefulmap{$custom}/g;
 
 			} else {
 
-				$log->debug("ungraceful");
+				main::DEBUGLOG && $log->debug("ungraceful");
 
 				$line =~ s/$encodedCustom/ /g;
 			}
@@ -266,7 +292,6 @@ sub vfdUpdate {
 			delete $newCustom{$custom};
 		}
 	}
-
 	if ($lang eq 'european') {
 		# why can't we all just get along?
 		$line =~ tr{\x1f\x92\xa1\xa2\xa3\xa4\xa5\xa6\xa8\xa9\xab\xad\xaf \xbb\xbf \xc0\xc1\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xcb\xcc\xcd\xce\xcf \xd0\xd1\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xdb\xdc\xdd\xde\xdf \xe0\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xeb\xec\xed\xee\xef \xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff}
@@ -275,8 +300,9 @@ sub vfdUpdate {
 		# translate iso8859-1 to vfd charset
 		$line =~ tr{\x1f\x92\x0e\x0f\x5c\x70\x7e\x7f\xa0\xa1\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xab\xac\xad\xae\xaf\xb0\xb1\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xbb\xbc\xbd\xbe\xbf\xc0\xc1\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xcb\xcc\xcd\xce\xcf\xd0\xd1\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xdb\xdc\xdd\xde\xdf\xe0\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xeb\xec\xed\xee\xef\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff}
 				   {\xff\x27\x19\x7e\x8c\xf0\x8e\x8f\x20\x98\xec\x92\xeb\x5c\x98\x8f\xde\x63\x61\x3c\xa3\x2d\x72\xb0\xdf\xb7\x32\x33\x60\xe4\xf1\x94\x2c\x31\xdf\x3e\x25\x25\x25\x3f\x81\x81\x82\x82\x80\x81\x90\x99\x45\x45\x45\x45\x49\x49\x49\x49\x44\xee\x4f\x4f\x4f\x4f\x86\x78\x30\x55\x55\x55\x8a\x59\x70\xe2\x84\x83\x84\x84\xe1\x84\x91\x99\x65\x65\x65\x65\x69\x69\x69\x69\x95\xee\x6f\x6f\x6f\x6f\xef\xfd\x88\x75\x75\x75\xf5\x79\xf0\x79};	
-	} elsif ($lang eq 'latin1') {
+	} elsif (($lang eq 'latin1') || ($lang eq 'squeezeslave')) {
 		# golly, the latin1 character map _is_ latin1.  Also, translate funky windows apostrophes to legal ones.
+		# squeezeslave uses latin1 too
 		$line =~ tr{\x92}
 				   {\x26};
 	};
@@ -287,9 +313,10 @@ sub vfdUpdate {
 	my $vfdmodel = $client->vfdmodel();
 
 	# force the display out of 4 bit mode if it got there somehow, then set the brightness
+	# not used for Squeezeslave
 	if ( $vfdmodel =~ 'futaba') {
 		$vfddata .= $vfdCodeCmd .  $vfdBrightFutaba[$brightness];
-	} else {
+	} elsif ( $vfdmodel ne 'squeezeslave') { 
 		$vfddata .= $noritakeBrightPrelude . $vfdBright[$brightness];
 	}
 
@@ -310,17 +337,17 @@ sub vfdUpdate {
 	$line =~ s/(.)/$vfdCodeChar$1/gos;
 
 	# split the line in two and move the cursor to the second line
-	$line = substr($line, 0, 80) . $vfdCodeCmd . $vfdCommand{"HOME2"} . substr($line, 80);
+	$line = substr($line, 0, 2 * $displaywidth) . $vfdCodeCmd . $vfdCommand{"HOME2"} . substr($line, 2 * $displaywidth);
 
 	$vfddata .= $line;
 	
 	# set the cursor
 	if ($cur >= 0) {
 
-		if ($cur < 40) {
+		if ($cur < $displaywidth) {
 			$vfddata .= $vfdCodeCmd.(pack 'C', (0b10000000 + $cur));
 		} else {
-			$vfddata .= $vfdCodeCmd.(pack 'C', (0b11000000 + $cur - 40));
+			$vfddata .= $vfdCodeCmd.(pack 'C', (0b11000000 + $cur - $displaywidth));
 		}
 
 		# turn on  the cursor			
@@ -1042,7 +1069,7 @@ sub doubleSize {
 	$line2 =~ s/$cursorpos//g;
 	$line2 =~ s/^(\s*)(.*)/$2/;
 	
-	$log->info("doubling: $line2");
+	main::INFOLOG && $log->info("doubling: $line2");
 
 	$line2 =~ tr/\x{00E6}\x{00F8}\x{00F0}/\x{00C6}\x{00D8}\x{00D0}/;
 	$line2 =~ tr/\x{00C5}\x{00E5}/AA/;

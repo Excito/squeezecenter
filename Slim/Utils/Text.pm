@@ -3,9 +3,9 @@
 
 package Slim::Utils::Text;
 
-# $Id: Text.pm 23907 2008-11-12 09:27:42Z mherger $
+# $Id: Text.pm 26931 2009-06-07 03:53:36Z michael $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -76,10 +76,10 @@ sub matchCase {
 	}
 
 	# Upper case and fold latin1 diacritical characters into their plain versions, surprisingly useful.
-	$s =~ tr{abcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅßŞÇ¢ĞÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜ×İàáâãäåşçèéêëìíîïñòóôõöøùúûüÿığ¡°}
+	$s =~ tr{abcdefghijklmnopqrstuvwxyzï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½}
 		{ABCDEFGHIJKLMNOPQRSTUVWXYZAAAAAABBCCDEEEEIIIINOOOOOOUUUUXYAAAAAABCEEEEIIIINOOOOOOUUUUYYD!D};
 
-	# Turn Æ & æ into AE
+	# Turn ï¿½ & ï¿½ into AE
 	$s =~ s/\xC6/AE/go;
 	$s =~ s/\xC3\x86/AE/go;
 
@@ -87,7 +87,7 @@ sub matchCase {
 	$s =~ s/\xE6/AE/go;
 	$s =~ s/\xC3\xA6/AE/go;
 
-	# And µ into MU
+	# And ï¿½ into MU
 	$s =~ s/\xB5/MU/go;
 	$s =~ s/\xC2\xB5/MU/go;
 

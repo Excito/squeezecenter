@@ -1,16 +1,14 @@
 package Slim::Control::Jive;
 
-# SqueezeCenter Copyright 2001-2007 Logitech
+# Squeezebox Server Copyright 2001-2009 Logitech
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
 
 use strict;
 
-use POSIX;
+use POSIX qw(strftime);
 use Scalar::Util qw(blessed);
-use File::Spec::Functions qw(:ALL);
-use File::Basename;
 use URI;
 
 use Slim::Utils::Log;
@@ -38,8 +36,8 @@ my $log = Slim::Utils::Log->addLogCategory({
 });
 
 # additional top level menus registered by plugins
-my %itemsToDelete      = ();
-my @pluginMenus        = ();
+my @appMenus           = (); # all available apps
+my @pluginMenus        = (); # all non-app plugins
 my @recentSearches     = ();
 
 =head1 METHODS
@@ -52,14 +50,14 @@ sub init {
 
 	# register our functions
 	
-       #        |requires Client
+       #        |requires Client (2 == set disconnected client to clientid if client does not exist)
        #        |  |is a Query
        #        |  |  |has Tags
        #        |  |  |  |Function to call
        #        C  Q  T  F
 
 	Slim::Control::Request::addDispatch(['menu', '_index', '_quantity'], 
-		[0, 1, 1, \&menuQuery]);
+		[2, 1, 1, \&menuQuery]);
 
 	Slim::Control::Request::addDispatch(['alarmsettings', '_index', '_quantity'], 
 		[1, 1, 1, \&alarmSettingsQuery]);
@@ -94,6 +92,9 @@ sub init {
 	Slim::Control::Request::addDispatch(['jivedummycommand', '_index', '_quantity'],
 		[1, 1, 1, \&jiveDummyCommand]);
 
+	Slim::Control::Request::addDispatch(['jivealarm'],
+		[1, 0, 1, \&jiveAlarmCommand]);
+
 	Slim::Control::Request::addDispatch(['jiveendoftracksleep', '_index', '_quantity' ],
 		[1, 1, 1, \&endOfTrackSleepCommand]);
 
@@ -127,6 +128,9 @@ sub init {
 	Slim::Control::Request::addDispatch(['jiveplaytrackalbum'],
 		[1, 0, 1, \&jivePlayTrackAlbumCommand]);
 
+	Slim::Control::Request::addDispatch(['jiveplaytrackplaylist'],
+		[1, 0, 1, \&jivePlayTrackPlaylistCommand]);
+
 	Slim::Control::Request::addDispatch(['date'],
 		[0, 1, 1, \&dateQuery]);
 
@@ -145,7 +149,10 @@ sub init {
 	# setup the menustatus dispatch and subscription
 	Slim::Control::Request::addDispatch( ['menustatus', '_data', '_action'],
 		[0, 0, 0, sub { warn "menustatus query\n" }]);
-	Slim::Control::Request::subscribe( \&menuNotification, [['menustatus']] );
+	
+	if ( $log->is_info ) {
+		Slim::Control::Request::subscribe( \&menuNotification, [['menustatus']] );
+	}
 	
 	# setup a cli command for jive that returns nothing; can be useful in some situations
 	Slim::Control::Request::addDispatch( ['jiveblankcommand'],
@@ -158,33 +165,49 @@ sub init {
 		# Re-build the caches after a rescan
 		Slim::Control::Request::subscribe( \&buildCaches, [['rescan', 'done']] );
 	}
+	
+	Slim::Control::Request::subscribe(\&_libraryChanged, [['library'], ['changed']]);
+}
+
+sub _libraryChanged {
+	foreach ( Slim::Player::Client::clients() ) {
+		myMusicMenu(0, $_);
+	}
 }
 
 sub buildCaches {
-	$log->debug("Begin function");
+	main::DEBUGLOG && $log->debug("Begin function");
+	
+	return if !Slim::Schema::hasLibrary();
 
 	my $sort    = $prefs->get('jivealbumsort') || 'album';
 
 	for my $partymode ( 0..1 ) {
 		# Pre-cache albums query
 		if ( my $numAlbums = Slim::Schema->rs('Album')->count ) {
-			$log->debug( "Pre-caching $numAlbums album items for partymode:$partymode" );
-			Slim::Control::Request::executeRequest( undef, [ 'albums', 0, $numAlbums, "sort:$sort", 'menu:track', 'cache:1', "party:$partymode" ] );
+			main::DEBUGLOG && $log->debug( "Pre-caching $numAlbums album items for partymode:$partymode" );
+			Slim::Control::Request::executeRequest( undef, [ 'albums', 0, $numAlbums, "useContextMenu:1", "sort:$sort", 'menu:track', 'cache:1', "party:$partymode" ] );
 		}
+		
+		main::idleStreams();
 		
 		# Artists
 		if ( my $numArtists = Slim::Schema->rs('Contributor')->browse->search( {}, { distinct => 'me.id' } )->count ) {
 			# Add one since we may have a VA item
 			$numArtists++;
-			$log->debug( "Pre-caching $numArtists artist items for partymode:$partymode." );
-			Slim::Control::Request::executeRequest( undef, [ 'artists', 0, $numArtists, 'menu:album', 'cache:1', "party:$partymode" ] );
+			main::DEBUGLOG && $log->debug( "Pre-caching $numArtists artist items for partymode:$partymode." );
+			Slim::Control::Request::executeRequest( undef, [ 'artists', 0, $numArtists, "useContextMenu:1", 'menu:album', 'cache:1', "party:$partymode" ] );
 		}
+		
+		main::idleStreams();
 		
 		# Genres
 		if ( my $numGenres = Slim::Schema->rs('Genre')->browse->search( {}, { distinct => 'me.id' } )->count ) {
-			$log->debug( "Pre-caching $numGenres genre items for partymode:$partymode." );
-			Slim::Control::Request::executeRequest( undef, [ 'genres', 0, $numGenres, 'menu:artist', 'cache:1', "party:$partymode" ] );
+			main::DEBUGLOG && $log->debug( "Pre-caching $numGenres genre items for partymode:$partymode." );
+			Slim::Control::Request::executeRequest( undef, [ 'genres', 0, $numGenres, "useContextMenu:1", 'menu:artist', 'cache:1', "party:$partymode" ] );
 		}
+		
+		main::idleStreams();
 	}
 }
 
@@ -205,48 +228,96 @@ sub menuQuery {
 
 	my $request = shift;
 
-	$log->info("Begin menuQuery function");
+	main::INFOLOG && $log->info("Begin menuQuery function");
 
 	if ($request->isNotQuery([['menu']])) {
 		$request->setStatusBadDispatch();
 		return;
 	}
 
-	my $client        = $request->client() || 0;
+	my $client = $request->client() || 0;
+	my $disconnected;
+	
+	if ( !$client ) {
+		require Slim::Player::Disconnected;
+		
+		# Check if this is a disconnected player request
+		if ( my $id = $request->disconnectedClientID ) {
+			# On SN, if the player does not exist in the database this is a fatal error
+			if ( main::SLIM_SERVICE ) {
+				my ($player) = SDI::Service::Model::Player->search( { mac => $id } );
+				if ( !$player ) {
+					main::INFOLOG && $log->is_info && $log->info("Player $id does not exist in SN database");
+					$request->setStatusBadDispatch();
+					return;
+				}
+			}
+			
+			$client = Slim::Player::Disconnected->new($id);
+			$disconnected = 1;
+			
+			main::INFOLOG && $log->is_info && $log->info("Player $id not connected, using disconnected menu mode");
+		}
+		else {
+			# XXX temporary workaround for requests without a playerid
+			$client = Slim::Player::Disconnected->new( '_dummy_' . Time::HiRes::time() );
+			$disconnected = 1;
+			
+			$log->error("Menu requests without a client are deprecated, using disconnected menu mode");
+		}
+	}
+	
+	my $direct = ( $disconnected || $request->getParam('direct') ) ? 1 : 0;
 
 	# send main menu notification
-	mainMenu($client);
+	my $menu = mainMenu($client, $direct);
+	
+	# Return results directly and destroy the client if it is disconnected
+	# Also return the results directly if param 'direct' is set
+	if ( $direct ) {
+		$log->is_info && $log->info('Sending direct menu response');
+		
+		$request->setRawResults( {
+			count     => scalar @{$menu},
+			offset    => 0,
+			item_loop => $menu,
+		} );
+		
+		if ( $disconnected ) {
+			$client->forgetClient;
+		}
+	}
+	else {
+		# a single dummy item to keep jive happy with _merge
+		my $upgradeText = 
+		"Please upgrade your firmware at:\n\nSettings->\nController Settings->\nAdvanced->\nSoftware Update\n\nThere have been updates to better support the communication between your remote and Squeezebox Server, and this requires a newer version of firmware.";
+	        my $upgradeMessage = {
+			text      => 'READ ME',
+			weight    => 1,
+	                offset    => 0,
+	                count     => 1,
+	                window    => { titleStyle => 'settings' },
+	                textArea =>  $upgradeText,
+	        };
 
-	# a single dummy item to keep jive happy with _merge
-	my $upgradeText = 
-	"Please upgrade your firmware at:\n\nSettings->\nController Settings->\nAdvanced->\nSoftware Update\n\nThere have been updates to better support the communication between your remote and SqueezeCenter, and this requires a newer version of firmware.";
-        my $upgradeMessage = {
-		text      => 'READ ME',
-		weight    => 1,
-                offset    => 0,
-                count     => 1,
-                window    => { titleStyle => 'settings' },
-                textArea =>  $upgradeText,
-        };
-
-        $request->addResult("count", 1);
-	$request->addResult("offset", 0);
-	$request->setResultLoopHash('item_loop', 0, $upgradeMessage);
+		$request->addResult("count", 1);
+		$request->addResult("offset", 0);
+		$request->setResultLoopHash('item_loop', 0, $upgradeMessage);
+	}
+	
 	$request->setStatusDone();
-
 }
 
 sub mainMenu {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $client = shift;
-
-	unless ($client->isa('Slim::Player::Client')) {
+	my $direct = shift;
+	
+	unless ($client && $client->isa('Slim::Player::Client')) {
 		# if this isn't a player, no menus should get sent
 		return;
 	}
- 
-	$log->info("Begin Function");
  
 	# as a convention, make weights => 10 and <= 100; Jive items that want to be below all SS items
 	# then just need to have a weight > 100, above SS items < 10
@@ -255,10 +326,9 @@ sub mainMenu {
 	# as a result, no item_loops, all submenus (setting, myMusic) are just elements of the big array that get sent
 
 	my @menu = map {
-		$_->{text} = $client->string($_->{stringToken}) if ($_->{stringToken});
-		$_;
+		_localizeMenuItemText( $client, $_ );
 	}(
-		{
+		main::SLIM_SERVICE ? () : {
 			stringToken    => 'MY_MUSIC',
 			weight         => 11,
 			id             => 'myMusic',
@@ -270,7 +340,7 @@ sub mainMenu {
 			stringToken    => 'FAVORITES',
 			id             => 'favorites',
 			node           => 'home',
-			weight         => 40,
+			weight         => 100,
 			actions => {
 				go => {
 					cmd => ['favorites', 'items'],
@@ -312,120 +382,17 @@ sub mainMenu {
 			}
 		},
 		@{internetRadioMenu($client)},
-		@{musicServicesMenu($client)},
-		@{musicStoresMenu($client)},
-		@{albumSortSettingsItem($client, 1)},
-		@{myMusicMenu(1, $client)},
-		@{recentSearchMenu($client, 1)},
+		main::SLIM_SERVICE ? () : @{albumSortSettingsItem($client, 1)},
+		main::SLIM_SERVICE ? () : @{myMusicMenu(1, $client)},
+		main::SLIM_SERVICE ? () : @{recentSearchMenu($client, 1)},
+		@{appMenus($client, 1)},
 	);
-	
-	# SN Jive Menu
-	if ( main::SLIM_SERVICE ) {
-		@menu = map {
-			$_->{text} = $client->string($_->{stringToken}) if ($_->{stringToken});
-			$_;
-		} (
-			{
-				text           => $client->string('MY_MUSIC'),
-				id             => 'myMusic',
-				node           => 'home',
-				weight         => 15,
-				actions        => {
-					go => {
-						cmd => ['my_music'],
-						params => {
-							menu => 'my_music',
-						},
-					},
-				},
-				window        => {
-					menuStyle  => 'album',
-					titleStyle => 'mymusic',
-				},
-			},
-			{
-				text           => $client->string('RADIO'),
-				id             => 'radio',
-				node           => 'home',
-				weight         => 20,
-				actions        => {
-					go => {
-						cmd => ['internetradio', 'items'],
-						params => {
-							menu => 'internetradio',
-						},
-					},
-				},
-				window        => {
-					menuStyle => 'album',
-					titleStyle => 'internetradio',
-				},
-			},
-			{
-				text           => $client->string('MUSIC_SERVICES'),
-				id             => 'ondemand',
-				node           => 'home',
-				weight         => 30,
-				actions => {
-					go => {
-						cmd => ['music_services'],
-						params => {
-							menu => 'music_services',
-						},
-					},
-				},
-				window        => {
-					menuStyle => 'album',
-					titleStyle => 'internetradio',
-				},
-			},
-			{
-				text           => $client->string('FAVORITES'),
-				id             => 'favorites',
-				node           => 'home',
-				weight         => 40,
-				actions        => {
-					go => {
-						cmd => ['favorites', 'items'],
-						params => {
-							menu     => 'favorites',
-						},
-					},
-				},
-				window        => {
-					titleStyle => 'favorites',
-				},
-			},
-			@pluginMenus,
-			@{playerPower($client, 1)},
-			@{Slim::Plugin::DigitalInput::Plugin::digitalInputItem($client)},
-			@{Slim::Plugin::LineIn::Plugin::lineInItem($client)},
-			@{playerSettingsMenu($client, 1)},
-		);
-		
-		# Add Music Stores menu if in an Amazon country
-		if ( $client->playerData->userid->isAllowedService('Amazon') ) {
-			splice @menu, 3, 0, ( {
-				text           => $client->string('MUSIC_STORES'),
-				id             => 'music_stores',
-				node           => 'home',
-				weight         => 35,
-				actions => {
-					go => {
-						cmd => ['music_stores'],
-						params => {
-							menu => 'music_stores',
-						},
-					},
-				},
-				window        => {
-					titleStyle => 'internetradio',
-				},
-			} );
-		}
-	}
 
-	_notifyJive(\@menu, $client);
+	if ( !$direct ) {
+		_notifyJive(\@menu, $client);
+	}
+	
+	return \@menu;
 }
 
 sub jiveSetAlbumSort {
@@ -439,7 +406,7 @@ sub jiveSetAlbumSort {
 }
 
 sub playlistModeSettings {
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 
 	my $client       = shift;
 	my $batch        = shift;
@@ -456,6 +423,7 @@ sub playlistModeSettings {
 		party    => 4,
 	);
 
+	#todo: move node to "betaFeatures",  left as advancedSettings for backwards compat 
 	my $choice = {
 		text          => $client->string('PLAYLIST_MODE'),
 		choiceStrings => [ @translatedModeStrings ] ,
@@ -498,7 +466,7 @@ sub playlistModeSettings {
 
 
 sub albumSortSettingsMenu {
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request = shift;
 	my $client = $request->client;
 	my $sort    = $prefs->get('jivealbumsort');
@@ -530,7 +498,7 @@ sub albumSortSettingsMenu {
 }
 
 sub albumSortSettingsItem {
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $client = shift;
 	my $batch = shift;
 
@@ -540,7 +508,7 @@ sub albumSortSettingsItem {
 		text           => $client->string('ALBUMS_SORT_METHOD'),
 		id             => 'settingsAlbumSettings',
 		node           => 'advancedSettings',
-		weight         => 100,
+		weight         => 105,
 			actions        => {
 			go => {
 				cmd => ['jivealbumsortsettings'],
@@ -563,8 +531,9 @@ sub albumSortSettingsItem {
 }
 
 # allow a plugin to add a node to the menu
+# XXX what uses this?
 sub registerPluginNode {
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $nodeRef = shift;
 	my $client = shift || undef;
 	unless (ref($nodeRef) eq 'HASH') {
@@ -573,7 +542,7 @@ sub registerPluginNode {
 	}
 
 	$nodeRef->{'isANode'} = 1;
-	$log->info("Registering node menu item from plugin");
+	main::INFOLOG && $log->info("Registering node menu item from plugin");
 
 	# notify this menu to be added
 	my $id = _clientId($client);
@@ -584,9 +553,43 @@ sub registerPluginNode {
 
 }
 
+sub registerAppMenu {
+	my $menuArray = shift;
+	
+	# now we want all of the items in $menuArray to go into @pluginMenus, but we also
+	# don't want duplicate items (specified by 'id'), 
+	# so we want the ids from $menuArray to stomp on ids from @pluginMenus, 
+	# thus getting the "newest" ids into the @pluginMenus array of items
+	# we also do not allow any hash without an id into the array, and will log an error if that happens
+
+	my $isInfo = $log->is_info;
+
+	my %seen;
+	my @new;
+
+	for my $href (@$menuArray, reverse @appMenus) {
+		my $id = $href->{id};
+		if ($id) {
+			if ( !$seen{$id} ) {
+				main::INFOLOG && $isInfo && $log->info("registering app menu " . $id);
+				push @new, $href;
+			}
+			$seen{$id}++;
+		}
+		else {
+			$log->error("Menu items cannot be added without an id");
+		}
+	}
+
+	# @new is the new @appMenus
+	# we do this in reverse so we get previously initialized nodes first 
+	# you can't add an item to a node that doesn't exist :)
+	@appMenus = reverse @new;
+}
+
 # send plugin menus array as a notification to Jive
 sub refreshPluginMenus {
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $client = shift || undef;
 	_notifyJive(\@pluginMenus, $client);
 }
@@ -601,6 +604,8 @@ sub registerPluginMenu {
 		$log->error("Incorrect data type");
 		return;
 	}
+	
+	my $isInfo = $log->is_info;
 
 	if ($node) {
 		my @menuArray = @$menuArray;
@@ -611,11 +616,12 @@ sub registerPluginMenu {
 		}
 	}
 
-	$log->info("Registering menus from plugin");
+	main::INFOLOG && $isInfo && $log->info("Registering menus from plugin");
 
-	# notify this menu to be added
-	my $id = _clientId($client);
-	Slim::Control::Request::notifyFromArray( $client, [ 'menustatus', $menuArray, 'add', $id ] );
+	if ( $client ) {
+		# notify this menu to be added
+		_notifyJive($menuArray, $client);
+	}
 
 	# now we want all of the items in $menuArray to go into @pluginMenus, but we also
 	# don't want duplicate items (specified by 'id'), 
@@ -630,7 +636,7 @@ sub registerPluginMenu {
 		my $node = $href->{'node'};
 		if ($id) {
 			if (!$seen{$id}) {
-				$log->info("registering menuitem " . $id . " to " . $node );
+				main::INFOLOG && $isInfo && $log->info("registering menuitem " . $id . " to " . $node );
 				push @new, $href;
 			}
 			$seen{$id}++;
@@ -647,17 +653,50 @@ sub registerPluginMenu {
 }
 
 # allow a plugin to delete an item from the Jive menu based on the id of the menu item
+# if the item is a node, then delete its immediate children too
 sub deleteMenuItem {
 	my $menuId = shift;
 	my $client = shift || undef;
 	return unless $menuId;
-	$log->warn($menuId . " menu id slated for deletion");
+	main::INFOLOG && $log->is_warn && $log->warn($menuId . " menu id slated for deletion");
+	
 	# send a notification to delete
-	my @menuDelete = ( { id => $menuId } );
-	my $id = _clientId($client);
-	Slim::Control::Request::notifyFromArray( $client, [ 'menustatus', \@menuDelete, 'remove', $id ] );
 	# but also remember that this id is not to be sent
-	$itemsToDelete{$menuId}++;
+	my @menuDelete;
+	my @new;
+	for my $href (reverse @pluginMenus) {
+		next if !$href;
+		if (($href->{'id'} && $href->{'id'} eq $menuId)
+			|| ($href->{'node'} && $href->{'node'} eq $menuId))
+		{
+			main::INFOLOG && $log->info("deregistering menuitem ",  $href->{'id'});
+			push @menuDelete, $href;
+		} else {
+			push @new, $href;
+		}
+	}
+	
+	push @menuDelete, { id => $menuId };
+
+	_notifyJive(\@menuDelete, $client, 'remove');
+
+	@pluginMenus = reverse @new;
+}
+
+# delete all menus items listed in @pluginMenus and @appMenus
+# This used to do menu refreshes when apps may have been removed
+sub deleteAllMenuItems {
+	my $client = shift || return;
+	
+	my @menuDelete;
+	
+	for my $menu ( @pluginMenus, @appMenus ) {
+		push @menuDelete, { id => $menu->{id} };
+	}
+	
+	main::INFOLOG && $log->is_info && $log->info( $client->id . ' removing menu items: ' . Data::Dump::dump(\@menuDelete) );
+	
+	_notifyJive( \@menuDelete, $client, 'remove' );
 }
 
 sub _purgeMenu {
@@ -665,13 +704,8 @@ sub _purgeMenu {
 	my @menu = @$menu;
 	my @purgedMenu = ();
 	for my $i (0..$#menu) {
-		my $menuId = defined($menu[$i]->{id}) ? $menu[$i]->{id} : ($menu[$i]->{stringToken} ? $menu[$i]->{stringToken} : $menu[$i]->{text});
 		last unless (defined($menu[$i]));
-		if ($itemsToDelete{$menuId}) {
-			$log->warn("REMOVING " . $menuId . " FROM Jive menu");
-		} else {
-			push @purgedMenu, $menu[$i];
-		}
+		push @purgedMenu, $menu[$i];
 	}
 	return \@purgedMenu;
 }
@@ -679,7 +713,7 @@ sub _purgeMenu {
 
 sub alarmSettingsQuery {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request = shift;
 	my $client  = $request->client();
 
@@ -723,7 +757,8 @@ sub alarmSettingsQuery {
 	my $addAlarm = {
 		text           => $client->string("ALARM_ADD"),
 		input   => {
-			initialText  => 0, # this will need to be formatted correctly
+			initialText  => 25200, # default is 7:00
+			title => $client->string('ALARM_ADD'),
 			_inputStyle  => 'time',
 			len          => 1,
 			help         => {
@@ -740,8 +775,7 @@ sub alarmSettingsQuery {
 				},
 			},
 		},
-		nextWindow => 'parent',
-		window         => { titleStyle => 'settings' },
+		nextWindow => 'refresh',
 	};
 	push @menu, $addAlarm;
 
@@ -802,6 +836,7 @@ sub alarmUpdateMenu {
 		text           => $client->string("ALARM_SET_TIME"),
 		input   => {
 			initialText  => $params->{time}, # this will need to be formatted correctly
+			title => $client->string('ALARM_SET_TIME'),
 			_inputStyle  => 'time',
 			len          => 1,
 			help         => {
@@ -818,7 +853,7 @@ sub alarmUpdateMenu {
 				},
 			},
 		},
-		nextWindow => 'grandparent',
+		nextWindow => 'parent',
 		window         => { titleStyle => 'settings' },
 	};
 	push @menu, $setTime;
@@ -1054,7 +1089,7 @@ sub alarmVolumeSettings {
 
 sub syncSettingsQuery {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request           = shift;
 	my $client            = $request->client();
 	my $playersToSyncWith = getPlayersToSyncWith($client);
@@ -1102,7 +1137,7 @@ sub endOfTrackSleepCommand {
 
 sub sleepSettingsQuery {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request = shift;
 	my $client  = $request->client();
 	my $val     = $client->currentSleepTime();
@@ -1148,7 +1183,7 @@ sub sleepSettingsQuery {
 
 sub stereoXLQuery {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request        = shift;
 	my $client         = $request->client();
 	my $currentSetting = $client->stereoxl();
@@ -1176,7 +1211,7 @@ sub stereoXLQuery {
 
 sub lineOutQuery {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request        = shift;
 	my $client         = $request->client();
 	my $currentSetting = $prefs->client($client)->get('analogOutMode');
@@ -1204,7 +1239,7 @@ sub lineOutQuery {
 
 sub toneSettingsQuery {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request        = shift;
 	my $client         = $request->client();
 	my $tone           = $request->getParam('cmd');
@@ -1239,7 +1274,7 @@ sub toneSettingsQuery {
 
 sub crossfadeSettingsQuery {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request = shift;
 	my $client  = $request->client();
 	my $val     = $prefs->client($client)->get('transitionType');
@@ -1262,7 +1297,7 @@ sub crossfadeSettingsQuery {
 
 sub replaygainSettingsQuery {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request = shift;
 	my $client  = $request->client();
 	my $val     = $prefs->client($client)->get('replayGainMode');
@@ -1304,7 +1339,7 @@ sub sliceAndShip {
 
 # returns a single item for the homeMenu if radios is a valid command
 sub internetRadioMenu {
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $client = shift;
 	my @command = ('radios', 0, 200, 'menu:radio');
 
@@ -1339,82 +1374,9 @@ sub internetRadioMenu {
 
 }
 
-# returns a single item for the homeMenu if music_services is a valid command
-sub musicServicesMenu {
-	$log->info("Begin function");
-	my $client = shift;
-	my @command = ('music_services', 0, 200, 'menu:music_services');
-
-	my $test_request = Slim::Control::Request::executeRequest($client, \@command);
-	my $validQuery = $test_request->isValidQuery();
-
-	my @menu = ();
-	
-	if ($validQuery && $test_request->getResult('count')) {
-		push @menu, 
-		{
-			text           => $client->string('MUSIC_SERVICES'),
-			id             => 'music_services',
-			node           => 'home',
-			weight         => 30,
-			actions => {
-				go => {
-					cmd => ['music_services'],
-					params => {
-						menu => 'music_services',
-					},
-				},
-			},
-			window        => {
-					menuStyle => 'album',
-					titleStyle => 'internetradio',
-			},
-		};
-	}
-
-	return \@menu;
-
-}
-
-# returns a single item for the homeMenu if music_stores is a valid command
-sub musicStoresMenu {
-	$log->info("Begin function");
-	my $client = shift;
-	my @command = ('music_stores', 0, 200, 'menu:music_stores');
-
-	my $test_request = Slim::Control::Request::executeRequest($client, \@command);
-	my $validQuery = $test_request->isValidQuery();
-
-	my @menu = ();
-	
-	if ($validQuery && $test_request->getResult('count')) {
-		push @menu, 
-		{
-			text           => $client->string('MUSIC_STORES'),
-			id             => 'music_stores',
-			node           => 'home',
-			weight         => 35,
-			actions => {
-				go => {
-					cmd => ['music_stores'],
-					params => {
-						menu => 'music_stores',
-					},
-				},
-			},
-			window        => {
-					menuStyle => 'album',
-					titleStyle => 'internetradio',
-			},
-		};
-	}
-
-	return \@menu;
-}
-
 sub playerSettingsMenu {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $client = shift;
 	my $batch = shift;
 
@@ -1437,7 +1399,10 @@ sub playerSettingsMenu {
 	push @menu, shuffleSettings($client, 1);
 
 	# always add playlist mode
-	push @menu, playlistModeSettings($client, 1);
+	# Bugs: 13896, 13689, 8878
+	# playlist/party mode is in conflict with 7.4 touch/press-to-play behavior
+	# fix for bug 13689 will be the complete fix, but for now remove playlistModeSettings from SP menus entirely
+	# push @menu, playlistModeSettings($client, 1);
 
 	# add alarm only if this is a slimproto player
 	if ($client->isPlayer()) {
@@ -1533,10 +1498,10 @@ sub playerSettingsMenu {
 
 	# sleep setting (always)
 	push @menu, {
-		text           => $client->string("PLAYER_SLEEP"),
+		text           => $client->string("SLEEP"),
 		id             => 'settingsSleep',
 		node           => 'settings',
-		weight         => 40,
+		weight         => 65,
 		actions        => {
 			go => {
 				cmd    => ['sleepsettings'],
@@ -1566,10 +1531,10 @@ sub playerSettingsMenu {
 
 	# information, always display
 	push @menu, {
-		text           => $client->string( 'INFORMATION' ),
+		text           => $client->string( 'JIVE_SQUEEZEBOX_INFORMATION' ),
 		id             => 'settingsInformation',
 		node           => 'advancedSettings',
-		weight         => 4,
+		weight         => 100,
 		window         => { titleStyle => 'settings' },
 		actions        => {
 				go =>	{
@@ -1585,8 +1550,9 @@ sub playerSettingsMenu {
 	push @menu, {
 		text           => $client->string('INFORMATION_PLAYER_NAME'),
 		id             => 'settingsPlayerNameChange',
-		node           => 'advancedSettings',
-		input          => {	
+		node           => 'settings',
+		weight         => 67,
+		input          => {
 			initialText  => $client->name(),
 			len          => 1, # For those that want to name their player "X"
 			allowedChars => $client->string('JIVE_ALLOWEDCHARS_WITHCAPS'),
@@ -1648,16 +1614,15 @@ sub playerSettingsMenu {
 		push @menu, 
 		{
 			stringToken    => 'JIVE_PLAYER_DISPLAY_SETTINGS',
-			weight         => 52,
-			id             => 'playerDisplaySettings',
+			id             => 'squeezeboxDisplaySettings',
 			isANode        => 1,
-			node           => 'settings',
+			node           => 'advancedSettings',
 			window         => { titleStyle => 'settings', },
 		},
 		{
 			text           => $client->string("PLAYER_BRIGHTNESS"),
 			id             => 'settingsPlayerBrightness',
-			node           => 'playerDisplaySettings',
+			node           => 'squeezeboxDisplaySettings',
 			actions        => {
 				  go => {
 					cmd    => [ 'jiveplayerbrightnesssettings' ],
@@ -1674,7 +1639,7 @@ sub playerSettingsMenu {
 		{
 			text           => $client->string("TEXTSIZE"),
 			id             => 'settingsPlayerTextsize',
-			node           => 'playerDisplaySettings',
+			node           => 'squeezeboxDisplaySettings',
 			actions        => {
 				  go => {
 					cmd    => [ 'jiveplayertextsettings', 'activeFont' ],
@@ -1686,7 +1651,7 @@ sub playerSettingsMenu {
 		{
 			text           => $client->string("OFFDISPLAYSIZE"),
 			id             => 'settingsPlayerOffTextsize',
-			node           => 'playerDisplaySettings',
+			node           => 'squeezeboxDisplaySettings',
 			actions        => {
 				  go => {
 					cmd    => [ 'jiveplayertextsettings', 'idleFont' ],
@@ -1695,19 +1660,6 @@ sub playerSettingsMenu {
 			},
 			window         => { titleStyle => 'settings' },
 		},
-	}
-	
-	# Display Controller PIN on SN
-	if ( main::SLIM_SERVICE ) {
-		my $pin = $client->getControllerPIN();
-		push @menu, {
-			id     => 'settingsPIN',
-			action => 'none',
-			style  => 'itemNoAction',
-			node   => 'settings',
-			weight => 80,
-			text   => $client->string( 'SQUEEZENETWORK_PIN', $pin ),
-		};
 	}
 
 	if ($batch) {
@@ -1891,7 +1843,7 @@ sub playerTextMenu {
 }
 
 sub browseMusicFolder {
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $client = shift;
 	my $batch = shift;
 
@@ -1900,7 +1852,7 @@ sub browseMusicFolder {
 
 	my $return = 0;
 	if (defined($audiodir) && -d $audiodir) {
-		$log->info("Adding Browse Music Folder");
+		main::INFOLOG && $log->info("Adding Browse Music Folder");
 		$return = {
 				text           => $client->string('BROWSE_MUSIC_FOLDER'),
 				id             => 'myMusicMusicFolder',
@@ -1920,7 +1872,7 @@ sub browseMusicFolder {
 			};
 	} else {
 		# if it disappeared, send a notification to get rid of it if it exists
-		$log->info("Removing Browse Music Folder from Jive menu via notification");
+		main::INFOLOG && $log->info("Removing Browse Music Folder from Jive menu via notification");
 		deleteMenuItem('myMusicMusicFolder', $client);
 	}
 
@@ -2017,15 +1969,21 @@ sub _clientId {
 }
 	
 sub _notifyJive {
-	my $menu = shift;
-	my $client = shift || undef;
+	my ($menu, $client, $action) = @_;
+	$action ||= 'add';
+	
 	my $id = _clientId($client);
-	my $menuForExport = _purgeMenu($menu);
-	Slim::Control::Request::notifyFromArray( $client, [ 'menustatus', $menuForExport, 'add', $id ] );
+	my $menuForExport = $action eq 'add' ? _purgeMenu($menu) : $menu;
+	
+	$menuForExport = [ map { _localizeMenuItemText( $client, $_ ) } @{$menuForExport} ];
+	
+	Slim::Control::Request::notifyFromArray( $client, [ 'menustatus', $menuForExport, $action, $id ] );
 }
 
 sub howManyPlayersToSyncWith {
 	my $client = shift;
+	return 0 if $client->isa('Slim::Player::Disconnected');
+	
 	my @playerSyncList = Slim::Player::Client::clients();
 	my $synchablePlayers = 0;
 	
@@ -2083,17 +2041,17 @@ sub getPlayersToSyncWith() {
 	my @players  = Slim::Player::Client::clients();
 
 	# construct the list
-	my $syncList;
+	my @syncList;
 	my $currentlySyncedWith = 0;
 	
 	# the logic is a little tricky here...first make a pass at any sync groups that include $client
 	if ($client->isSynced()) {
-		my $snCheckOk = _syncSNCheck($userid, $client);
-		if ($snCheckOk) {
-			$syncList->[$cnt]->{'id'}           = $client->id();
-			$syncList->[$cnt]->{'name'}         = $client->syncedWithNames(0);
+		if (_syncSNCheck($userid, $client)) {
+			$syncList[$cnt] = {};
+			$syncList[$cnt]->{'id'}           = $client->id();
+			$syncList[$cnt]->{'name'}         = $client->syncedWithNames(0);
 			$currentlySyncedWith                = $client->syncedWithNames(0);
-			$syncList->[$cnt]->{'isSyncedWith'} = 1;
+			$syncList[$cnt]->{'isSyncedWith'} = 1;
 			$cnt++;
 		}
 	}
@@ -2103,27 +2061,27 @@ sub getPlayersToSyncWith() {
 		for my $eachclient (@players) {
 			next if !$eachclient->isPlayer();
 			next if $eachclient->isSyncedWith($client);
-			my $snCheckOk = _syncSNCheck($userid, $eachclient);
-			next unless $snCheckOk;
-
+			next unless _syncSNCheck($userid, $eachclient);
 			if ($eachclient->isSynced() && Slim::Player::Sync::isMaster($eachclient)) {
-				$syncList->[$cnt]->{'id'}           = $eachclient->id();
-				$syncList->[$cnt]->{'name'}         = $eachclient->syncedWithNames(1);
-				$syncList->[$cnt]->{'isSyncedWith'} = 0;
+				$syncList[$cnt] = {};
+				$syncList[$cnt]->{'id'}           = $eachclient->id();
+				$syncList[$cnt]->{'name'}         = $eachclient->syncedWithNames(1);
+				$syncList[$cnt]->{'isSyncedWith'} = 0;
 				$cnt++;
 
 			# then players which are not synced
 			} elsif (! $eachclient->isSynced && $eachclient != $client ) {
-				$syncList->[$cnt]->{'id'}           = $eachclient->id();
-				$syncList->[$cnt]->{'name'}         = $eachclient->name();
-				$syncList->[$cnt]->{'isSyncedWith'} = 0;
+				$syncList[$cnt] = {};
+				$syncList[$cnt]->{'id'}           = $eachclient->id();
+				$syncList[$cnt]->{'name'}         = $eachclient->name();
+				$syncList[$cnt]->{'isSyncedWith'} = 0;
 				$cnt++;
 
 			}
 		}
 	}
 
-	for my $syncOption (sort { $a->{name} cmp $b->{name} } @$syncList) {
+	for my $syncOption (sort { $a->{name} cmp $b->{name} } @syncList) {
 		push @return, { 
 			text  => $syncOption->{name},
 			radio => ($syncOption->{isSyncedWith} == 1) + 0,
@@ -2225,6 +2183,9 @@ sub dateQuery {
 		$request->setStatusBadDispatch();
 		return;
 	}
+
+	# one concept of "now" for the whole func
+	my $time = time();
 	
 	if ( main::SLIM_SERVICE ) {
 		# Use timezone on user's account
@@ -2235,10 +2196,13 @@ sub dateQuery {
 			|| $client->playerData->userid->timezone 
 			|| 'America/Los_Angeles';
 		
-		my $datestr = DateTime->now( time_zone => $tz )->strftime("%Y-%m-%dT%H:%M:%S%z");
+		my $datestr = DateTime->from_epoch( epoch => $time, time_zone => $tz )->strftime("%Y-%m-%dT%H:%M:%S%z");
 		$datestr =~ s/(\d\d)$/:$1/; # change -0500 to -05:00
-		
 		$request->addResult( 'date', $datestr );
+
+		$datestr = DateTime->from_epoch( epoch => $time )->strftime("%Y-%m-%dT%H:%M:%S%z");
+		$datestr =~ s/(\d\d)$/:$1/; # change -0500 to -05:00
+		$request->addResult( 'date_utc', $datestr );
 		
 		$request->setStatusDone();
 		
@@ -2246,7 +2210,6 @@ sub dateQuery {
 	}
 	
 	# Calculate the time zone offset, taken from Time::Timezone
-	my $time = time();
 	my @l    = localtime($time);
 	my @g    = gmtime($time);
 
@@ -2288,7 +2251,8 @@ sub dateQuery {
 	$tzoff .= sprintf( "%s:%02d", $hour, int( $off % 3600 / 60 ) );
 
 	# Return time in http://www.w3.org/TR/NOTE-datetime format
-	$request->addResult( 'date', strftime("%Y-%m-%dT%H:%M:%S", localtime) . $tzoff );
+	$request->addResult( 'date', strftime("%Y-%m-%dT%H:%M:%S", @l) . $tzoff );
+	$request->addResult( 'date_utc', strftime("%Y-%m-%dT%H:%M:%S+00:00", @g));
 
 	# manage the subscription
 	if (defined(my $timeout = $request->getParam('subscribe'))) {
@@ -2296,6 +2260,19 @@ sub dateQuery {
 	}
 
 	$request->setStatusDone();
+}
+
+sub firmwareUpgradeQuery_filter {
+	my $self = shift;
+	my $request = shift;
+
+	# update the query if new firmware downloaded for this machine type
+	if ($request->isCommand([['fwdownloaded']]) && 
+		(($request->getParam('machine') || 'jive') eq ($self->getParam('_machine') || 'jive')) ) {
+		return 1;
+	}
+
+	return 0;
 }
 
 sub firmwareUpgradeQuery {
@@ -2307,9 +2284,10 @@ sub firmwareUpgradeQuery {
 	}
 
 	my $firmwareVersion = $request->getParam('firmwareVersion');
+	my $model           = $request->getParam('machine') || 'jive';
 	
 	# always send the upgrade url this is also used if the user opts to upgrade
-	if ( my $url = Slim::Utils::Firmware->jive_url() ) {
+	if ( my $url = Slim::Utils::Firmware->url($model) ) {
 		# Bug 6828, Send relative firmware URLs for Jive versions which support it
 		my ($cur_rev) = $firmwareVersion =~ m/\sr(\d+)/;
 		if ( $cur_rev >= 1659 ) {
@@ -2320,7 +2298,7 @@ sub firmwareUpgradeQuery {
 		}
 	}
 	
-	if ( Slim::Utils::Firmware->jive_needs_upgrade( $firmwareVersion ) ) {
+	if ( Slim::Utils::Firmware->need_upgrade( $firmwareVersion, $model ) ) {
 		# if this is true a firmware upgrade is forced
 		$request->addResult( firmwareUpgrade => 1 );
 	}
@@ -2330,7 +2308,7 @@ sub firmwareUpgradeQuery {
 
 	# manage the subscription
 	if (defined(my $timeout = $request->getParam('subscribe'))) {
-		$request->registerAutoExecute($timeout, \&firmwareUpgradeQuery);
+		$request->registerAutoExecute($timeout, \&firmwareUpgradeQuery_filter);
 	}
 
 	$request->setStatusDone();
@@ -2381,7 +2359,7 @@ sub playerPower {
 }
 
 sub sleepInXHash {
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my ($client, $val, $sleepTime) = @_;
 	my $text = $sleepTime == 0 ? 
 		$client->string("SLEEP_CANCEL") :
@@ -2432,12 +2410,16 @@ sub replayGainHash {
 }
 
 sub myMusicMenu {
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function: ", (Slim::Schema::hasLibrary() ? 'library' : 'no library'));
 	my $batch = shift;
 	my $client = shift;
 	my $sort   = $prefs->get('jivealbumsort') || 'album';
 	my $party  = (Slim::Player::Playlist::playlistMode($client) eq 'party');
-	my @myMusicMenu = (
+	my @myMusicMenu = ();
+	
+	if (Slim::Schema::hasLibrary()) {
+		
+		@myMusicMenu = (
 			{
 				text           => $client->string('BROWSE_BY_ARTIST'),
 				homeMenuText   => $client->string('BROWSE_ARTISTS'),
@@ -2564,29 +2546,50 @@ sub myMusicMenu {
 				window         => { titleStyle => 'search', },
 			},
 		);
-	# add the items for under mymusicSearch
-	my $searchMenu = searchMenu(1, $client);
-	@myMusicMenu = (@myMusicMenu, @$searchMenu);
-
-	if (my $browseMusicFolder = browseMusicFolder($client, 1)) {
-		push @myMusicMenu, $browseMusicFolder;
+		# add the items for under mymusicSearch
+		my $searchMenu = searchMenu(1, $client);
+		@myMusicMenu = (@myMusicMenu, @$searchMenu);
+	
+		if (my $browseMusicFolder = browseMusicFolder($client, 1)) {
+			push @myMusicMenu, $browseMusicFolder;
+		}
 	}
 
 	if ($batch) {
 		return \@myMusicMenu;
 	} else {
+		_emptyMyMusicMenu($client);
 		_notifyJive(\@myMusicMenu, $client);
 	}
 
 }
 
+sub _emptyMyMusicMenu {
+	main::INFOLOG && $log->info("Begin function");
+	my $client = shift;
+		
+	my @myMusicMenu = map +{id => $_, node => 'myMusic'},
+		qw(
+			myMusicArtists
+			myMusicAlbums
+			myMusicGenres
+			myMusicYears
+			myMusicNewMusic
+			myMusicPlaylists
+			myMusicSearch
+			myMusicMusicFolder
+		);
+
+	_notifyJive(\@myMusicMenu, $client, 'remove');
+}
+
 sub searchMenu {
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $batch = shift;
 	my $client = shift || undef;
 	my $party = ( $client && Slim::Player::Playlist::playlistMode($client) eq 'party' );
 	my @searchMenu = (
-		{
+	{
 		text           => $client->string('ARTISTS'),
 		homeMenuText   => $client->string('ARTIST_SEARCH'),
 		id             => 'myMusicSearchArtists',
@@ -2607,6 +2610,7 @@ sub searchMenu {
 				params => {
 					menu     => 'album',
 					menu_all => '1',
+					useContextMenu => '1',
 					search   => '__TAGGEDINPUT__',
 					party    => $party,
 					_searchType => 'artists',
@@ -2639,6 +2643,7 @@ sub searchMenu {
 				params => {
 					menu     => 'track',
 					menu_all => '1',
+					useContextMenu => '1',
 					search   => '__TAGGEDINPUT__',
 					_searchType => 'albums',
 					party    => $party,
@@ -2672,6 +2677,7 @@ sub searchMenu {
 				params => {
 					menu     => 'track',
 					menuStyle => 'album',
+					useContextMenu => '1',
 					menu_all => '1',
 					search   => '__TAGGEDINPUT__',
 					_searchType => 'tracks',
@@ -2727,23 +2733,49 @@ sub searchMenu {
 }
 # send a notification for menustatus
 sub menuNotification {
-	$log->warn("Menustatus notification sent.");
 	# the lines below are needed as menu notifications are done via notifyFromArray, but
 	# if you wanted to debug what's getting sent over the Comet interface, you could do it here
 	my $request  = shift;
 	my $dataRef          = $request->getParam('_data')   || return;
 	my $action   	     = $request->getParam('_action') || 'add';
-#	$log->warn(Data::Dump::dump($dataRef));
+	my $client           = $request->clientid();
+	main::INFOLOG && $log->is_info && $log->info("Menustatus notification sent:", $action, '->', ($client || 'all'));
+	main::DEBUGLOG && $log->is_debug && $log->debug(Data::Dump::dump($dataRef));
+}
+
+sub jivePlayTrackPlaylistCommand {
+
+	main::INFOLOG && $log->info("Begin function");
+
+	my $request    = shift;
+	my $client     = $request->client || return;
+	my $playlistID = $request->getParam('playlist_id');
+	my $listIndex  = $request->getParam('list_index');
+	
+	$client->execute( ["playlist", "clear"] );
+
+	if ( !defined ($playlistID) ) {
+		$request->setStatusBadDispatch();
+		return;
+	}
+
+	# load the playlist
+	$client->execute( ["playlistcontrol", "cmd:load", "playlist_id:$playlistID" ]);
+	# jump to the correct index
+	$client->execute( ["playlist", "jump", $listIndex] );
+
+	$request->setStatusDone();
 }
 
 sub jivePlayTrackAlbumCommand {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 
 	my $request    = shift;
 	my $client     = $request->client || return;
 	my $albumID    = $request->getParam('album_id');
 	my $trackID    = $request->getParam('track_id');
+	my $playlistID = $request->getParam('playlist_id');
 	my $folder     = $request->getParam('folder')|| undef;
 	my $listIndex  = $request->getParam('list_index');
  	my $mode       = Slim::Player::Playlist::playlistMode($client);
@@ -2753,14 +2785,21 @@ sub jivePlayTrackAlbumCommand {
 		$client->execute( ['playlistcontrol', 'cmd:load', "track_id:$trackID" ] );
 		return;
 	}
+
 	$client->execute( ["playlist", "clear"] );
 
 	# Database album browse is the simple case
 	if ( $albumID ) {
-
 		$client->execute( ["playlist", "addtracks", { 'album.id' => $albumID } ] );
 		$client->execute( ["playlist", "jump", $listIndex] );
 
+	}
+
+	elsif ( $playlistID ) {
+		# load the playlist
+		$client->execute( ["playlistcontrol", "cmd:load", "playlist_id:$playlistID" ]);
+		# jump to the correct index
+		$client->execute( ["playlist", "jump", $listIndex] );
 	}
 
 	# hard case is Browse Music Folder - re-create the playlist, starting playback with the current item
@@ -2773,35 +2812,18 @@ sub jivePlayTrackAlbumCommand {
 			url => $folder,
 		} );
 
-		$log->info("Playing all in folder, starting with $listIndex");
+		main::INFOLOG && $log->info("Playing all in folder, starting with $listIndex");
 
-		my @playlist = ();
+		# filter out folders
+		@{$items} = grep { Slim::Music::Info::isSong($_) }
+		# make sure we get a valid path
+		map { ref $_ ? $_ : Slim::Utils::Misc::fixPath($_, $folder) }
+		@$items;
 
-		# iterate through list in reverse order, so that dropped items don't affect the index as we subtract.
-		for my $i (reverse (0..scalar @{$items}-1)) {
-
-			if (!ref $items->[$i]) {
-				$items->[$i] =  Slim::Utils::Misc::fixPath($items->[$i], $folder);
-			}
-
-			if (!Slim::Music::Info::isSong($items->[$i])) {
-
-				$log->info("Dropping $items->[$i] from play all in folder at index $i");
-
-				if ($i < $listIndex) {
-					$listIndex--;
-				}
-
-				next;
-			}
-
-			unshift (@playlist, $items->[$i]);
-		}
-
-		$log->info("Load folder playlist, now starting at index: $listIndex");
+		main::INFOLOG && $log->info("Load folder playlist, now starting at index: $listIndex");
 
 		$client->execute(['playlist', 'clear']);
-		$client->execute(['playlist', 'addtracks', 'listref', \@playlist]);
+		$client->execute(['playlist', 'addtracks', 'listref', $items]);
 		$client->execute(['playlist', 'jump', $listIndex]);
 
 		if ($wasShuffled) {
@@ -2814,7 +2836,7 @@ sub jivePlayTrackAlbumCommand {
 
 sub jivePlaylistsCommand {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request    = shift;
 	my $client     = $request->client || return;
 	my $title      = $request->getParam('title');
@@ -2875,9 +2897,30 @@ sub jiveUnmixableMessage {
         $request->setStatusDone();
 }
 
+# currently just for snooze but this could be extended with other tagged params as needed
+sub jiveAlarmCommand {
+	main::INFOLOG && $log->info("Begin function");
+
+	my $request    = shift;
+	my $client     = $request->client || return;
+
+	# this command can issue either a snooze or a cancel
+	my $snooze      = $request->getParam('snooze') ? 1 : undef;
+
+	my $alarm       = Slim::Utils::Alarm->getCurrentAlarm($client);
+
+	if ( defined($alarm) ) {
+		if ( defined($snooze) ) {
+			$alarm->snooze();
+		}
+	}
+
+	$request->setStatusDone();
+}
+
 sub jiveFavoritesCommand {
 
-	$log->info("Begin function");
+	main::INFOLOG && $log->info("Begin function");
 	my $request = shift;
 	my $client  = $request->client || shift;
 	my $title   = $request->getParam('title');
@@ -2885,47 +2928,90 @@ sub jiveFavoritesCommand {
 	my $icon    = $request->getParam('icon');
 	my $command = $request->getParam('_cmd');
 	my $token   = uc($command); # either ADD or DELETE
-	my $action = $command eq 'add' ? 'parent' : 'grandparent';
+	my $action = 'grandparent';
 	my $favIndex = defined($request->getParam('item_id'))? $request->getParam('item_id') : undef;
-	my @favorites_menu = (
-		{
-			text    => $client->string('CANCEL'),
+
+	if ( $command eq 'set_preset' ) {
+		my $preset = $request->getParam('key');
+		my $title  = $request->getParam('favorites_title');
+		my $url    = $request->getParam('favorites_url');
+		my $type   = $request->getParam('type');
+		my $parser = $request->getParam('parser');
+
+		# if playlist_index is sent, that's for the current NP track, derive everything you need from it
+		my $playlist_index = $request->getParam('playlist_index');
+		if ( defined($playlist_index) ) {
+			my $song = Slim::Player::Playlist::song( $client, $playlist_index );
+			$url     = $song->url;
+			$type    = 'audio';
+			$title   = $song->title;
+		}
+
+		# favorite needs to be saved as either a playlist or default to audio
+		if ( defined($type) && $type ne 'playlist' ) {
+			$type = 'audio';
+		}
+		if ( ! defined $title || ! defined $url ) {
+			$request->setStatusBadDispatch();
+			return;
+		}
+		
+		$client->setPreset( {
+			slot   => $preset,
+			URL    => $url,
+			text   => $title,
+			type   => $type,
+			parser => $parser,
+		} );
+
+		$client->showBriefly({
+			jive => {
+				type     => 'popupplay',
+				text     => [ $client->string('PRESET_ADDING', $preset), $title ],
+			},
+		});
+	} else {
+
+		my @favorites_menu = (
+			{
+				text    => $client->string('CANCEL'),
+				actions => {
+					go => {
+							player => 0,
+						cmd    => [ 'jiveblankcommand' ],
+					},
+				},
+				nextWindow => 'parent',
+			}
+		);
+		my $actionItem = {
+			text    => $client->string($token) . ' ' . $title,
 			actions => {
 				go => {
 					player => 0,
-					cmd    => [ 'jiveblankcommand' ],
+					cmd    => ['favorites', $command ],
+					params => {
+							title => $title,
+							url   => $url,
+					},
 				},
 			},
-			nextWindow => 'parent',
-		}
-	);
-	my $actionItem = {
-		text    => $client->string($token) . ' ' . $title,
-		actions => {
-			go => {
-				player => 0,
-				cmd    => ['favorites', $command ],
-				params => {
-						title => $title,
-						url   => $url,
-				},
-			},
-		},
-		nextWindow => $action,
-	};
-	$actionItem->{'actions'}{'go'}{'params'}{'icon'} = $icon if $icon;
-	$actionItem->{'actions'}{'go'}{'params'}{'item_id'} = $favIndex if defined($favIndex);
-	push @favorites_menu, $actionItem;
-
-	$request->addResult('offset', 0);
-	$request->addResult('count', 2);
-	$request->addResult('item_loop', \@favorites_menu);
-	$request->addResult('window', { titleStyle => 'favorites' } );
-
-
+			nextWindow => $action,
+		};
+		$actionItem->{'actions'}{'go'}{'params'}{'icon'} = $icon if $icon;
+		$actionItem->{'actions'}{'go'}{'params'}{'item_id'} = $favIndex if defined($favIndex);
+		push @favorites_menu, $actionItem;
+	
+		$request->addResult('offset', 0);
+		$request->addResult('count', 2);
+		$request->addResult('item_loop', \@favorites_menu);
+		$request->addResult('window', { titleStyle => 'favorites' } );
+	}
+	
+	
 	$request->setStatusDone();
-
-}
+		
+} 
 
 sub _jiveNoResults {
 	my $request = shift;
@@ -2939,6 +3025,9 @@ sub _jiveNoResults {
 sub cacheSearch {
 	my $request = shift;
 	my $search  = shift;
+	
+	# Don't cache searches on SN
+	return if main::SLIM_SERVICE;
 
 	if (defined($search) && $search->{text} && $search->{actions}{go}{cmd}) {
 		unshift (@recentSearches, $search);
@@ -2998,7 +3087,7 @@ sub recentSearchMenu {
 sub jiveRecentSearchQuery {
 
 	my $request = shift;
-	$log->info("Begin Function");
+	main::INFOLOG && $log->info("Begin Function");
 
 	# check this is the correct query.
 	if ($request->isNotQuery([['jiverecentsearches']])) {
@@ -3040,7 +3129,7 @@ sub registerExtensionProvider {
 	my $name     = shift;
 	my $provider = shift;
 
-	$log->info("adding extension provider $name $provider");
+	main::INFOLOG && $log->info("adding extension provider $name $provider");
 
 	$extensionProviders{ $name } = $provider;
 }
@@ -3048,7 +3137,7 @@ sub registerExtensionProvider {
 sub removeExtensionProvider {
 	my $name = shift;
 
-	$log->info("deleting extension provider $name");
+	main::INFOLOG && $log->info("deleting extension provider $name");
 
 	delete $extensionProviders{ $name };
 }
@@ -3085,6 +3174,7 @@ sub extensionsQuery {
 				'target' => $target,
 				'version'=> $version, 
 				'lang'   => $language,
+				'details'=> 1,
 				'cb'     => \&_extensionsQueryCB,
 				'pt'     => [ $request ]
 			});
@@ -3118,6 +3208,153 @@ sub _extensionsQueryCB {
 
 		$request->setStatusDone();
 	}
+}
+
+sub appMenus {
+	my $client = shift;
+	my $batch  = shift;
+	
+	my $isInfo = main::INFOLOG && $log->is_info;
+	
+	my $apps = $client->apps;
+	my $menu = [];
+	
+	my $disabledPlugins = Slim::Utils::PluginManager->disabledPlugins();
+	my @disabled = map { $disabledPlugins->{$_}->{name} } keys %{$disabledPlugins};
+	
+	# We want to add nodes for the following items:
+	# My Apps (node = null)
+	# Home menu apps (node = home)
+	# If a home menu app is not already defined in @appMenus,
+	# i.e. pure OPML apps such as SomaFM
+	# create one for it using the generic OPML handler
+	
+	for my $app ( keys %{$apps} ) {
+		next unless ref $apps->{$app} eq 'HASH'; # XXX don't crash on old style
+		
+		# Is this app supported by a local plugin?
+		if ( my $plugin = $apps->{$app}->{plugin} ) {
+			# Make sure it's enabled
+			if ( my $pluginInfo = Slim::Utils::PluginManager->isEnabled($plugin) ) {
+				# Get the predefined menu for this plugin
+				if ( my ($globalMenu) = grep { $_->{text} eq $pluginInfo->{name} } @appMenus ) {				
+					main::INFOLOG && $isInfo && $log->info( "App: $app, using plugin $plugin" );
+				
+					# Clone the existing menu and set the node
+					my $clone = Storable::dclone($globalMenu);
+
+					# Set node to home or null
+					$clone->{node} = $apps->{$app}->{home_menu} == 1 ? 'home' : '';
+
+					# Use title from app list
+					$clone->{stringToken} = $apps->{$app}->{title};
+
+					push @{$menu}, $clone;
+				}
+			}
+			else {
+				# Bug 13627, Make sure the app is not for a plugin that has been disabled.
+				# We could browse menus for a disabled plugin like Last.fm, but playback
+				# would be impossible.
+				main::INFOLOG && $isInfo && $log->info( "App: $app, not displaying because plugin is disabled" );
+				next;
+			}
+		}
+		else {			
+			# For type=opml, use generic handler
+			if ( $apps->{$app}->{type} eq 'opml' ) {
+				main::INFOLOG && $isInfo && $log->info( "App: $app, using generic OPML handler" );
+				
+				my $url = $apps->{$app}->{url} =~ /^http/
+					? $apps->{$app}->{url} 
+					: Slim::Networking::SqueezeNetwork->url( $apps->{$app}->{url} );
+				
+				my $icon = $apps->{$app}->{icon} =~ /^http/
+					? $apps->{$app}->{icon} 
+					: Slim::Networking::SqueezeNetwork->url( $apps->{$app}->{icon}, 'external' );
+				
+				my $node = $apps->{$app}->{home_menu} == 1 ? 'home' : '';
+				
+				push @{$menu}, {
+					actions => {
+						go => {
+							cmd    => [ 'opml_generic', 'items' ],
+							params => {
+								menu     => 'opml_generic',
+								opml_url => $url,
+							},
+							player => 0,
+						},
+					},
+					displayWhenOff => 0,
+					id             => 'opml' . $app,
+					node           => $node,
+					text           => $apps->{$app}->{title},
+					window         => {
+						'icon-id'  => $icon,
+						titleStyle => 'album',
+					},
+				};
+			}
+		}
+	}
+	
+	return [] if !scalar @{$menu};
+	
+	# Alpha sort and add weighting
+	my $weight = 21; # After Internet Radio
+	
+	my @sorted =
+	 	map { $_->{weight} = $weight++; $_ } 
+		sort { $a->{text} cmp $b->{text} }
+		@{$menu};
+	
+	if ( $batch ) {
+		return \@sorted;
+	}
+	else {
+		_notifyJive(\@sorted, $client);
+	}
+}
+
+sub _localizeMenuItemText {
+	my ( $client, $item ) = @_;
+	
+	return unless $client;
+	
+	# Don't alter the global data
+	my $clone = Storable::dclone($item);
+	
+	if ( $clone->{stringToken} ) {
+		if ( $clone->{stringToken} eq uc( $clone->{stringToken} ) ) {
+			$clone->{text} = $client->string( delete $clone->{stringToken} );
+		}
+		else {
+			$clone->{text} = delete $clone->{stringToken};
+		}
+	}
+	elsif ( $clone->{text} && $clone->{text} eq uc( $clone->{text} ) ) {
+		$clone->{text} = $client->string( $clone->{text} );
+	}
+	
+	# call string() for screensaver titles
+	if ( $clone->{screensavers} ) {
+		for my $s ( @{ $clone->{screensavers} } ) {
+			$s->{text} = $client->string( delete $s->{stringToken} ) if $s->{stringToken};
+		}
+	}
+	
+	# call string() for input text if necessary
+	if ( my $input = $clone->{input} ) {
+		if ( $input->{title} && $input->{title} eq uc( $input->{title} ) ) {
+			$input->{title}        = $client->string( $input->{title} );
+			$input->{help}->{text} = $client->string( $input->{help}->{text} );
+			$input->{softbutton1}  = $client->string( $input->{softbutton1} );
+			$input->{softbutton2}  = $client->string( $input->{softbutton2} );
+		}
+	}
+	
+	return $clone;
 }
 
 1;

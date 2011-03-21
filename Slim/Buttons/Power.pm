@@ -1,8 +1,8 @@
 package Slim::Buttons::Power;
 
-# $Id: Power.pm 15258 2007-12-13 15:29:14Z mherger $
+# $Id: Power.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -13,15 +13,13 @@ Slim::Buttons::Power
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Power> is a SqueezeCenter module to add an 'off' mode.
+L<Slim::Buttons::Power> is a Squeezebox Server module to add an 'off' mode.
 The players are never truly off, instead entering and leaving this 
 mode in reaction to the power button.
 
 =cut
 
 use strict;
-use File::Spec::Functions qw(:ALL);
-use File::Spec::Functions qw(updir);
 use Slim::Utils::Misc;
 
 our %functions = ();

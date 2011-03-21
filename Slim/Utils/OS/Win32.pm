@@ -1,20 +1,25 @@
 package Slim::Utils::OS::Win32;
 
+# Squeezebox Server Copyright 2001-2009 Logitech.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License, 
+# version 2.
+
 use strict;
-use File::Path;
-use File::Spec::Functions qw(:ALL);
+use Cwd;
+use File::Spec::Functions qw(catdir);
 use FindBin qw($Bin);
-use Scalar::Util qw(blessed);
+use Sys::Hostname qw(hostname);
 use Win32;
+use Win32::OLE;
 use Win32::OLE::NLS;
-use POSIX qw(LC_CTYPE LC_TIME);
+use Win32::TieRegistry ('Delimiter' => '/');
 
 use base qw(Slim::Utils::OS);
 
 my $driveList  = {};
 my $driveState = {};
 my $writablePath;
-my $isWHS; 		# Windows Home Server is different
 
 sub name {
 	return 'win';
@@ -22,16 +27,16 @@ sub name {
 
 sub initDetails {
 	my $class = shift;
+
+	# better version detection than relying on Win32::GetOSName()
+	# http://msdn.microsoft.com/en-us/library/ms724429(VS.85).aspx
+	my ($string, $major, $minor, $build, $id, $spmajor, $spminor, $suitemask, $producttype) = Win32::GetOSVersion();
 	
 	$class->{osDetails} = {
 		'os'     => 'Windows',
-
 		'osName' => (Win32::GetOSName())[0],
-
 		'osArch' => Win32::GetChipName(),
-
 		'uid'    => Win32::LoginName(),
-
 		'fsType' => (Win32::FsType())[0],
 	};
 
@@ -41,26 +46,21 @@ sub initDetails {
 	$class->{osDetails}->{'osName'} =~ s/2003/Server 2003/;
 	
 	# TODO: remove this code as soon as Win32::GetOSName supports Windows 2008 Server
-	if ($class->{osDetails}->{'osName'} =~ /Vista/i && (Win32::GetOSVersion())[8] > 1) {
-		$class->{osDetails}->{'osName'} = 'Windows 2008 Server';
+	if ($major == 6 && $minor == 1 && $producttype != 1) {
+		$class->{osDetails}->{'osName'} = 'Windows 2008 Server R2';
+	}
+
+	# Windows 2003 && suitemask 0x00008000 -> WHS
+	# http://msdn.microsoft.com/en-us/library/ms724833(VS.85).aspx
+	elsif ($major == 5 && $minor == 2
+			&& $suitemask && $suitemask & 0x00008000) {
+		$class->{osDetails}->{'osName'} = 'Windows Home Server';
+		$class->{osDetails}->{'isWHS'} = 1;
 	}
 	
 	$class->{osDetails}->{isVista} = 1 if $class->{osDetails}->{'osName'} =~ /Vista/;
 
 	return $class->{osDetails};
-}
-
-sub isWHS {
-	return $isWHS if defined $isWHS;
-	
-	$isWHS = 0;
-	
-	my ($string, $major, $minor, $build, $id, $spmajor, $spminor, $suitemask, $producttype) = Win32::GetOSVersion();
-	
-	# WHS is 2003 server based but with suitemask 0x00008000
-	if ($major == 5 && $minor == 2 && $suitemask && $suitemask >= 0x00008000 && $suitemask < 0x00009000) {
-		$isWHS = 1;
-	}
 }
 
 sub initSearchPath {
@@ -72,6 +72,15 @@ sub initSearchPath {
 	# as Perl is not always in that folder (eg. German Windows)
 	
 	Slim::Utils::Misc::addFindBinPaths('C:\Perl\bin');
+}
+
+sub initMySQL {}
+
+sub initPrefs {
+	my ($class, $prefs) = @_;
+	
+	# we now have a binary control panel - don't show the wizard
+	$prefs->{wizardDone} = 1;
 }
 
 sub dirsFor {
@@ -111,13 +120,54 @@ sub dirsFor {
 			}
 		}
 
+	} elsif ($dir eq 'base') {
+
+		push @dirs, $class->installPath();
+
 	} elsif ($dir eq 'prefs') {
 
 		push @dirs, $::prefsdir || $class->writablePath('prefs');
 
 	} elsif ($dir =~ /^(?:music|playlists)$/) {
 
-		my $path = Win32::GetFolderPath(Win32::CSIDL_MYMUSIC);
+		my $path;
+
+		# Windows Home Server offers a Music share which is more likely to be used 
+		# than the administrator's My Music folder
+		if ($class->{osDetails}->{isWHS}) {
+			my $objWMI = Win32::OLE->GetObject('winmgmts://./root/cimv2');
+			
+			if ( $objWMI && (my $shares = $objWMI->InstancesOf('Win32_Share')) ) {
+				
+				my $path2;
+				foreach my $objShare (in $shares) {
+
+					# let's be a bit more open for localized versions: musica, Musik, musique...
+					if ($objShare->Name =~ /^musi(?:c|k|que|ca)$/i) {
+						$path = '\\\\' . hostname() . '\\' . $objShare->Name;
+						last;
+					}
+					elsif ($objShare->Path =~ /shares.*?musi[ckq]/i) {
+						$path = $objShare->Path;
+						last;
+					}
+					elsif ($objShare->path =~ /musi[ckq]/i) {
+						$path2 = $objShare->Path;
+					}
+				}
+				
+				undef $shares;
+				
+				# we didn't find x:\shares\music, but some other share with music in the path
+				if ($path2 && !$path) {
+					$path = $path2;
+				}
+			}
+			
+			undef $objWMI;
+		}
+
+		$path = Win32::GetFolderPath(Win32::CSIDL_MYMUSIC) unless $path;
 		
 		# fall back if no path or invalid path is returned
 		if (!$path || $path eq Win32::GetFolderPath(0)) {
@@ -133,14 +183,14 @@ sub dirsFor {
 			if (defined $swKey) {
 				if (!($path = $swKey->{'My Music'})) {
 					if ($path = $swKey->{'Personal'}) {
-						$path = $path . '/My Music';
+						$path = catdir($path, 'My Music');
 					}
 				}
 			}
 		}
 
 		if ($path && $dir eq 'playlists') {
-			$path .= '/Playlists';
+			$path = catdir($path, 'Playlists');
 		}
 
 		push @dirs, $path;
@@ -165,6 +215,7 @@ sub scanner {
 }
 
 sub localeDetails {
+	eval { use POSIX qw(LC_TIME); };
 	require Win32::Locale;
 
 	my $langid = Win32::OLE::NLS::GetSystemDefaultLCID();
@@ -191,8 +242,6 @@ sub dontSetUserAndGroup { 1 }
 sub getProxy {
 	my $class = shift;
 	my $proxy = '';
-
-	require Win32::TieRegistry;
 
 	# on Windows read Internet Explorer's proxy setting
 	my $ieSettings = $Win32::TieRegistry::Registry->Open(
@@ -222,7 +271,7 @@ sub ignoredItems {
 
 =head2 getDrives()
 
-Returns a list of drives available to SqueezeCenter, filtering out floppy drives etc.
+Returns a list of drives available to Squeezebox Server, filtering out floppy drives etc.
 
 =cut
 
@@ -282,12 +331,51 @@ sub isDriveReady {
 	return $driveState->{$drive}->{state};
 }
 
+=head2 installPath()
+
+Returns the base installation directory of Squeezebox Server.
+
+=cut
+
+sub installPath {
+
+	# Try and find it in the registry.
+	# This is a system-wide registry key.
+	my $swKey = $Win32::TieRegistry::Registry->Open(
+		'LMachine/Software/Logitech/Squeezebox/', 
+		{ 
+			Access => Win32::TieRegistry::KEY_READ(), 
+			Delimiter =>'/' 
+		}
+	);
+
+	if (defined $swKey && $swKey->{'Path'}) {
+		return $swKey->{'Path'} if -d $swKey->{'Path'};
+	}
+
+	# Otherwise look in the standard location.
+	# search in legacy SlimServer folder, too
+	my $installDir;
+	PF: foreach my $programFolder ($ENV{ProgramFiles}, 'C:/Program Files') {
+		foreach my $ourFolder ('Squeezebox', 'SqueezeCenter', 'SlimServer') {
+
+			$installDir = File::Spec->catdir($programFolder, $ourFolder);
+			last PF if (-d $installDir);
+
+			$installDir = '';
+		}
+	}
+
+	return $installDir || getcwd();
+	
+	return '';
+}
+
+
 =head2 writablePath()
 
 Returns a path which is expected to be writable by all users on Windows without virtualisation on Vista.
 This should mean that the server always sees consistent versions of files under this path.
-
-TODO: this needs to be rewritten to use the proper API calls instead of poking around the registry and environment!
 
 =cut
 
@@ -296,11 +384,10 @@ sub writablePath {
 	my $path;
 
 	unless ($writablePath) {
-		require Win32::TieRegistry;
 
 		# the installer is writing the data folder to the registry - give this the first try
 		my $swKey = $Win32::TieRegistry::Registry->Open(
-			'LMachine/Software/Logitech/SqueezeCenter/', 
+			'LMachine/Software/Logitech/Squeezebox/', 
 			{ 
 				Access => Win32::TieRegistry::KEY_READ(), 
 				Delimiter =>'/' 
@@ -313,7 +400,7 @@ sub writablePath {
 
 		else {
 			# second attempt: use the Windows API (recommended by MS)
-			# use the "Common Application Data" folder to store SqueezeCenter configuration etc.
+			# use the "Common Application Data" folder to store Squeezebox Server configuration etc.
 			$writablePath = Win32::GetFolderPath(Win32::CSIDL_COMMON_APPDATA);
 			
 			# fall back if no path or invalid path is returned
@@ -344,11 +431,11 @@ sub writablePath {
 				}
 			}
 			
-			$writablePath = catdir($writablePath, 'SqueezeCenter') unless $writablePath eq $Bin;
+			$writablePath = catdir($writablePath, 'Squeezebox') unless $writablePath eq $Bin;
 			
 			# store the key in the registry for future reference
 			$swKey = $Win32::TieRegistry::Registry->Open(
-				'LMachine/Software/Logitech/SqueezeCenter/', 
+				'LMachine/Software/Logitech/Squeezebox/', 
 				{ 
 					Delimiter =>'/' 
 				}
@@ -371,13 +458,13 @@ sub writablePath {
 	return $path;
 }
 
-=head2 pathFromWinShortcut( $path )
+=head2 pathFromShortcut( $path )
 
 Return the filepath for a given Windows Shortcut
 
 =cut
 
-sub pathFromWinShortcut {
+sub pathFromShortcut {
 	my $class    = shift;
 	my $fullpath = Slim::Utils::Misc::pathFromFileURL(shift);
 
@@ -400,20 +487,50 @@ sub pathFromWinShortcut {
 
 			#collapse shortcuts to shortcuts into a single hop
 			if (Slim::Music::Info::isWinShortcut($path)) {
-				$path = $class->pathFromWinShortcut($path);
+				$path = $class->pathFromShortcut($path);
 			}
 
 		} else {
 
-			Slim::Utils::Log::logger('os.files')->error("Error: Bad path in $fullpath - path was: [$path]");
+			Slim::Utils::Log::logger('os.files')->error("Bad path in $fullpath - path was: [$path]");
+			
+			return;
 		}
 
 	} else {
 
-		Slim::Utils::Log::logger('os.files')->error("Error: Shortcut $fullpath is invalid");
+		Slim::Utils::Log::logger('os.files')->error("Shortcut $fullpath is invalid");
+		
+		return;
 	}
 
 	return $path;
+}
+
+=head2 fileURLFromShortcut( $shortcut )
+
+	Special case to convert a windows shortcut to a normalised file:// url.
+
+=cut
+
+sub fileURLFromShortcut {
+	my ($class, $path) = @_;
+	return Slim::Utils::Misc::fixPath( $class->pathFromShortcut($path) );
+}
+
+=head2 getShortcut( $shortcut )
+
+	Return a shortcut's name and the target URL
+
+=cut
+
+sub getShortcut {
+	my ($class, $path) = @_;
+	
+	my $name = Slim::Music::Info::fileName($path);
+	$name =~ s/\.lnk$//i;
+	
+	return ( $name, $class->fileURLFromShortcut($path) );
 }
 
 
@@ -428,7 +545,7 @@ sub setPriority {
 
 	return unless defined $priority && $priority =~ /^-?\d+$/;
 
-	Slim::bootstrap::tryModuleLoad('Win32::API', 'Win32::Process', 'nowarn');
+	Slim::bootstrap::tryModuleLoad('Scalar::Util', 'Win32::API', 'Win32::Process', 'nowarn');
 
 	# For win32, translate the priority to a priority class and use that
 	my ($priorityClass, $priorityClassName) = _priorityClassFromPriority($priority);
@@ -436,7 +553,7 @@ sub setPriority {
 	my $getCurrentProcess = Win32::API->new('kernel32', 'GetCurrentProcess', ['V'], 'N');
 	my $setPriorityClass  = Win32::API->new('kernel32', 'SetPriorityClass',  ['N', 'N'], 'N');
 
-	if (blessed($setPriorityClass) && blessed($getCurrentProcess)) {
+	if (Scalar::Util::blessed($setPriorityClass) && Scalar::Util::blessed($getCurrentProcess)) {
 
 		my $processHandle = eval { $getCurrentProcess->Call(0) };
 
@@ -446,7 +563,7 @@ sub setPriority {
 			return;
 		};
 
-		Slim::Utils::Log::logger('server')->info("SqueezeCenter changing process priority to $priorityClassName");
+		Slim::Utils::Log::logger('server')->info("Squeezebox Server changing process priority to $priorityClassName");
 
 		eval { $setPriorityClass->Call($processHandle, $priorityClass) };
 
@@ -464,12 +581,12 @@ Get the current priority of the server.
 
 sub getPriority {
 
-	Slim::bootstrap::tryModuleLoad('Win32::API', 'Win32::Process', 'nowarn');
+	Slim::bootstrap::tryModuleLoad('Scalar::Util', 'Win32::API', 'Win32::Process', 'nowarn');
 
 	my $getCurrentProcess = Win32::API->new('kernel32', 'GetCurrentProcess', ['V'], 'N');
 	my $getPriorityClass  = Win32::API->new('kernel32', 'GetPriorityClass',  ['N'], 'N');
 
-	if (blessed($getPriorityClass) && blessed($getCurrentProcess)) {
+	if (Scalar::Util::blessed($getPriorityClass) && Scalar::Util::blessed($getCurrentProcess)) {
 
 		my $processHandle = eval { $getCurrentProcess->Call(0) };
 
@@ -535,5 +652,142 @@ sub _priorityFromPriorityClass {
 }
 
 
+=head2 cleanupTempDirs( )
+
+PDK compiled executables can leave temporary pdk-{username}-{pid} folders behind
+if process is crashing. Use this method to clean them up.
+
+=cut
+
+sub cleanupTempDirs {
+
+	my $dir = $ENV{TEMP};
+	
+	return unless $dir && -d $dir;
+	
+	opendir(DIR, $dir) || return;
+
+	my @folders = readdir(DIR);
+	close(DIR);
+
+	my %pdkFolders;
+	for my $entry (@folders) {
+		if ($entry =~ /^pdk-.*?-(\d+)$/i) {
+			$pdkFolders{$1} = $entry
+		}
+	}
+	
+	return unless scalar(keys %pdkFolders);
+
+	require File::Path;
+	require Win32::Process::List;
+	my $p = Win32::Process::List->new();
+	my %processes = $p->GetProcesses(); 
+
+	foreach my $pid (keys %pdkFolders) {
+		
+		# don't remove files if process is still running...
+		next if $processes{$pid};
+
+		my $path = catdir($dir, $pdkFolders{$pid});
+		next unless -d $path;
+
+		eval { File::Path::rmtree($path) };
+	}
+}
+
+
+sub getUpdateParams {
+	my ($class, $url) = @_;
+
+	return if main::SLIM_SERVICE || main::SCANNER;
+	
+	if (!$PerlSvc::VERSION) {
+		Slim::Utils::Log::logger('server.update')->info("Running Squeezebox Server from the source - don't download the update.");
+		return;
+	}
+	
+	require Win32::NetResource;
+	
+	my $downloaddir;
+	
+	if ($class->{osDetails}->{isWHS}) {
+
+		my $share;
+		Win32::NetResource::NetShareGetInfo('software', $share);
+
+		# this is ugly... FR uses a localized share name
+		if (!$share || !$share->{path}) {
+			Win32::NetResource::NetShareGetInfo('logiciel', $share);
+		}
+		
+		if ($share && $share->{path}) {
+			$downloaddir = $share->{path};
+
+			if (-e catdir($downloaddir, "Add-Ins")) {
+				$downloaddir = catdir($downloaddir, "Add-Ins");
+			}
+		}
+	}
+	
+	return {
+		path => $downloaddir,
+	};
+}
+
+sub canAutoUpdate { 1 }
+
+# return file extension filter for installer
+sub installerExtension { '(?:exe|msi)' }; 
+sub installerOS { 
+	my $class = shift;
+	return $class->{osDetails}->{isWHS} ? 'whs' : 'win';
+}
+
+sub restartServer {
+	my $class = shift;
+
+	my $log = Slim::Utils::Log::logger('server.update');
+	
+
+	if (!$class->canRestartServer()) {
+		$log->warn("Squeezebox Server can't be restarted automatically on Windows if run from the perl source.");
+		return;
+	}
+	
+	if ($PerlSvc::VERSION && PerlSvc::RunningAsService()) {
+
+		my $svcHelper = Win32::GetShortPathName( catdir( $class->installPath, 'server', 'squeezesvc.exe' ) );
+		my $processObj;
+
+		Slim::bootstrap::tryModuleLoad('Win32::Process');
+
+		if ($@ || !Win32::Process::Create(
+			$processObj,
+			$svcHelper,
+			"$svcHelper --restart",
+			0,
+			Win32::Process::DETACHED_PROCESS() | Win32::Process::CREATE_NO_WINDOW() | Win32::Process::NORMAL_PRIORITY_CLASS(),
+			".")
+		) {
+			$log->error("Couldn't restart Squeezebox Server service (squeezesvc)");
+		}
+	}
+	
+	elsif ($PerlSvc::VERSION) {
+	
+		my $restartFlag = catdir( Slim::Utils::Prefs::preferences('server')->get('cachedir') || $class->dirsFor('cache'), 'restart.txt' );
+		if (open(RESTART, ">$restartFlag")) {
+			close RESTART;
+			main::stopServer();
+		}
+		
+		else {
+			$log->error("Can't write restart flag ($restartFlag) - don't shut down");
+		}
+	}
+};
+
+sub canRestartServer { return $PerlSvc::VERSION ? 1 : 0; }
 
 1;

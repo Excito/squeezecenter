@@ -1,6 +1,6 @@
 package Slim::Networking::SqueezeNetwork::Stats;
 
-# $Id: Stats.pm 22943 2008-08-28 17:56:34Z andy $
+# $Id: Stats.pm 27975 2009-08-01 03:28:30Z andy $
 
 # Report radio stats to SN if enabled.
 
@@ -30,7 +30,7 @@ my $REPORT_GRANULARITY = 300;
 sub init {
 	my ( $class, $json ) = @_;
 	
-	$log->info( "SqueezeNetwork stats init" );
+	main::INFOLOG && $log->info( "SqueezeNetwork stats init" );
 	
 	# Override defaults if SN has provided them
 	if ( $json->{stats_interval} ) {
@@ -60,7 +60,7 @@ sub init {
 }
 
 sub shutdown {
-	$log->info( "SqueezeNetwork stats shutdown" );
+	main::INFOLOG && $log->info( "SqueezeNetwork stats shutdown" );
 	
 	# Unsubscribe
 	Slim::Control::Request::unsubscribe( \&newsongCallback );
@@ -90,7 +90,7 @@ sub newsongCallback {
 	# If this is a radio track (no track length) and doesn't contain a playlist index value
 	# it is the newsong notification from a metadata change, which we want to ignore
 	if ( !$secs && !defined $request->getParam('_p3') ) {
-		$log->debug( 'Ignoring radio station newsong metadata notification' );
+		main::DEBUGLOG && $log->debug( 'Ignoring radio station newsong metadata notification' );
 		return;
 	}
 		
@@ -107,7 +107,7 @@ sub newsongCallback {
 	
 		$prefs->set( sn_stats_queue => $queue );
 		
-		$log->debug( "Reporting play of remote URL to SN: $url, duration: $secs" );
+		main::DEBUGLOG && $log->debug( "Reporting play of remote URL to SN: $url, duration: $secs" );
 	}
 	else {
 		# A radio track, log events at 5-minute intervals
@@ -120,14 +120,14 @@ sub logRadio {
 	
 	# If player is stopped, stop logging
 	if ( !$client || $client->isStopped() ) {
-		$log->debug( "Player no longer playing, finished logging for $url" );
+		main::DEBUGLOG && $log->debug( "Player no longer playing, finished logging for $url" );
 		return;
 	}
 	
 	my $cururl = Slim::Player::Playlist::url($client);
 	
 	if ( $cururl ne $url ) {
-		$log->debug( "Currently playing radio URL has changed, finished logging for $url" );
+		main::DEBUGLOG && $log->debug( "Currently playing radio URL has changed, finished logging for $url" );
 		return;
 	}
 	
@@ -142,7 +142,7 @@ sub logRadio {
 
 	$prefs->set( sn_stats_queue => $queue );
 	
-	$log->debug( "Reporting play of radio URL to SN: $url, duration: $REPORT_GRANULARITY" );
+	main::DEBUGLOG && $log->debug( "Reporting play of radio URL to SN: $url, duration: $REPORT_GRANULARITY" );
 	
 	Slim::Utils::Timers::setTimer(
 		$client,
@@ -159,7 +159,7 @@ sub reportStats {
 		my $client = Slim::Player::Client::clientRandom();
 		
 		if ( defined $client ) {
-			if ( $log->is_debug ) {
+			if ( main::DEBUGLOG && $log->is_debug ) {
 				$log->debug( 'Reporting stats queue to SN: ' . Data::Dump::dump($queue) );
 			}
 			
@@ -184,7 +184,7 @@ sub reportStats {
 			}
 		}
 		else {
-			$log->debug( 'Skipping stats reporting, no client connected' );
+			main::DEBUGLOG && $log->debug( 'Skipping stats reporting, no client connected' );
 		}
 	}
 	
@@ -205,7 +205,7 @@ sub _reportStats_done {
 		return _reportStats_error( $http );
 	}
 	
-	$log->debug( 'Stats reported OK' );
+	main::DEBUGLOG && $log->debug( 'Stats reported OK' );
 }
 
 sub _reportStats_error {

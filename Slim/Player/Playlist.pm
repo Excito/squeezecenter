@@ -1,13 +1,13 @@
 package Slim::Player::Playlist;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
 use strict;
 
-use File::Spec::Functions qw(:ALL);
+use File::Spec::Functions qw(catfile);
 use Scalar::Util qw(blessed);
 
 use Slim::Formats::Playlists::M3U;
@@ -78,7 +78,7 @@ sub song {
 
 	if ( $objOrUrl && ($refresh || !blessed($objOrUrl)) ) {
 
-		$objOrUrl = Slim::Schema->rs('Track')->objectForUrl({
+		$objOrUrl = Slim::Schema->objectForUrl({
 			'url'      => $objOrUrl,
 			'create'   => 1,
 			'readTags' => 1,
@@ -96,7 +96,7 @@ sub song {
 sub refreshTrack {
 	my ( $client, $url ) = @_;
 	
-	my $track = Slim::Schema->rs('Track')->objectForUrl( {
+	my $track = Slim::Schema->objectForUrl( {
 		url      => $url,
 		create   => 1,
 		readTags => 1,
@@ -175,6 +175,11 @@ sub playlistMode {
 
 	$client     = $client->master();
 
+	# Bugs: 13896, 13689, 8878
+	# playlist/party mode is in conflict with 7.4 touch/press-to-play behavior
+	# fix for bug 13689 will be the complete fix, but for now ignore client pref and just always return 'off'
+	return 'off';
+
 	my $currentSetting = $prefs->client($client)->get('playlistmode');
 
 	if ( defined($mode) && $mode ne $currentSetting ) {
@@ -203,11 +208,12 @@ sub playlistMode {
 sub copyPlaylist {
 	my $toClient   = shift;
 	my $fromClient = shift;
+	my $noQueueReset = shift;
 
 	@{$toClient->playlist}    = @{$fromClient->playlist};
 	@{$toClient->shufflelist} = @{$fromClient->shufflelist};
 
-	Slim::Player::Source::streamingSongIndex($toClient, Slim::Player::Source::streamingSongIndex($fromClient), 1);
+	$toClient->controller()->resetSongqueue(Slim::Player::Source::streamingSongIndex($fromClient)) unless $noQueueReset;
 
 	$prefs->client($toClient)->set('shuffle', $prefs->client($fromClient)->get('shuffle'));
 	$prefs->client($toClient)->set('repeat',  $prefs->client($fromClient)->get('repeat'));
@@ -225,7 +231,7 @@ sub removeTrack {
 	
 	if (Slim::Player::Source::playingSongIndex($client) == $tracknum) {
 
-		$log->info("Removing currently playing track.");
+		main::INFOLOG && $log->info("Removing currently playing track.");
 
 		Slim::Player::Source::playmode($client, "stop");
 
@@ -236,7 +242,7 @@ sub removeTrack {
 		# If we're removing the streaming song (which is different from
 		# the playing song), get the client to flush out the current song
 		# from its audio pipeline.
-		$log->info("Removing currently streaming track.");
+		main::INFOLOG && $log->info("Removing currently streaming track.");
 
 		Slim::Player::Source::flushStreamingSong($client);
 
@@ -246,8 +252,8 @@ sub removeTrack {
 
 		for my $song (@$queue) {
 
-			if ($tracknum < $song->{'index'}) {
-				$song->{'index'}--;
+			if ($tracknum < $song->index()) {
+				$song->index($song->index() - 1);
 			}
 		}
 	}
@@ -404,7 +410,7 @@ sub removeMultipleTracks {
 		my $queue = $client->currentsongqueue();
 
 		for my $song (@{$queue}) {
-			$song->{'index'} = $oldToNewShuffled{$song->{'index'}} || 0;
+			$song->index($oldToNewShuffled{$song->index()} || 0);
 		}
 	}
 
@@ -470,12 +476,12 @@ sub moveSong {
 			my $queue = $client->currentsongqueue();
 
 			for my $song (@$queue) {
-				my $index = $song->{index};
+				my $index = $song->index();
 				if ($src == $index) {
-					$song->{index} = $dest;
+					$song->index($dest);
 				}
 				elsif (($dest == $index) || (($src < $index) != ($dest < $index))) {
-					$song->{index} = ($dest>$src)? $index - 1 : $index + 1;
+					$song->index(($dest>$src)? $index - 1 : $index + 1);
 				}
 			}
 
@@ -484,11 +490,19 @@ sub moveSong {
 	}
 }
 
-sub clear {
+sub stopAndClear {
 	my $client = shift;
+	
+	# Bug 11447 - Have to stop player and clear song queue
+	$client->controller->stop();
+	$client->controller()->resetSongqueue();
 
 	@{playList($client)} = ();
 	$client->currentPlaylist(undef);
+	
+	# Remove saved playlist if available
+	my $playlistUrl = _playlistUrlForClient($client);
+	unlink(Slim::Utils::Misc::pathFromFileURL($playlistUrl)) if $playlistUrl;
 
 	reshuffle($client);
 }
@@ -535,7 +549,7 @@ sub reshuffle {
 		$realsong = $songcount;
 	}
 	
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf("Reshuffling, current song index: %d, preserve song? %s",
 			$realsong,
 			$dontpreservecurrsong ? 'no' : 'yes',
@@ -547,7 +561,7 @@ sub reshuffle {
 
 	for my $song (@$queue) {
 
-		push @realqueue, $listRef->[$song->{'index'}];
+		push @realqueue, $listRef->[$song->index()];
 	}
 
 	@{$listRef} = (0 .. ($songcount - 1));
@@ -597,9 +611,9 @@ sub reshuffle {
 
 			if (!blessed($trackObj) || !$trackObj->can('albumid')) {
 
-				$log->info("Track: $track isn't an object - fetching");
+				main::INFOLOG && $log->info("Track: $track isn't an object - fetching");
 
-				$trackObj = Slim::Schema->rs('Track')->objectForUrl($track);
+				$trackObj = Slim::Schema->objectForUrl($track);
 			}
 
 			# Pull out the album id, and accumulate all of the
@@ -634,7 +648,7 @@ sub reshuffle {
 
 		# This shouldn't happen - but just in case.
 		if (!blessed($currentTrack) || !$currentTrack->can('albumid')) {
-			$currentTrack = Slim::Schema->rs('Track')->objectForUrl($currentTrack);
+			$currentTrack = Slim::Schema->objectForUrl($currentTrack);
 		}
 
 		if (blessed($currentTrack) && $currentTrack->can('albumid')) {
@@ -676,14 +690,14 @@ sub reshuffle {
 
 			if (defined($realqueue[$j]) && defined $listRef->[$i] && $realqueue[$j] == $listRef->[$i]) {
 
-				$queue->[$j]->{'index'} = $i;
+				$queue->[$j]->index($i);
 			}
 		}
 	}
 
 	for my $song (@$queue) {
-		if ($song->{'index'} >= $songcount) {
-			$song->{'index'} = 0;
+		if ($song->index() >= $songcount) {
+			$song->index(0);
 		}
 	}
 
@@ -754,7 +768,7 @@ sub newSongPlaylist {
 	my $client = shift || return;
 	my $reset = shift;
 	
-	logger('player.playlist')->debug("Begin function - reset: " . $reset);
+	main::DEBUGLOG && logger('player.playlist')->debug("Begin function - reset: " . ($reset || 'false'));
 
 	return if Slim::Player::Playlist::shuffle($client);
 	return if !$prefs->get('playlistdir');
@@ -772,7 +786,7 @@ sub newSongPlaylist {
 
 	return if Slim::Music::Info::isRemoteURL($playlist);
 
-	logger('player.playlist')->info("Calling writeCurTrackForM3U()");
+	main::INFOLOG && logger('player.playlist')->info("Calling writeCurTrackForM3U()");
 
 	Slim::Formats::Playlists::M3U->writeCurTrackForM3U(
 		$playlist,
@@ -784,7 +798,7 @@ sub newSongPlaylist {
 sub newSongPlaylistCallback {
 	my $request = shift;
 
-	logger('player.playlist')->debug("Begin function");
+	main::DEBUGLOG && logger('player.playlist')->debug("Begin function");
 
 	my $client = $request->client() || return;
 	
@@ -798,10 +812,10 @@ sub modifyPlaylistCallback {
 	my $client  = $request->client();
 	my $log     = logger('player.playlist');
 
-	$log->info("Checking if persistPlaylists is set..");
+	main::INFOLOG && $log->info("Checking if persistPlaylists is set..");
 
 	if ( !$client || !$prefs->get('persistPlaylists') ) {
-		$log->debug("no client or persistPlaylists not set, not saving playlist");
+		main::DEBUGLOG && $log->debug("no client or persistPlaylists not set, not saving playlist");
 		return;
 	}
 	
@@ -809,7 +823,7 @@ sub modifyPlaylistCallback {
 	if (   exists $INC{'Slim/Plugin/RandomPlay/Plugin.pm'} 
 		&& Slim::Plugin::RandomPlay::Plugin::active($client)
 	) {
-		$log->debug("Random play mode active, not saving playlist");
+		main::DEBUGLOG && $log->debug("Random play mode active, not saving playlist");
 		return;
 	}
 
@@ -822,13 +836,11 @@ sub modifyPlaylistCallback {
 		($request->isCommand([['playlist'], ['jump', 'index', 'shuffle']]));
 
 	if (!$saveCurrentSong) {
-
-		$log->info("saveCurrentSong not set. returing.");
-
+		main::INFOLOG && $log->info("saveCurrentSong not set. returing.");
 		return;
 	}
 
-	$log->info("saveCurrentSong is: [$saveCurrentSong]");
+	main::INFOLOG && $log->info("saveCurrentSong is: [$saveCurrentSong]");
 
 	my @syncedclients = ($client->controller()->allPlayers());
 
@@ -842,35 +854,29 @@ sub modifyPlaylistCallback {
 		# Don't save all the tracks again if we're just starting up!
 		if (!$eachclient->startupPlaylistLoading && $savePlaylist) {
 
-			if ( $log->is_info ) {
-				$log->info("Finding client playlist for: ", $eachclient->id);
+			if ( main::INFOLOG && $log->is_info ) {
+				$log->info("Saving client playlist for: ", $eachclient->id);
 			}
 
 			# Create a virtual track that is our pointer
 			# to the list of tracks that make up this playlist.
-			my $playlistObj = Slim::Schema->rs('Playlist')->updateOrCreate({
-
-				'url'        => sprintf('clientplaylist://%s', $eachclient->id),
-				'attributes' => {
-					'TITLE' => sprintf('%s - %s', 
+			my $playlistTitle = sprintf('%s - %s', 
 						Slim::Utils::Unicode::utf8encode($eachclient->string('NOW_PLAYING')),
 						Slim::Utils::Unicode::utf8encode($eachclient->name ||  $eachclient->ip),
-					),
+					);
 
-					'CT'    => 'cpl',
-				},
-			});
-
-			if (defined $playlistObj) {
-
-				$log->info("Calling setTracks() to update playlist");
-
-				$playlistObj->setTracks($playlist);
-			}
+			my $playlistUrl = _playlistUrlForClient($client) or next;
+			
+			Slim::Formats::Playlists::M3U->write( 
+				$playlist,
+				$playlistTitle,
+				Slim::Utils::Misc::pathFromFileURL($playlistUrl),
+				1,
+				defined($client) ? Slim::Player::Source::playingSongIndex($client) : 0,
+			);
 		}
 
 		if ($saveCurrentSong) {
-
 			$prefs->client($eachclient)->set('currentSong', $currsong);
 		}
 	}
@@ -879,11 +885,48 @@ sub modifyPlaylistCallback {
 	# there's only one place that sets it - in Client::startup()
 	if ($client->startupPlaylistLoading) {
 
-		$log->info("Resetting startupPlaylistLoading flag.");
+		main::INFOLOG && $log->info("Resetting startupPlaylistLoading flag.");
 
 		$client->startupPlaylistLoading(0);
 	}
 }
+
+# restore the old playlist if we aren't already synced with somebody (that has a playlist)
+sub loadClientPlaylist {
+	my ($client, $callback) = @_;
+	
+	return if ($client->isSynced() || !$prefs->get('persistPlaylists'));
+
+	my $url = _playlistUrlForClient($client) or return;
+	my @tracks = Slim::Formats::Playlists::M3U->read(Slim::Utils::Misc::pathFromFileURL($url), undef, $url);
+	my $currsong = $prefs->client($client)->get('currentSong');
+
+	# Only add on to the playlist if there are tracks.
+	if (scalar @tracks && defined $tracks[0] && blessed($tracks[0]) && $tracks[0]->id) {
+
+		$client->debug("found nowPlayingPlaylist - will loadtracks");
+
+		# We don't want to re-setTracks on load - so mark a flag.
+		$client->startupPlaylistLoading(1);
+
+		$client->execute(
+			['playlist', 'addtracks', 'listref', \@tracks ],
+			$callback, [$client, $currsong],
+		);
+	}
+}
+
+sub _playlistUrlForClient {
+	my $client = shift;
+	
+	my $id = $client->id();
+	$id =~ s/://g;
+
+	return Slim::Utils::Misc::fileURLFromPath(
+		catfile(Slim::Utils::OSDetect::dirsFor('prefs'), "clientplaylist_$id.m3u")
+	);
+}
+
 
 1;
 

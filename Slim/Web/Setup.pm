@@ -1,8 +1,8 @@
 package Slim::Web::Setup;
 
-# $Id: Setup.pm 23663 2008-10-23 11:47:52Z mherger $
+# $Id: Setup.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -11,6 +11,8 @@ use strict;
 use Slim::Utils::Log;
 
 sub initSetup {
+
+	return if $::noweb;
 
 	my @classes = ('Slim::Web::Settings');
 	
@@ -33,7 +35,6 @@ sub initSetup {
 		Behavior 
 		Debugging 
 		FileSelector 
-		FileTypes 
 		Index 
 		Network 
 		Performance 
@@ -47,6 +48,10 @@ sub initSetup {
 		Wizard
 	);
 	
+	if (main::TRANSCODING) {
+		push @classes, 'Slim::Web::Settings::Server::FileTypes';
+	}
+
 	for my $class (@classes) {
 		eval "use $class";
 

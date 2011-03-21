@@ -1,15 +1,14 @@
 package Slim::Web::Pages::BrowseTree;
 
-# $Id: BrowseTree.pm 24179 2008-12-02 01:35:41Z mherger $
+# $Id: BrowseTree.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
 
 use strict;
 
-use File::Spec::Functions qw(:ALL);
 use POSIX ();
 use Scalar::Util qw(blessed);
 
@@ -22,7 +21,7 @@ my $prefs = preferences('server');
 
 sub init {
 	
-	Slim::Web::HTTP::addPageFunction( qr/^browsetree\.(?:htm|xml)/, \&browsetree );
+	Slim::Web::Pages->addPageFunction( qr/^browsetree\.(?:htm|xml)/, \&browsetree );
 	
 	if ($prefs->get('audiodir')) {
 		Slim::Web::Pages->addPageLinks("browse",{'BROWSE_MUSIC_FOLDER'   => "browsetree.html"});
@@ -73,7 +72,7 @@ sub browsetree {
 
 	my ($start, $end) = (0, $count);
 
-	$params->{'pageinfo'} = Slim::Web::Pages->pageInfo({
+	$params->{'pageinfo'} = Slim::Web::Pages::Common->pageInfo({
 		'itemCount'    => $count,
 		'path'         => $params->{'path'},
 		'otherParams'  => "&hierarchy=$hierarchy&player=$player",
@@ -99,27 +98,26 @@ sub browsetree {
 	}
 
 	my $topPath = $topLevelObj->path;
-	my $isWin   = Slim::Utils::OSDetect::isWindows();
 
 	for my $relPath (@$items[$start..$end]) {
 
 		my $url  = Slim::Utils::Misc::fixPath($relPath, $topPath) || next;
+		my $name;
 
-		# Amazingly, this just works. :)
 		# Do the cheap compare for osName first - so non-windows users
 		# won't take the penalty for the lookup.
-		if ($isWin && Slim::Music::Info::isWinShortcut($url)) {
-			$url = Slim::Utils::Misc::fileURLFromWinShortcut($url);
+		if (main::ISWINDOWS && Slim::Music::Info::isWinShortcut($url)) {
+			($name, $url) = Slim::Utils::OS::Win32->getShortcut($url);
+			$name = Slim::Utils::Unicode::utf8on($name);
 		}
 
-		my $item = Slim::Schema->rs('Track')->objectForUrl({
+		my $item = Slim::Schema->objectForUrl({
 			'url'      => $url,
 			'create'   => 1,
 			'readTags' => 1,
 		});
 
 		if (!blessed($item) || !$item->can('content_type')) {
-
 			next;
 		}
 
@@ -133,7 +131,7 @@ sub browsetree {
 		# Turn the utf8 flag on for proper display - since this is
 		# coming directly from the filesystem.
 		my %form = (
-			'text'      => Slim::Utils::Unicode::utf8on( Slim::Music::Info::fileName($item->url) ),
+			'text'      => $name || Slim::Music::Info::fileName($url),
 			'hierarchy' => join('/', @levels, $item->id),
 			'descend'   => $descend,
 			'odd'       => ($itemnumber + 1) % 2,

@@ -1,6 +1,6 @@
 package Slim::Plugin::Sirius::Plugin;
 
-# $Id: Plugin.pm 23921 2008-11-13 18:39:10Z andy $
+# $Id: Plugin.pm 28265 2009-08-25 19:58:11Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -19,12 +19,19 @@ sub initPlugin {
 	Slim::Player::ProtocolHandlers->registerHandler(
 		sirius => 'Slim::Plugin::Sirius::ProtocolHandler'
 	);
+	
+	$class->SUPER::initPlugin(
+		feed   => Slim::Networking::SqueezeNetwork->url('/api/sirius/v1/opml'),
+		tag    => 'sirius',
+		is_app => 1,
+	);
 }
 
 sub getDisplayName () {
 	return 'PLUGIN_SIRIUS_MODULE_NAME';
 }
 
-sub playerMenu { undef }
+# Don't add this item to any menu
+sub playerMenu { }
 
 1;

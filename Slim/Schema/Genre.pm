@@ -1,12 +1,15 @@
 package Slim::Schema::Genre;
 
-# $Id: Genre.pm 24729 2009-01-21 14:21:41Z michael $
+# $Id: Genre.pm 28539 2009-09-16 13:02:39Z michael $
 
 use strict;
 use base 'Slim::Schema::DBI';
 use Scalar::Util qw(blessed);
 
+use Slim::Schema::ResultSet::Genre;
+
 use Slim::Utils::Misc;
+use Slim::Utils::Log;
 
 {
 	my $class = __PACKAGE__;
@@ -27,7 +30,7 @@ use Slim::Utils::Misc;
 	$class->has_many('genreTracks' => 'Slim::Schema::GenreTrack' => 'genre');
 
 	if ($] > 5.007) {
-		$class->utf8_columns(qw/name namesort/);
+		$class->utf8_columns(qw/name namesort namesearch/);
 	}
 
 	$class->resultset_class('Slim::Schema::ResultSet::Genre');
@@ -36,7 +39,7 @@ use Slim::Utils::Misc;
 sub url {
 	my $self = shift;
 
-	return sprintf('db:genre.namesearch=%s', URI::Escape::uri_escape($self->namesearch));
+	return sprintf('db:genre.namesearch=%s', URI::Escape::uri_escape_utf8($self->namesearch));
 }
 
 sub tracks {
@@ -64,8 +67,11 @@ sub add {
 	my $class = shift;
 	my $genre = shift;
 	my $track = shift;
-
-	my @genres = ();
+	
+	# Using native DBI here to improve performance during scanning
+	# and because DBIC objects are not needed here
+	# This is around 20x faster than using DBIC
+	my $dbh = Slim::Schema->storage->dbh;
 
 	for my $genreSub (Slim::Music::Info::splitTag($genre)) {
 
@@ -73,22 +79,49 @@ sub add {
 
 		# So that ucfirst() works properly.
 		use locale;
-
-		my $genreObj = Slim::Schema->resultset('Genre')->find_or_create({ 
-			'namesort'   => $namesort,
-			'name'       => ucfirst($genreSub),
-			'namesearch' => $namesort,
-		}, { 'key' => 'namesearch' });
-
-		Slim::Schema->resultset('GenreTrack')->find_or_create({
-			track => $track->id,
-			genre => $genreObj->id,
-		});
-
-		push @genres, $genreObj;
+		
+		my $sth = $dbh->prepare_cached( 'SELECT id FROM genres WHERE namesearch = ?' );
+		$sth->execute($namesort);
+		my ($id) = $sth->fetchrow_array;
+		$sth->finish;
+		
+		if ( !$id ) {
+			$sth = $dbh->prepare_cached( qq{
+				INSERT INTO genres
+				(namesort, name, namesearch)
+				VALUES
+				(?, ?, ?)
+			} );
+			$sth->execute( $namesort, ucfirst($genreSub), $namesort );
+			$id = $dbh->last_insert_id(undef, undef, undef, undef);
+		}
+		
+		$sth = $dbh->prepare_cached( qq{
+			REPLACE INTO genre_track
+			(genre, track)
+			VALUES
+			(?, ?)
+		} );
+		$sth->execute( $id, $track->id );
 	}
+	
+	return;
+}
 
-	return wantarray ? @genres : $genres[0];
+# XXX native DBI
+sub rescan {
+	my ( $class, @ids ) = @_;
+	
+	my $log = logger('scan.scanner');
+	
+	for my $id ( @ids ) {
+		my $count = Slim::Schema->rs('GenreTrack')->search( genre => $id )->count;
+		
+		if ( !$count ) {
+			main::DEBUGLOG && $log->is_debug && $log->debug("Removing unused genre: $id");
+			Slim::Schema->rs('Genre')->find($id)->delete;
+		}
+	}
 }
 
 1;

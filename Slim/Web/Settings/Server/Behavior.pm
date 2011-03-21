@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::Behavior;
 
-# $Id: Behavior.pm 21388 2008-07-01 20:28:32Z andy $
+# $Id: Behavior.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,11 +13,11 @@ use base qw(Slim::Web::Settings);
 use Slim::Utils::Prefs;
 
 sub name {
-	return Slim::Web::HTTP::protectName('BEHAVIOR_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('BEHAVIOR_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/server/behavior.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/server/behavior.html');
 }
 
 sub prefs {

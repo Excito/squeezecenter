@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::Plugins;
 
-# $Id: Plugins.pm 19487 2008-05-06 17:31:12Z andy $
+# $Id: Plugins.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,75 +13,125 @@ use base qw(Slim::Web::Settings);
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::PluginManager;
+use Slim::Utils::OSDetect;
+
+my $os = Slim::Utils::OSDetect->getOS();
 
 sub name {
-	return Slim::Web::HTTP::protectName('SETUP_PLUGINS');
+	return Slim::Web::HTTP::CSRF->protectName('SETUP_PLUGINS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/server/plugins.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/server/plugins.html');
 }
 
 sub handler {
 	my ($class, $client, $paramRef) = @_;
 
-	my @changed = ();
-
 	my $plugins = Slim::Utils::PluginManager->allPlugins;
 	my $pluginState = preferences('plugin.state')->all();
-
+	
 	for my $plugin (keys %{$plugins}) {
 
-		my $name     = $plugins->{$plugin}->{'name'};
-		my $module   = $plugins->{$plugin}->{'module'};
+		my $name = $plugins->{$plugin}->{'name'};
 
 		$plugins->{$plugin}->{errorDesc} = Slim::Utils::PluginManager->getErrorString($plugin);
 
-		# XXXX - handle install / uninstall / enable / disable
 		if ( $paramRef->{'saveSettings'} ) {
-			# don't handle enforced plugins
-			next if $plugins->{$plugin}->{'enforce'} || $plugins->{$plugin}->{error} < 0;
 
-			if (!$paramRef->{$name} && $pluginState->{$plugin}) {
-				push @changed, Slim::Utils::Strings::string($name);
-				Slim::Utils::PluginManager->disablePlugin($module);
+			next if $plugins->{$plugin}->{'enforce'};
+
+			if (!$paramRef->{$name} && $pluginState->{$plugin} eq 'enabled') {
+				Slim::Utils::PluginManager->disablePlugin($plugin);
 			}
 	
-			if ($paramRef->{$name} && !$pluginState->{$plugin}) {
-				push @changed, Slim::Utils::Strings::string($name);
-				Slim::Utils::PluginManager->enablePlugin($module);
+			if ($paramRef->{$name} && $pluginState->{$plugin} eq 'disabled') {
+				Slim::Utils::PluginManager->enablePlugin($plugin);
 			}
 		}
 
 	}
 
-	if (@changed) {
+	if (Slim::Utils::PluginManager->needsRestart) {
 		
-		#Slim::Utils::PluginManager->runPendingOperations;
-		Slim::Utils::PluginManager->writePluginCache;
-		$paramRef->{'warning'} .= '<span id="popupWarning">'
-			. Slim::Utils::Strings::string('PLUGINS_CHANGED').'<br>'.join('<br>',@changed)
-			. '</span>';
+		$paramRef = $class->getRestartMessage($paramRef, Slim::Utils::Strings::string('PLUGINS_CHANGED'));
 	}
 
+	$paramRef = $class->restartServer($paramRef, Slim::Utils::PluginManager->needsRestart);
+
 	$paramRef->{plugins}     = $plugins;
+	$paramRef->{failsafe}    = $main::failsafe;
+
 	$paramRef->{pluginState} = preferences('plugin.state')->all();
 
-	# only show plugins with perl modules
-	my @keys = ();
-	for my $key (keys %$plugins) {
-		push @keys, $key if $plugins->{$key}->{module};
-	};
+	# FIXME: temp remap new states to binary value:
+	for my $plugin (keys %{$paramRef->{pluginState}}) {
+		$paramRef->{pluginState}->{$plugin} = $paramRef->{pluginState}->{$plugin} =~ /enabled/;
+	}
 
 	my @sortedPlugins = 
 		map { $_->[1] }
 		sort { $a->[0] cmp $b->[0] }
-		map { [ uc( Slim::Utils::Strings::string($plugins->{$_}->{name}) ), $_ ] } 
-		@keys;
+		map { [ uc( Slim::Utils::Strings::getString($plugins->{$_}->{name}) ), $_ ] } 
+		keys %$plugins;
 
 	$paramRef->{sortedPlugins} = \@sortedPlugins;
 
 	return $class->SUPER::handler($client, $paramRef);
+}
+
+sub getRestartMessage {
+	my ($class, $paramRef, $noRestartMsg) = @_;
+	
+	# show a link/button to restart SC if this is supported by this platform
+	if ($os->canRestartServer()) {
+				
+		$paramRef->{'restartUrl'} = $paramRef->{webroot} . $paramRef->{path} . '?restart=1';
+		$paramRef->{'restartUrl'} .= '&rand=' . $paramRef->{'rand'} if $paramRef->{'rand'};
+
+		$paramRef->{'warning'} = '<span id="restartWarning">'
+			. Slim::Utils::Strings::string('PLUGINS_CHANGED_NEED_RESTART', $paramRef->{'restartUrl'})
+			. '</span>';
+
+	}
+	
+	else {
+	
+		$paramRef->{'warning'} .= '<span id="popupWarning">'
+			. $noRestartMsg
+			. '</span>';
+		
+	}
+	
+	return $paramRef;	
+}
+
+sub restartServer {
+	my ($class, $paramRef, $needsRestart) = @_;
+	
+	if ($needsRestart && $paramRef->{restart} && $os->canRestartServer()) {
+		
+		$paramRef->{'warning'} = '<span id="popupWarning">'
+			. Slim::Utils::Strings::string('RESTARTING_PLEASE_WAIT')
+			. '</span>';
+		
+		# delay the restart a few seconds to return the page to the client first
+		Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 2, \&_restartServer);
+	}
+	
+	return $paramRef;
+}
+
+sub _restartServer {
+
+	if (Slim::Utils::PluginDownloader->downloading) {
+
+		Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 2, \&_restartServer);
+
+	} else {
+
+		$os->restartServer();
+	}
 }
 
 1;

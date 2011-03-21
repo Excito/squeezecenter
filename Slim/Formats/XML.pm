@@ -1,8 +1,8 @@
 package Slim::Formats::XML;
 
-# $Id: XML.pm 25698 2009-03-26 01:54:17Z andy $
+# $Id: XML.pm 28569 2009-09-18 21:28:30Z adrian $
 
-# Copyright 2006-2007 Logitech
+# Copyright 2006-2009 Logitech
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -13,7 +13,7 @@ package Slim::Formats::XML;
 use strict;
 use File::Slurp;
 use HTML::Entities;
-use JSON::XS qw(from_json);
+use JSON::XS::VersionOneAndTwo;
 use Scalar::Util qw(weaken);
 use URI::Escape qw(uri_escape);
 use XML::Simple;
@@ -60,7 +60,7 @@ sub getFeedAsync {
 
 	if ( $feed ) {
 
-		$log->info("Got cached XML data for $url");
+		main::INFOLOG && $log->is_info && $log->info("Got cached XML data for $url");
 
 		return $cb->( $feed, $params );
 	}
@@ -97,7 +97,7 @@ sub getFeedAsync {
 			'Timeout' => $params->{'timeout'},
 	});
 
-	$log->info("Async request: $url");
+	main::INFOLOG && $log->is_info && $log->info("Async request: $url");
 	
 	# Bug 3165
 	# Override user-agent and Icy-Metadata headers so we appear to be a web browser
@@ -141,7 +141,7 @@ sub getFeedAsync {
 		
 		# Don't require SN session for public URLs
 		if ( $url !~ /public/ ) {
-			$log->info("URL requires SqueezeNetwork session");
+			main::INFOLOG && $log->is_info && $log->info("URL requires SqueezeNetwork session");
 		
 			# Sometimes from the web we won't have a client, so pick a random one
 			# (Never use random client on SN)
@@ -164,7 +164,7 @@ sub getFeedAsync {
 				$headers{Cookie} = $snCookie;
 			}
 			else {
-				$log->info("Logging in to SqueezeNetwork to obtain session ID");
+				main::INFOLOG && $log->is_info && $log->info("Logging in to SqueezeNetwork to obtain session ID");
 		
 				# Login and get a session ID
 				Slim::Networking::SqueezeNetwork->login(
@@ -173,7 +173,7 @@ sub getFeedAsync {
 						if ( my $snCookie = Slim::Networking::SqueezeNetwork->getCookie( $params->{client} ) ) {
 							$headers{Cookie} = $snCookie;
 
-							$log->info('Got SqueezeNetwork session ID');
+							main::INFOLOG && $log->is_info && $log->info('Got SqueezeNetwork session ID');
 						}
 				
 						$http->get( $url, %headers );
@@ -199,7 +199,7 @@ sub gotViaHTTP {
 	
 	my $ct = $http->headers()->content_type;
 
-	if ( $log->is_debug ) {
+	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug("Got ", $http->url);
 		$log->debug("Content type is $ct");
 	}
@@ -207,7 +207,7 @@ sub gotViaHTTP {
 	# Try and turn the content we fetched into a parsed data structure.
 	if (my $parser = $params->{'params'}->{'parser'}) {
 
-		$log->info("Parsing with parser $parser");
+		main::INFOLOG && $log->is_info && $log->info("Parsing with parser $parser");
 
 		my $parserParams;
 
@@ -217,7 +217,7 @@ sub gotViaHTTP {
 
 		eval "use $parser";
 
-		$log->warn("$@") if $@;
+		$log->error("$@") if $@;
 
 		$feed = eval { $parser->parse($http, $parserParams) };
 
@@ -225,7 +225,7 @@ sub gotViaHTTP {
 
 			my $url = $feed->{'url'};
 
-			$log->info("Redirected to $url");
+			main::INFOLOG && $log->is_info && $log->info("Redirected to $url");
 
 			$params->{'params'}->{'url'} = $url;
 
@@ -253,20 +253,30 @@ sub gotViaHTTP {
 		return;
 	}
 	
-	# Use the same cache time for parsed XML as we do for HTTP
-	if ( defined $http->cacheTime ) {
-		$feed->{'cachetime'} = $http->cacheTime;
-	}
-	
 	# Cache the parsed XML or raw response
 	if ( Slim::Utils::Misc::shouldCacheURL( $http->url ) ) {
 
 		my $cache   = Slim::Utils::Cache->new();
-		my $expires = defined( $feed->{'cachetime'} ) ? $feed->{'cachetime'} : $XML_CACHE_TIME;
+
+		my $expires;
+
+		# parsers may set 'cachetime' to specify a specific cachetime which is also honored by caching within xmlbrowser
+		if (defined $feed->{'cachetime'}) {
+
+			$expires = $feed->{'cachetime'};
+
+		} elsif (defined $http->cacheTime) {
+
+			$expires = $http->cacheTime;
+
+		} else {
+
+			$expires = $XML_CACHE_TIME;
+		} 
 
 		if ( !$feed->{'nocache'} ) {
 
-			if ( $log->is_info ) {
+			if ( main::INFOLOG && $log->is_info ) {
 				$log->info("Caching parsed XML for " . $http->url . " for $expires seconds");
 			}
 
@@ -274,7 +284,7 @@ sub gotViaHTTP {
 
 		} elsif ( !$cache->get( $http->url() ) ) {
 
-			if ( $log->is_info ) {
+			if ( main::INFOLOG && $log->is_info ) {
 				$log->info("Caching raw response for " . $http->url . " for $expires seconds - not previously cached");
 			}
 
@@ -285,7 +295,7 @@ sub gotViaHTTP {
 	}
 	else {
 
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(sprintf("Not caching parsed XML for %s, appears to be a local resource",
 				$http->url,
 			));
@@ -326,7 +336,7 @@ sub parseXMLIntoFeed {
 	# convert XML into data structure
 	if ($xml && $xml->{'body'}) {
 
-		$log->debug("Parsing body as OPML");
+		main::DEBUGLOG && $log->is_debug && $log->debug("Parsing body as OPML");
 
 		# its OPML outline
 		return parseOPML($xml);
@@ -338,7 +348,7 @@ sub parseXMLIntoFeed {
 
 	} elsif ($xml) {
 
-		$log->debug("Parsing body as RSS");
+		main::DEBUGLOG && $log->is_debug && $log->debug("Parsing body as RSS");
 
 		# its RSS or podcast
 		return parseRSS($xml);
@@ -524,11 +534,19 @@ sub parseOPML {
 	# Optional command to run (used by Pandora)
 	if ( $xml->{'command'} ) {
 		$opml->{'command'} = $xml->{'command'};
+		
+		# Optional flag to abort OPML processing after command is run
+		$opml->{abort} = $xml->{abort} if $xml->{abort};
 	}
 	
 	# Optional item to indicate if the list is sorted
 	if ( $xml->{sorted} ) {
 		$opml->{sorted} = $xml->{sorted};
+	}
+	
+	# Optional windowId to support nextWindow
+	if ( $xml->{head}->{windowId} ) {
+		$opml->{windowId} = $xml->{head}->{windowId};
 	}
 
 	$xml = undef;
@@ -557,7 +575,7 @@ sub _parseOPMLOutline {
 		# Pull in all attributes we find
 		my %attrs;
 		for my $attr ( keys %{$itemXML} ) {
-		    next if $attr =~ /text|type|URL|xmlUrl|outline/i;
+		    next if $attr =~ /^(?:text|type|URL|xmlUrl|outline)$/i;
 		    $attrs{$attr} = $itemXML->{$attr};
 	    }
 
@@ -641,7 +659,7 @@ sub xmlToHash {
 
 		if (defined $content && ref($content) eq 'SCALAR') {
 
-			if ($log->is_debug && length $$content < 50000) {
+			if ( main::DEBUGLOG && $log->is_debug && length $$content < 50000 ) {
 				$log->debug("Here's the bad feed:\n[$$content]\n");
 			}
 

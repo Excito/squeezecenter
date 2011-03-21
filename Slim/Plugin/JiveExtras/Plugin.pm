@@ -2,14 +2,17 @@ package Slim::Plugin::JiveExtras::Plugin;
 
 # This plugin enables custom wallpapers and sound effects to be defined by the user
 # These appear on the settings menu on jive.  The wallpaper/sound file is either
-# a remote url or a local file which is servered via Slim::Web::HTTP::addRawDownload
+# a remote url or a local file which is servered via Slim::Web::Pages->addRawDownload
 
 use strict;
 
 use base qw(Slim::Plugin::Base);
 
 use Slim::Utils::Prefs;
-use Slim::Plugin::JiveExtras::Settings;
+
+if (!$::noweb) {
+	require Slim::Plugin::JiveExtras::Settings;
+}
 
 my $prefs = preferences('plugin.jiveextras');
 
@@ -20,20 +23,26 @@ sub initPlugin {
 
 	$class->SUPER::initPlugin;
 
-	Slim::Plugin::JiveExtras::Settings->new;
+	if (!$::noweb) {
+		Slim::Plugin::JiveExtras::Settings->new;
+	}
 
 	Slim::Control::Jive::registerExtensionProvider('jiveextras', \&getExtensions);
 
-	Slim::Web::HTTP::addRawDownload('^jive(wallpaper|sound)/', \&downloadFile, 'binary');
+	Slim::Web::Pages->addRawDownload('^jive(wallpaper|sound)/', \&downloadFile, 'binary');
 }
 
 sub getExtensions {
 	my $args = shift;
 
+	my $target = $args->{'target'};
+
 	my @res = ();
 	my $urlBase = 'http://' . Slim::Utils::Network::serverAddr() . ':' . $serverprefs->get('httpport') . "/jive$args->{type}";
 
 	for my $opt (@{ $prefs->get($args->{'type'}) || [] }) {
+
+		next if ($opt->{'target'} && $opt->{'target'} ne $target);
 
 		my $new = {
 			'name'  => $opt->{'key'},

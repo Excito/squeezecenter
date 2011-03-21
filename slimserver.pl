@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-# SqueezeCenter Copyright 2001-2009 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -16,15 +16,27 @@ use strict;
 use warnings;
 
 use constant SLIM_SERVICE => 0;
-use constant SCANNER => 0;
+use constant SCANNER      => 0;
+use constant RESIZER      => 0;
+use constant TRANSCODING  => ( grep { /--notranscoding/ } @ARGV ) ? 0 : 1;
+use constant PERFMON      => ( grep { /--perfwarn/ } @ARGV ) ? 1 : 0;
+use constant DEBUGLOG     => ( grep { /--no(?:debug|info)log/ } @ARGV ) ? 0 : 1;
+use constant INFOLOG      => ( grep { /--noinfolog/ } @ARGV ) ? 0 : 1;
+use constant SB1SLIMP3SYNC=> ( grep { /--nosb1slimp3sync/ } @ARGV ) ? 0 : 1;
+use constant ISWINDOWS    => ( $^O =~ /^m?s?win/i ) ? 1 : 0;
+use constant ISMAC        => ( $^O =~ /darwin/i ) ? 1 : 0;
+
+use Config;
+my %check_inc;
+$ENV{PERL5LIB} = join $Config{path_sep}, grep { !$check_inc{$_}++ } @INC;
 
 # This package section is used for the windows service version of the application, 
 # as built with ActiveState's PerlSvc
 package PerlSvc;
 
 our %Config = (
-	DisplayName => 'SqueezeCenter',
-	Description => "SqueezeCenter Music Server",
+	DisplayName => 'Squeezebox Server',
+	Description => "Squeezebox Server - streaming music server",
 	ServiceName => "squeezesvc",
 	StartNow    => 0,
 );
@@ -32,9 +44,9 @@ our %Config = (
 sub Startup {
 	# Tell PerlSvc to bundle these modules
 	if (0) {
-		require 'auto/Compress/Zlib/autosplit.ix';
+		require 'auto/Compress/Raw/Zlib/autosplit.ix';
 	}
-
+	
 	# added to workaround a problem with 5.8 and perlsvc.
 	# $SIG{BREAK} = sub {} if RunningAsService();
 	main::initOptions();
@@ -51,7 +63,6 @@ sub Install {
 	my($Username,$Password);
 
 	use Getopt::Long;
-	require Win32::Lanman;
 
 	Getopt::Long::GetOptions(
 		'username=s' => \$Username,
@@ -75,10 +86,8 @@ sub Install {
 		}
 
 		# configure user to be used to run the server
-		if ($host && $user 
-		&& Win32::Lanman::LsaLookupNames("\\\\$host", [$user], \@infos)
-		&& Win32::Lanman::LsaAddAccountRights("\\\\$host", ${$infos[0]}{sid}, [&Win32::Lanman::SE_SERVICE_LOGON_NAME])) {
-
+		my $grant = PerlSvc::extract_bound_file('grant.exe');
+		if ($host && $user && $grant && !`$grant add SeServiceLogonRight $user`) {
 			$Config{UserName} = "$host\\$user";
 			$Config{Password} = $Password;
 		}
@@ -104,7 +113,20 @@ package main;
 use FindBin qw($Bin);
 use lib $Bin;
 
+our @argv;
+
 BEGIN {
+	# With EV, only use select backend
+	# I have seen segfaults with poll, and epoll is not stable
+	$ENV{LIBEV_FLAGS} = 1;
+
+	# set the AnyEvent model to our subclassed version when PERFMON is enabled
+	$ENV{PERL_ANYEVENT_MODEL} = 'PerfMonEV' if main::PERFMON;
+	$ENV{PERL_ANYEVENT_MODEL} ||= 'EV';
+
+	# save argv
+	@argv = @ARGV;
+        
 	use Slim::bootstrap;
 	use Slim::Utils::OSDetect;
 
@@ -114,9 +136,10 @@ BEGIN {
 use File::Slurp;
 use Getopt::Long;
 use File::Spec::Functions qw(:ALL);
-use POSIX qw(:signal_h :errno_h :sys_wait_h setsid);
-use Socket qw(:DEFAULT :crlf);
+use POSIX qw(setsid);
 use Time::HiRes;
+use EV;
+use AnyEvent;
 
 # Force XML::Simple to use XML::Parser for speed. This is done
 # here so other packages don't have to worry about it. If we
@@ -137,7 +160,6 @@ if (!$@) {
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::Misc;
-use Slim::Utils::PerfMon;
 use Slim::Buttons::Common;
 use Slim::Buttons::Home;
 use Slim::Buttons::Power;
@@ -153,15 +175,17 @@ use Slim::Buttons::Input::Bar;
 use Slim::Buttons::Settings;
 use Slim::Player::Client;
 use Slim::Control::Request;
-use Slim::Display::Lib::Fonts;
 use Slim::Web::HTTP;
 use Slim::Hardware::IR;
 use Slim::Menu::TrackInfo;
+use Slim::Menu::AlbumInfo;
+use Slim::Menu::ArtistInfo;
+use Slim::Menu::GenreInfo;
+use Slim::Menu::YearInfo;
 use Slim::Menu::SystemInfo;
+use Slim::Menu::PlaylistInfo;
 use Slim::Music::Info;
 use Slim::Music::Import;
-use Slim::Music::MusicFolderScan;
-use Slim::Music::PlaylistFolderScan;
 use Slim::Utils::OSDetect;
 use Slim::Player::Playlist;
 use Slim::Player::Sync;
@@ -173,16 +197,28 @@ use Slim::Networking::Async::DNS;
 use Slim::Networking::Select;
 use Slim::Networking::SqueezeNetwork;
 use Slim::Networking::UDP;
-use Slim::Web::Setup;
 use Slim::Control::Stdio;
 use Slim::Utils::Strings qw(string);
 use Slim::Utils::Timers;
-use Slim::Utils::MySQLHelper;
+use Slim::Utils::Update;
 use Slim::Networking::Slimproto;
 use Slim::Networking::SimpleAsyncHTTP;
 use Slim::Utils::Firmware;
 use Slim::Control::Jive;
 use Slim::Formats::RemoteMetadata;
+
+if ( SB1SLIMP3SYNC ) {
+	require Slim::Player::SB1SliMP3Sync;
+}
+
+if ( DEBUGLOG ) {
+	require Data::Dump;
+	require Slim::Utils::PerlRunTime;
+}
+
+my $sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass();
+eval "use $sqlHelperClass";
+die $@ if $@;
 
 our @AUTHORS = (
 	'Sean Adams',
@@ -207,12 +243,13 @@ our @AUTHORS = (
 	'Richard Smith',
 	'Max Spicer',
 	'Dan Sully',
-	'Richard Titmuss'
+	'Richard Titmuss',
+	'Alan Young'
 );
 
 my $prefs        = preferences('server');
 
-our $VERSION     = '7.3.3';
+our $VERSION     = '7.4.0';
 our $REVISION    = undef;
 our $BUILDDATE   = undef;
 our $audiodir    = undef;
@@ -220,7 +257,6 @@ our $playlistdir = undef;
 our $httpport    = undef;
 
 our (
-	@argv,
 	$inInit,
 	$cachedir,
 	$user,
@@ -248,10 +284,14 @@ our (
 	$noserver,
 	$noupnp,
 	$noweb,     # used in scanner to prevent loading of Slim::Web::Pages etc.
+	$notranscoding,
+	$nodebuglog,
+	$noinfolog,
+	$nosb1slimp3sync,
 	$stdio,
 	$stop,
-	$perfmon,
 	$perfwarn,
+	$failsafe,
 	$checkstrings,
 	$charset,
 	$d_startup, # Needed for Slim::bootstrap
@@ -259,7 +299,17 @@ our (
 
 sub init {
 	$inInit = 1;
-
+	
+	# Can only have one of NYTPROF and Object-Leak at a time
+	if ( $ENV{OBJECT_LEAK} ) {
+		require Devel::Leak::Object;
+		Devel::Leak::Object->import(qw(GLOBAL_bless));
+		$SIG{USR2} = sub {
+			Devel::Leak::Object::status();
+			warn "Dumping objects...\n";
+		};
+	}
+	
 	# initialize the process and daemonize, etc...
 	srand();
 
@@ -267,7 +317,7 @@ sub init {
 
 	my $log = logger('server');
 
-	$log->error("Starting SqueezeCenter (v$VERSION, r$REVISION, $BUILDDATE)");
+	$log->error("Starting Squeezebox Server (v$VERSION, r$REVISION, $BUILDDATE) perl $]");
 
 	if ($diag) { 
 		eval "use diagnostics";
@@ -278,15 +328,15 @@ sub init {
 
 	Slim::Utils::OSDetect::init();
 
-	# initialize SqueezeCenter subsystems
+	# initialize Squeezebox Server subsystems
 	initSettings();
 
 	# Redirect STDERR to the log file.
 	tie *STDERR, 'Slim::Utils::Log::Trapper';
 
-	$log->info("SqueezeCenter OS Specific init...");
+	main::INFOLOG && $log->info("Squeezebox Server OS Specific init...");
 
-	unless (Slim::Utils::OSDetect::isWindows()) {
+	unless (main::ISWINDOWS) {
 		$SIG{'HUP'} = \&initSettings;
 	}		
 
@@ -303,7 +353,7 @@ sub init {
 	
 	# Start/stop profiler during runtime (requires Devel::NYTProf)
 	# and NYTPROF env var set to 'start=no'
-	if ( $INC{'Devel/NYTProf.pm'} && $ENV{NYTPROF} =~ /start=no/ ) {
+	if ( $ENV{NYTPROF} && $INC{'Devel/NYTProf.pm'} && $ENV{NYTPROF} =~ /start=no/ ) {
 		$SIG{USR1} = sub {
 			DB::enable_profile();
 			warn "Profiling enabled...\n";
@@ -316,9 +366,9 @@ sub init {
 	}
 
 	# background if requested
-	if (!Slim::Utils::OSDetect::isWindows() && $daemon) {
+	if (!main::ISWINDOWS && $daemon) {
 
-		$log->info("SqueezeCenter daemonizing...");
+		main::INFOLOG && $log->info("Squeezebox Server daemonizing...");
 		daemonize();
 
 	} else {
@@ -327,8 +377,8 @@ sub init {
 	}
 
 	# Change UID/GID after the pid & logfiles have been opened.
-	unless (Slim::Utils::OSDetect::getOS->dontSetUserAndGroup()) {
-		$log->info("SqueezeCenter settings effective user and group if requested...");
+	unless (Slim::Utils::OSDetect::getOS->dontSetUserAndGroup() || defined($user) eq "root") {
+		main::INFOLOG && $log->info("Squeezebox Server settings effective user and group if requested...");
 		changeEffectiveUserAndGroup();		
 	}
 
@@ -338,94 +388,122 @@ sub init {
 	} else {
 		Slim::Utils::Misc::setPriority( $prefs->get('serverPriority') );
 	}
+	
+	# Generate a UUID for this SC instance on first-run
+	if ( !$prefs->get('server_uuid') ) {
+		require UUID::Tiny;
+		$prefs->set( server_uuid => UUID::Tiny::create_UUID_as_string( UUID::Tiny::UUID_V4() ) );
+	}
 
-	$log->info("SqueezeCenter binary search path init...");
+	main::INFOLOG && $log->info("Squeezebox Server binary search path init...");
 	Slim::Utils::OSDetect::getOS->initSearchPath();
 
-	$log->info("SqueezeCenter strings init...");
+	# Find plugins and process any new ones now so we can load their strings
+	main::INFOLOG && $log->info("Squeezebox Server PluginManager init...");
+	Slim::Utils::PluginManager->init();
+
+	main::INFOLOG && $log->info("Squeezebox Server strings init...");
 	Slim::Utils::Strings::init();
 
-	$log->info("SqueezeCenter MySQL init...");
-	Slim::Utils::MySQLHelper->init();
+	if ( $sqlHelperClass ) {
+		main::INFOLOG && $log->info("Squeezebox Server SQL init...");
+		$sqlHelperClass->init();
+	}
 	
-	$log->info("Async DNS init...");
+	main::INFOLOG && $log->info("Async DNS init...");
 	Slim::Networking::Async::DNS->init;
 	
-	$log->info("Async HTTP init...");
+	main::INFOLOG && $log->info("Async HTTP init...");
 	Slim::Networking::Async::HTTP->init;
 	Slim::Networking::SimpleAsyncHTTP->init;
 	
-	$log->info("Firmware init...");
+	main::INFOLOG && $log->info("Firmware init...");
 	Slim::Utils::Firmware->init;
 
-	$log->info("SqueezeCenter Info init...");
+	main::INFOLOG && $log->info("Squeezebox Server Info init...");
 	Slim::Music::Info::init();
+	
+	# Load the relevant importers - necessary to ensure that Slim::Schema::init() is called.
+	if ($prefs->get('audiodir')) {
+		require Slim::Music::MusicFolderScan;
+		Slim::Music::MusicFolderScan->init();
+	}
+	if ($prefs->get('playlistdir')) {
+		require Slim::Music::PlaylistFolderScan;
+		Slim::Music::PlaylistFolderScan->init();
+	}
+	initClass('Slim::Plugin::iTunes::Importer') if Slim::Utils::PluginManager->isConfiguredEnabled('iTunes');
+	initClass('Slim::Plugin::MusicMagic::Importer') if Slim::Utils::PluginManager->isConfiguredEnabled('MusicMagic');
 
-	$log->info("SqueezeCenter IR init...");
+	main::INFOLOG && $log->info("Squeezebox Server IR init...");
 	Slim::Hardware::IR::init();
 
-	$log->info("SqueezeCenter Request init...");
+	main::INFOLOG && $log->info("Squeezebox Server Request init...");
 	Slim::Control::Request::init();
 	
-	$log->info("SqueezeCenter Buttons init...");
+	main::INFOLOG && $log->info("Squeezebox Server Buttons init...");
 	Slim::Buttons::Common::init();
 
-	$log->info("SqueezeCenter Graphic Fonts init...");
-	Slim::Display::Lib::Fonts::init();
-
 	if ($stdio) {
-		$log->info("SqueezeCenter Stdio init...");
+		main::INFOLOG && $log->info("Squeezebox Server Stdio init...");
 		Slim::Control::Stdio::init(\*STDIN, \*STDOUT);
 	}
 
-	$log->info("UDP init...");
+	main::INFOLOG && $log->info("UDP init...");
 	Slim::Networking::UDP::init();
 
-	$log->info("Slimproto Init...");
+	main::INFOLOG && $log->info("Slimproto Init...");
 	Slim::Networking::Slimproto::init();
 
-	$log->info("mDNS init...");
-	Slim::Networking::mDNS->init;
-
-	$log->info("Cache init...");
+	main::INFOLOG && $log->info("Cache init...");
 	Slim::Utils::Cache->init();
 	
-	$log->info("SqueezeNetwork Init...");
+	main::INFOLOG && $log->info("SqueezeNetwork Init...");
 	Slim::Networking::SqueezeNetwork->init();
 
 	unless ( $noupnp || $prefs->get('noupnp') ) {
-		$log->info("UPnP init...");
+		main::INFOLOG && $log->info("UPnP init...");
 		require Slim::Utils::UPnPMediaServer;
 		Slim::Utils::UPnPMediaServer::init();
 	}
 
-	$log->info("SqueezeCenter HTTP init...");
+	main::INFOLOG && $log->info("Squeezebox Server HTTP init...");
 	Slim::Web::HTTP::init();
 
-	$log->info("Source conversion init..");
-	Slim::Player::Source::init();
+	if (main::TRANSCODING) {
+		main::INFOLOG && $log->info("Source conversion init..");
+		require Slim::Player::TranscodingHelper;
+		Slim::Player::TranscodingHelper::init();
+	}
 
-	if (!$nosetup) {
+	if (!$nosetup && !$noweb) {
 
-		$log->info("SqueezeCenter Web Settings init...");
+		require Slim::Web::Setup;
+
+		main::INFOLOG && $log->info("Squeezebox Server Web Settings init...");
 		Slim::Web::Setup::initSetup();
 	}
 	
-	$log->info('Menu init...');
+	main::INFOLOG && $log->info('Menu init...');
 	Slim::Menu::TrackInfo->init();
+	Slim::Menu::AlbumInfo->init();
+	Slim::Menu::ArtistInfo->init();
+	Slim::Menu::GenreInfo->init();
+	Slim::Menu::YearInfo->init();
 	Slim::Menu::SystemInfo->init();
+	Slim::Menu::PlaylistInfo->init();
 
-	$log->info('SqueezeCenter Alarms init...');
+	main::INFOLOG && $log->info('Squeezebox Server Alarms init...');
 	Slim::Utils::Alarm->init();
 
 	# load plugins before Jive init so MusicIP hooks to cached artist/genre queries from Jive->init() will take root
-	$log->info("SqueezeCenter Plugins init...");
-	Slim::Utils::PluginManager->init();
+	main::INFOLOG && $log->info("Squeezebox Server Load Plugins...");
+	Slim::Utils::PluginManager->load();
 
-	$log->info("SqueezeCenter Jive init...");
+	main::INFOLOG && $log->info("Squeezebox Server Jive init...");
 	Slim::Control::Jive->init();
 	
-	$log->info("Remote Metadata init...");
+	main::INFOLOG && $log->info("Remote Metadata init...");
 	Slim::Formats::RemoteMetadata->init();
 
 	# Reinitialize logging, as plugins may have been added.
@@ -434,11 +512,11 @@ sub init {
 		Slim::Utils::Log->reInit;
 	}
 
-	$log->info("SqueezeCenter checkDataSource...");
+	main::INFOLOG && $log->info("Squeezebox Server checkDataSource...");
 	checkDataSource();
 
 	# regular server has a couple more initial operations.
-	$log->info("SqueezeCenter persist playlists...");
+	main::INFOLOG && $log->info("Squeezebox Server persist playlists...");
 
 	if ($prefs->get('persistPlaylists')) {
 
@@ -447,30 +525,45 @@ sub init {
 		);
 	}
 
+	# pull in the memory usage module if requested.
+	if (main::INFOLOG && logger('server.memory')->is_info) {
+		
+		Slim::bootstrap::tryModuleLoad('Slim::Utils::MemoryUsage');
+
+		if ($@) {
+
+			logError("Couldn't load Slim::Utils::MemoryUsage: [$@]");
+
+		} else {
+
+			Slim::Utils::MemoryUsage->init();
+		}
+	}
+
+	if ( main::PERFMON ) {
+		main::INFOLOG && $log->info("Squeezebox Server Perfwarn init...");
+		require Slim::Utils::PerfMon;
+		Slim::Utils::PerfMon->init($perfwarn);
+	}
+
 	Slim::Utils::Timers::setTimer(
 		undef,
 		time() + 30,
-		\&checkVersion,
+		\&Slim::Utils::Update::checkVersion,
 	);
 
-	$log->info("SqueezeCenter HTTP enable...");
+	main::INFOLOG && $log->info("Squeezebox Server HTTP enable...");
 	Slim::Web::HTTP::init2();
-
-	# advertise once we are ready...
-	$log->info("mDNS startAdvertising...");
-	Slim::Networking::mDNS->startAdvertising;
 
 	# otherwise, get ready to loop
 	$lastlooptime = Time::HiRes::time();
 	
 	$inInit = 0;
 
-	$log->info("SqueezeCenter done init...");
+	main::INFOLOG && $log->info("Squeezebox Server done init...");
 }
 
 sub main {
-	# save argv
-	@argv = @ARGV;
 	
 	# command line options
 	initOptions();
@@ -486,59 +579,46 @@ sub main {
 sub idle {
 	# No idle processing during startup
 	return if $inInit;
-	
-	my ($queuedIR, $queuedNotifications);
 
-	my $now = Time::HiRes::time();
+	my $now = EV::now;
 
 	# check for time travel (i.e. If time skips backwards for DST or clock drift adjustments)
-	if ( $now < $lastlooptime || ( $now - $lastlooptime > 300 ) ) {
-
-		# bug 10325 - only adjust timer when travelled back
-		# queue isn't influenced when travelling forward (eg. waking from suspend mode)
-		Slim::Utils::Timers::adjustAllTimers($now - $lastlooptime) if $now < $lastlooptime;
-		
+	if ( $now < $lastlooptime || ( $now - $lastlooptime > 300 ) ) {		
 		# For all clients that support RTC, we need to adjust their clocks
 		for my $client ( Slim::Player::Client::clients() ) {
 			if ( $client->hasRTCAlarm ) {
 				$client->setRTCTime;
 			}
 		}
-	} 
-
-	$lastlooptime = $now;
-
-	my $select_time = 0; # default to not waiting in select
-
-	# empty IR queue
-	if (!Slim::Hardware::IR::idle()) {
-
-		# empty notifcation queue
-		if (!Slim::Control::Request::checkNotifications()) {
-
-			my $timer_due = Slim::Utils::Timers::nextTimer();		
-
-			if (!defined($timer_due) || $timer_due > 0) {
-
-				# run scheduled task if no timers overdue
-				if (!Slim::Utils::Scheduler::run_tasks()) {
-
-					# set select time if no scheduled task
-					$select_time = $timer_due;
-
-					if (!defined $select_time || $select_time > 1) {
-						$select_time = 1
-					}
-				}
-			}
-		}
 	}
 
-	# call select and process any IO
-	Slim::Networking::Select::select($select_time);
-
-	# check the timers for any new tasks
-	Slim::Utils::Timers::checkTimers();
+	$lastlooptime = $now;
+	
+	# This flag indicates we have pending IR or request events to handle
+	my $pendingEvents = 0;
+	
+	# process IR queue
+	$pendingEvents = Slim::Hardware::IR::idle();
+	
+	if ( !$pendingEvents ) {
+		# empty notifcation queue, only if no IR events are pending
+		$pendingEvents = Slim::Control::Request::checkNotifications();
+		
+		if ( !main::SLIM_SERVICE && !$pendingEvents ) {
+			# run scheduled tasks, only if no other events are pending
+			# XXX: need a way to not call this unless someone is using Scheduler
+			Slim::Utils::Scheduler::run_tasks();
+		}
+	}
+	
+	if ( $pendingEvents ) {
+		# Some notifications are still pending, run the loop in non-blocking mode
+		Slim::Networking::IO::Select::loop( EV::LOOP_NONBLOCK );
+	}
+	else {
+		# No events are pending, run the loop until we get a select event
+		Slim::Networking::IO::Select::loop( EV::LOOP_ONESHOT );
+	}
 
 	return $::stop;
 }
@@ -549,28 +629,15 @@ sub idleStreams {
 	# No idle processing during startup
 	return if $inInit;
 	
-	my $select_time = 0;
-	my $check_timers = 1;
-	my $to;
-
-	if ($timeout) {
-		$select_time = Slim::Utils::Timers::nextTimer();
-		if ( !defined($select_time) || $select_time > $timeout ) {
-			$check_timers = 0;
-			$select_time = $timeout;
-		}
-	}
-
-	Slim::Networking::Select::select($select_time, 1);
-
-	if ( $check_timers ) {
-		Slim::Utils::Timers::checkTimers();
-	}
+	# Loop once without blocking
+	Slim::Networking::IO::Select::loop( EV::LOOP_NONBLOCK );
 }
 
 sub showUsage {
 	print <<EOF;
-Usage: $0 [--audiodir <dir>] [--playlistdir <dir>] [--diag] [--daemon] [--stdio] [--logfile <logfilepath>]
+Usage: $0 [--audiodir <dir>] [--playlistdir <dir>] [--diag] [--daemon] [--stdio]
+          [--logdir <logpath>]
+          [--logfile <logfilepath|syslog>]
           [--user <username>]
           [--group <groupname>]
           [--httpport <portnumber> [--httpaddr <listenip>]]
@@ -578,15 +645,18 @@ Usage: $0 [--audiodir <dir>] [--playlistdir <dir>] [--diag] [--daemon] [--stdio]
           [--priority <priority>]
           [--prefsdir <prefspath> [--pidfile <pidfilepath>]]
           [--perfmon] [--perfwarn=<threshold> | --perfwarn <warn options>]
-          [--checkstrings] [--charset <charset>] [--logging]
+          [--checkstrings] [--charset <charset>]
+          [--notranscoding] [--nosb1slimp3sync]
+          [--logging <logging-spec>] [--noinfolog | --nodebuglog]
 
     --help           => Show this usage information.
     --audiodir       => The path to a directory of your MP3 files.
     --playlistdir    => The path to a directory of your playlist files.
-    --cachedir       => Directory for SqueezeCenter to save cached music and web data
+    --cachedir       => Directory for Squeezebox Server to save cached music and web data
     --diag           => Use diagnostics, shows more verbose errors.
                         Also slows down library processing considerably
-    --logfile        => Specify a file for error logging.
+    --logdir         => Specify folder location for log file
+    --logfile        => Specify a file for error logging.  Specify 'syslog' to log to syslog.
     --noLogTimestamp => Don't add timestamp to log output
     --daemon         => Run the server in the background.
                         This may only work on Unix-like systems.
@@ -614,12 +684,17 @@ Usage: $0 [--audiodir <dir>] [--playlistdir <dir>] [--diag] [--daemon] [--stdio]
     --priority       => set process priority from -20 (high) to 20 (low)
     --streamaddr     => Specify the _server's_ IP address to use to connect
                         to streaming audio sources
+    --nodebuglog     => Disable all debug-level logging (compiled out).
+    --noinfolog      => Disable all debug-level & info-level logging (compiled out).
     --nosetup        => Disable setup via http.
     --noserver       => Disable web access server settings, but leave player settings accessible.
                         Settings changes are not preserved.
+    --nosb1slimp3sync=> Disable support for SliMP3s, SB1s and associated synchronization
+    --notranscoding  => Disable transcoding support.
     --noupnp         => Disable UPnP subsystem
     --perfmon        => Enable internal server performance monitoring
     --perfwarn       => Generate log messages if internal tasks take longer than specified threshold
+    --failsafe       => Don't load plugins
     --checkstrings   => Enable reloading of changed string files for plugin development
     --charset        => Force a character set to be used, eg. utf8 on Linux devices
                         which don't have full utf8 locale installed
@@ -662,11 +737,16 @@ sub initOptions {
 		'prefsfile=s'   => \$prefsfile,
 		# prefsdir is parsed by Slim::Utils::Prefs prior to initOptions being run
 		'quiet'	        => \$quiet,
+		'nodebuglog'    => \$nodebuglog,
+		'noinfolog'     => \$noinfolog,
 		'nosetup'       => \$nosetup,
 		'noserver'      => \$noserver,
 		'noupnp'        => \$noupnp,
-		'perfmon'       => \$perfmon,
-		'perfwarn=s'    => \$perfwarn,  # content parsed by Health plugin if loaded
+		'nosb1slimp3sync'=> \$nosb1slimp3sync,
+		'notranscoding' => \$notranscoding,
+		'noweb'         => \$noweb,
+		'failsafe'      => \$failsafe,
+		'perfwarn=s'    => \$perfwarn,  # content parsed by PerfMon if set
 		'checkstrings'  => \$checkstrings,
 		'charset=s'     => \$charset,
 		'd_startup'     => \$d_startup, # Needed for Slim::bootstrap
@@ -694,6 +774,18 @@ sub initLogging {
 	});
 }
 
+sub initClass {
+	my $class = shift;
+
+	Slim::bootstrap::tryModuleLoad($class);
+
+	if ($@) {
+		logError("Couldn't load $class: $@");
+	} else {
+		$class->initPlugin;
+	}
+}
+
 sub initSettings {
 
 	Slim::Utils::Prefs::init();
@@ -709,6 +801,7 @@ sub initSettings {
 	
 	if (defined($cachedir)) {
 		$prefs->set('cachedir', $cachedir);
+		$prefs->set('librarycachedir', $cachedir);
 	}
 	
 	if (defined($httpport)) {
@@ -751,8 +844,12 @@ sub initSettings {
 		$cachedir = Slim::Utils::Misc::fixPath($cachedir);
 		$cachedir = Slim::Utils::Misc::pathFromFileURL($cachedir);
 		$cachedir =~ s|[/\\]$||;
-
+		
+		# Make sure cachedir exists
+		Slim::Utils::Prefs::makeCacheDir($cachedir);
+		
 		$prefs->set('cachedir',$cachedir);
+		$prefs->set('librarycachedir',$cachedir);
 	}
 
 	Slim::Utils::Prefs::makeCacheDir();	
@@ -800,6 +897,7 @@ sub changeEffectiveUserAndGroup {
 			my $uname = getpwuid($>);
 			print STDERR "Current user is $uname\n";
 			print STDERR "Must run as root to change effective user or group.\n";
+
 			die "Aborting";
 
 		} else {
@@ -814,10 +912,10 @@ sub changeEffectiveUserAndGroup {
 
 	# Don't allow the server to be started as root.
 	# MySQL can't be run as root, and it's generally a bad idea anyways.
-	# Try starting as 'slimserver' instead.
+	# Try starting as 'squeezeboxserver' instead.
 	if (!defined($user)) {
-		$user = 'slimserver';
-		print STDERR "SqueezeCenter must not be run as root!  Trying user $user instead.\n";
+		$user = 'squeezeboxserver';
+		print STDERR "Squeezebox Server must not be run as root!  Trying user $user instead.\n";
 	}
 
 
@@ -854,8 +952,7 @@ sub changeEffectiveUserAndGroup {
 	# Check that we're definately not trying to start as root, e.g. if
 	# we were passed '--user root' or any other used with uid 0.
 	if ($uid == 0) {
-		print STDERR "SqueezeCenter must not be run as root! Exiting!\n";
-		die "Aborting";
+		print STDERR "Squeezebox Server must not be run as root! Only do this if you know what you're doing!!\n";
 	}
 
 
@@ -901,77 +998,14 @@ sub checkDataSource {
 		$prefs->set('audiodir',$audiodir);
 	}
 
+	return if !Slim::Schema::hasLibrary();
+
 	if (Slim::Schema->schemaUpdated || Slim::Schema->count('Track', { 'me.audio' => 1 }) == 0) {
 
 		logWarning("Schema updated or no tracks in the database, initiating scan.");
 
 		Slim::Control::Request::executeRequest(undef, ['wipecache']);
 	}
-}
-
-sub checkVersion {
-
-	if (!$prefs->get('checkVersion')) {
-
-		$newVersion = undef;
-		return;
-	}
-
-	my $lastTime = $prefs->get('checkVersionLastTime');
-	my $log      = logger('server.timers');
-
-	if ($lastTime) {
-
-		my $delta = Time::HiRes::time() - $lastTime;
-
-		if (($delta > 0) && ($delta < $prefs->get('checkVersionInterval'))) {
-
-			if ( $log->is_info ) {
-				$log->info(sprintf("Checking version in %s seconds",
-					($lastTime + $prefs->get('checkVersionInterval') + 2 - Time::HiRes::time())
-				));
-			}
-
-			Slim::Utils::Timers::setTimer(0, $lastTime + $prefs->get('checkVersionInterval') + 2, \&checkVersion);
-
-			return;
-		}
-	}
-
-	$log->info("Checking version now.");
-
-	my $url  = "http://"
-		. Slim::Networking::SqueezeNetwork->get_server("update")
-		. "/update/?version=$VERSION&lang=" . Slim::Utils::Strings::getLanguage();
-	my $http = Slim::Networking::SqueezeNetwork->new(\&checkVersionCB, \&checkVersionError);
-
-	# will call checkVersionCB when complete
-	$http->get($url);
-
-	$prefs->set('checkVersionLastTime', Time::HiRes::time());
-	Slim::Utils::Timers::setTimer(0, Time::HiRes::time() + $prefs->get('checkVersionInterval'), \&checkVersion);
-}
-
-# called when check version request is complete
-sub checkVersionCB {
-	my $http = shift;
-
-	# store result in global variable, to be displayed by browser
-	if ($http->{code} =~ /^2\d\d/) {
-		$::newVersion = Slim::Utils::Unicode::utf8decode( $http->content() );
-		chomp($::newVersion);
-	}
-	else {
-		$::newVersion = 0;
-		logWarning(sprintf(Slim::Utils::Strings::string('CHECKVERSION_PROBLEM'), $http->{code}));
-	}
-}
-
-# called only if check version request fails
-sub checkVersionError {
-	my $http = shift;
-
-	logError(Slim::Utils::Strings::string('CHECKVERSION_ERROR') . "\n" . $http->error);
 }
 
 sub forceStopServer {
@@ -983,35 +1017,49 @@ sub forceStopServer {
 # Clean up resources and exit.
 #
 sub stopServer {
+	my $restart = shift;
 
-	logger('')->info("SqueezeCenter shutting down.");
+	logger('')->info( 'Squeezebox Server ' . ($restart ? 'restarting...' : 'shutting down.') );
 	
 	$::stop = 1;
 	
 	cleanup();
+	
+	if ($restart 
+		&& Slim::Utils::OSDetect->getOS()->canRestartServer() 
+		&& !main::ISWINDOWS)
+	{
+		exec($^X, $0, @argv);
+	}
+
 	exit();
 }
 
 sub cleanup {
 	
-	if (Slim::Music::Import->stillScanning()) {
-		logger('')->info("Cancel running scanner.");
-		Slim::Music::Import->abortScan();
+	# Bug 11827, export tracks_persistent data for future use
+	if ($INC{'Slim/Schema/TrackPersistent.pm'}) {
+
+		my ($dir) = Slim::Utils::OSDetect::dirsFor('prefs');
+		logger('')->info("Exporting persistent track data to $dir");
+
+		Slim::Schema::TrackPersistent->export(
+			catfile( $dir, 'tracks_persistent.json' )
+		);	
 	}
 	
-	# Bug 11827, export tracks_persistent data for future use
-	my ($dir) = Slim::Utils::OSDetect::dirsFor('prefs');
-	logger('')->info("Exporting persistent track data to $dir");
-	Slim::Schema::TrackPersistent->export(
-		catfile( $dir, 'tracks_persistent.json' )
-	);	
-
-	logger('')->info("SqueezeCenter cleaning up.");
+	logger('')->info("Squeezebox Server cleaning up.");
 	
 	$::stop = 1;
 
 	# Make sure to flush anything in the database to disk.
 	if ($INC{'Slim/Schema.pm'} && Slim::Schema->storage) {
+
+		if (Slim::Music::Import->stillScanning()) {
+			logger('')->info("Cancel running scanner.");
+			Slim::Music::Import->abortScan();
+		}
+
 		Slim::Schema->forceCommit;
 		Slim::Schema->disconnect;
 	}
@@ -1020,14 +1068,12 @@ sub cleanup {
 
 	Slim::Utils::Prefs::writeAll();
 
-	Slim::Networking::mDNS->stopAdvertising;
-
 	if ($prefs->get('persistPlaylists')) {
 		Slim::Control::Request::unsubscribe(
 			\&Slim::Player::Playlist::modifyPlaylistCallback);
 	}
 
-	Slim::Utils::MySQLHelper->cleanup;
+	$sqlHelperClass->cleanup;
 
 	remove_pid_file();
 }
@@ -1035,7 +1081,7 @@ sub cleanup {
 sub save_pid_file {
 	my $process_id = shift || $$;
 
-	logger('')->info("SqueezeCenter saving pid file.");
+	logger('')->info("Squeezebox Server saving pid file.");
 
 	if (defined $pidfile) {
 		File::Slurp::write_file($pidfile, $process_id);

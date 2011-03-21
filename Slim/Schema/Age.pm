@@ -1,9 +1,11 @@
 package Slim::Schema::Age;
 
-# $Id: Age.pm 7620 2006-05-23 22:27:26Z dsully $
+# $Id: Age.pm 27975 2009-08-01 03:28:30Z andy $
 
 use strict;
 use base 'Slim::Schema::Album';
+
+use Slim::Schema::ResultSet::Age;
 
 use Slim::Utils::Misc;
 

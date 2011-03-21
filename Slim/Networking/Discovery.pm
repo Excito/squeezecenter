@@ -1,14 +1,13 @@
 package Slim::Networking::Discovery;
 
-# $Id: Discovery.pm 22939 2008-08-28 16:42:33Z andy $
+# $Id: Discovery.pm 28040 2009-08-04 13:17:54Z tom $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
 
 use strict;
-use IO::Socket;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -36,13 +35,23 @@ Return a 17 character hostname, suitable for display on a client device.
 =cut
 
 sub serverHostname {
-	my $hostname = Slim::Utils::Network::hostName();
+	my $hostname = $prefs->get('libraryname');
+	
+	if (!$hostname) {
+		$hostname = Slim::Utils::Network::hostName();
 
-	# may return several lines of hostnames, just take the first.	
-	$hostname =~ s/\n.*//;
-
-	# may return a dotted name, just take the first part
-	$hostname =~ s/\..*//;
+		# may return several lines of hostnames, just take the first.	
+		$hostname =~ s/\n.*//;
+	
+		# may return a dotted name, just take the first part
+		$hostname =~ s/\..*//;
+	}
+	
+	# Bug 13217, replace Unicode quote with ASCII version (commonly used in Mac server name)
+	$hostname =~ s/\x{2019}/'/g;
+	
+	# Hostname needs to be in ISO-8859-1 encoding to support the ip3k firmware font
+	$hostname = Slim::Utils::Unicode::encode('iso-8859-1', $hostname);
 
 	# just take the first 16 characters, since that's all the space we have 
 	$hostname = substr $hostname, 0, 16;
@@ -50,7 +59,7 @@ sub serverHostname {
 	# pad it out to 17 characters total
 	$hostname .= pack('C', 0) x (17 - (length $hostname));
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(" calculated $hostname length: " . length($hostname));
 	}
 
@@ -68,7 +77,7 @@ Send the client on the other end of the $udpsock a hello packet.
 sub sayHello {
 	my ($udpsock, $paddr) = @_;
 
-	$log->info(" Saying hello!");	
+	main::INFOLOG && $log->info(" Saying hello!");	
 
 	$udpsock->send( 'h'. pack('C', 0) x 17, 0, $paddr);
 }
@@ -84,39 +93,43 @@ sub gotDiscoveryRequest {
 
 	$revision = join('.', int($revision / 16), ($revision % 16));
 
-	$log->info("gotDiscoveryRequest: deviceid = $deviceid, revision = $revision, MAC = $mac");
+	main::INFOLOG && $log->info("gotDiscoveryRequest: deviceid = $deviceid, revision = $revision, MAC = $mac");
 
 	my $response = undef;
 
 	if ($deviceid == 1) {
 
-		$log->info("It's a SLIMP3 (note: firmware v2.2 always sends revision of 1.1).");
+		main::INFOLOG && $log->info("It's a SLIMP3 (note: firmware v2.2 always sends revision of 1.1).");
 
 		$response = 'D'. pack('C', 0) x 17; 
 
 	} elsif ($deviceid >= 2 || $deviceid <= 4) {  ## FIXME always true
 
-		$log->info("It's a Squeezebox");
+		main::INFOLOG && $log->info("It's a Squeezebox");
 
 		$response = 'D'. serverHostname(); 
 
 	} else {
 
-		$log->info("Unknown device.");
+		main::INFOLOG && $log->info("Unknown device.");
 	}
 
 	$udpsock->send($response, 0, $clientpaddr);
 
-	$log->info("gotDiscoveryRequest: Sent discovery response.");
+	main::INFOLOG && $log->info("gotDiscoveryRequest: Sent discovery response.");
 }
 
 my %TLVhandlers = (
 	# Requests
-	'NAME' => \&Slim::Utils::Network::hostName,        # send full host name - no truncation
+	'NAME' => sub { 
+		return $prefs->get('libraryname') || Slim::Utils::Network::hostName()
+	},											       # send full host name - no truncation
 	'IPAD' => sub { $::httpaddr },                     # send ipaddress as a string only if it is set
 	'JSON' => sub { $prefs->get('httpport') },         # send port as a string
+	'VERS' => sub { $::VERSION },			   # send server version
+	'UUID' => sub { $prefs->get('server_uuid') },	   # send server uuid
 	# Info only
-	'JVID' => sub { $log->is_info && $log->info("Jive: " . join(':', unpack( 'H2H2H2H2H2H2', shift))); return undef; },
+	'JVID' => sub { main::INFOLOG && $log->is_info && $log->info("Jive: " . join(':', unpack( 'H2H2H2H2H2H2', shift))); return undef; },
 );
 
 =head2 addTLVHandler( $hash )
@@ -153,7 +166,7 @@ sub gotTLVRequest {
 		return;
 	}
 
-	if ($log->is_debug) {
+	if (main::DEBUGLOG && $log->is_debug) {
 		$log->debug("discovery packet:" . Data::Dump::dump($msg));
 	}
 
@@ -170,7 +183,7 @@ sub gotTLVRequest {
 		$l = unpack("xxxxC", $msg);
 		$v = $l ? substr($msg, 5, $l) : undef;
 
-		$log->debug(" TLV: $t len: $l");
+		main::DEBUGLOG && $log->debug(" TLV: $t len: $l");
 
 		if ($TLVhandlers{$t}) {
 			if (my $r = $TLVhandlers{$t}->($v)) {
@@ -191,7 +204,7 @@ sub gotTLVRequest {
 		return;
 	}
 
-	$log->info("sending response");
+	main::INFOLOG && $log->info("sending response");
 
 	$udpsock->send($response, 0, $clientpaddr);
 }

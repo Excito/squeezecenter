@@ -152,6 +152,10 @@ function _init() {
 									this.playerStatus.rescan = response.result.rescan;
 									this.fireEvent('scannerupdate', response.result);
 								}
+								
+								if (response.result.lastscanfailed) {
+									this.showBriefly(response.result.lastscanfailed);
+								}
 							}
 						},
 			
@@ -198,7 +202,7 @@ function _init() {
 
 						// remember the selected player
 						if (playerobj.playerid)
-							SqueezeJS.setCookie('SqueezeCenter-player', playerobj.playerid);
+							SqueezeJS.setCookie('Squeezebox-player', playerobj.playerid);
 
 						this.player = playerobj.playerid;
 
@@ -468,7 +472,7 @@ function _init() {
 			if (response && response.result)
 				response = response.result;
 
-			activeplayer = activeplayer || SqueezeJS.getCookie('SqueezeCenter-player');
+			activeplayer = activeplayer || SqueezeJS.getCookie('Squeezebox-player');
 			if (response && response.players_loop) {
 				for (var x=0; x < response.players_loop.length; x++) {
 					if (response.players_loop[x].playerid == activeplayer || encodeURIComponent(response.players_loop[x].playerid) == activeplayer)
@@ -478,6 +482,10 @@ function _init() {
 		},
 
 		getPlayer : function(){
+			if (SqueezeJS.Controller.player == null)
+				return;
+			
+			SqueezeJS.Controller.player = SqueezeJS.Controller.player.replace(/%3A/gi, ':');
 			return SqueezeJS.Controller.player;
 		}
 	});
@@ -535,19 +543,13 @@ SqueezeJS.SonginfoParser = {
 		}
 	},
 
-	title : function(result, noLink, noRemoteTitle, noTrackNo){
+	title : function(result, noLink, noTrackNo){
 		var title;
 		var link;
 		var id;
 
 		if (result.playlist_tracks > 0) {
-			if (result.current_title) 
-				title = result.current_title;
-	
-			else if (result.playlist_loop[0].remote_title && !noRemoteTitle)
-				title = result.playlist_loop[0].remote_title;
-	
-			else if (noTrackNo)
+			if (noTrackNo)
 				title = result.playlist_loop[0].title;
 
 			else
@@ -567,7 +569,7 @@ SqueezeJS.SonginfoParser = {
 		});
 	},
 
-	album : function(result, noLink){
+	album : function(result, noLink, noRemoteTitle){
 		var album = '';
 		var id = null;
 
@@ -579,8 +581,11 @@ SqueezeJS.SonginfoParser = {
 				album = result.playlist_loop[0].album;
 			}
 	
-			else if (result.playlist_loop[0].remote_title && result.playlist_loop[0].title)
-				album = result.playlist_loop[0].title;
+			else if (result.playlist_loop[0].remote_title && !noRemoteTitle)
+				album = result.playlist_loop[0].remote_title;
+	
+			else if (result.current_title) 
+				album = result.current_title;
 		}
 
 		return this.tpl[((noLink || id == null) ? 'raw' : 'linked')].album.apply({
@@ -651,7 +656,7 @@ SqueezeJS.SonginfoParser = {
 
 	coverart : function(result, noLink, width){
 		var coverart = this.defaultCoverart(0, width);
-		var id = 0;
+		var id = -1;
 		var link;
 
 		if (result.playlist_tracks > 0) {
@@ -663,7 +668,7 @@ SqueezeJS.SonginfoParser = {
 			}
 		}
 
-		return this.tpl[((noLink || id == null) ? 'raw' : 'linked')].coverart.apply({
+		return this.tpl[((noLink || id == null || id < 0) ? 'raw' : 'linked')].coverart.apply({
 			id: id,
 			src: coverart,
 			width: width ? 'width="' + width + '"' : '',

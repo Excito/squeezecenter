@@ -148,13 +148,13 @@ img#background {
 	position: absolute;
 }
 
-#squeezeCenterLogo {
+#squeezeboxLogo {
 	position: absolute;
 	top: 15px;
 	left: 20px;
 	height: 40px;
 	width: 144px;
-	background: url(html/images/squeezecenter.gif) no-repeat;
+	background: url(html/images/squeezebox_server.png) no-repeat;
 }
 
 #logitechLogo {
@@ -441,7 +441,7 @@ div.pagetitleWithIcon {
 }
 
 
-.disclosure_home {
+.disclosure_home, .disclosure_repos {
 	width: 14px;
 	height: 11px;
 	background: transparent url(html/images/disclosure_home.gif) no-repeat 0 0;
@@ -891,6 +891,7 @@ form#advSearchForm.resultsPage {
 #ctrlVolume, #ctrlVolume img {
 	width: 91px;
 	height: 22px;
+	cursor: pointer;
 }
 
 #ctrlVolume {
@@ -935,6 +936,7 @@ form#advSearchForm.resultsPage {
 	height: 12px;
 	margin: 2px 100px 0 40px;
 	overflow: hidden;
+	cursor: pointer;
 }
 
 #ctrlProgress img {
@@ -1162,6 +1164,10 @@ body.settingsMenu {
 	padding: 0 22px;
 	margin-bottom: 15px;
 	margin-top: 15px;
+}
+
+.settingsSmallIndention .settingSection {
+	padding-left: 18px;
 }
 
 .settingSection p {

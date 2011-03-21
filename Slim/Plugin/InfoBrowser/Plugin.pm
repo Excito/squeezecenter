@@ -1,11 +1,11 @@
 package Slim::Plugin::InfoBrowser::Plugin;
 
-# InfoBrowser - an extensible information parser for SqueezeCenter 7.0
+# InfoBrowser - an extensible information parser for Squeezebox Server 7.0
 #
-# $Id: Plugin.pm 23849 2008-11-07 23:24:32Z adrian $
+# $Id: Plugin.pm 27975 2009-08-01 03:28:30Z andy $
 #
-# InfoBrowser provides a framework to use SqueezeCenter's xmlbrowser to fetch remote content and convert it into a format
-# which can be displayed via the SqueezeCenter web interface, cli for jive or another cli client or via the player display.
+# InfoBrowser provides a framework to use Squeezebox Server's xmlbrowser to fetch remote content and convert it into a format
+# which can be displayed via the Squeezebox Server web interface, cli for jive or another cli client or via the player display.
 #
 # The top level menu is defined by an opml file stored in playlistdir or cachedir.  It is created dynamically from any opml
 # files found in the plugin dir (Slim/Plugin/InfoBrowser) and the Addon dir (Plugins/InfoBrowserAddons) and any of their subdirs.
@@ -44,7 +44,7 @@ use strict;
 
 use base qw(Slim::Plugin::Base);
 
-use File::Spec::Functions qw(:ALL);
+use File::Spec::Functions qw(catdir);
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -58,10 +58,11 @@ my $log = Slim::Utils::Log->addLogCategory({
 	'description'  => getDisplayName(),
 });
 
-if ( !main::SLIM_SERVICE ) {
+if ( !main::SLIM_SERVICE && !$::noweb ) {
  	require Slim::Plugin::InfoBrowser::Settings;
 }
 
+my $prefs = preferences('plugin.infobrowser');
 my $prefsServer = preferences('server');
 
 my $menuUrl;    # menu fileurl location
@@ -70,19 +71,18 @@ my @searchDirs; # search directories for menu opml files
 sub initPlugin {
 	my $class = shift;
 
-	if ( !main::SLIM_SERVICE ) {
+	if ( !main::SLIM_SERVICE && !$::noweb ) {
 		Slim::Plugin::InfoBrowser::Settings->new($class);
 	}
-
-	$class->SUPER::initPlugin;
 
 	if ( !main::SLIM_SERVICE ) {
 		$menuUrl    = $class->_menuUrl;
 		@searchDirs = $class->_searchDirs;
 		
-		Slim::Plugin::InfoBrowser::Settings->importNewMenuFiles;
+		$class->importNewMenuFiles;
 	}
-	
+
+	$class->SUPER::initPlugin;
 
 	Slim::Control::Request::addDispatch(['infobrowser', 'items', '_index', '_quantity'],
 		[0, 1, 1, \&cliQuery]);
@@ -137,6 +137,74 @@ sub cliQuery {
 	Slim::Control::XMLBrowser::cliQuery('infobrowser', $menuUrl, $request);
 }
 
+
+sub importNewMenuFiles {
+	my $class = shift;
+	my $clear = shift;
+
+	my $imported = $prefs->get('imported');
+
+	if (!defined $imported || $clear) {
+		$imported = {};
+		$clear = 'clear';
+	}
+
+	main::INFOLOG && $log->info($clear ? "clearing old menu" : "searching for new menu files to import");
+
+	my @files = ();
+	my $iter  = File::Next::files(
+		{ 
+			'file_filter' => sub { /\.opml$/ }, 
+			'descend_filter' => sub { $_ ne 'HTML' } 
+		}, 
+		$class->searchDirs
+	);
+
+	while (my $file = $iter->()) {
+		if ( !$imported->{ $file } ) {
+			push @files, $file;
+			$imported->{ $file } = 1;
+		}
+	}
+
+	if (@files) {
+		$class->_import($clear, \@files);
+		$prefs->set('imported', $imported);
+	}
+}
+
+sub _import {
+	my $class = shift;
+	my $clear = shift;
+	my $files = shift;
+	
+	my $menuOpml = Slim::Plugin::Favorites::Opml->new({ 'url' => $class->menuUrl });
+
+	if ($clear) {
+		splice @{$menuOpml->toplevel}, 0;
+	}
+
+	for my $file (sort @$files) {
+
+		main::INFOLOG && $log->info("importing $file");
+	
+		my $import = Slim::Plugin::Favorites::Opml->new({ 'url' => $file });
+
+		if ($import->title =~ /Default/) {
+			# put these at the top of the list
+			for my $entry (reverse @{$import->toplevel}) {
+				unshift @{ $menuOpml->toplevel }, $entry;
+			}
+		} else {
+			for my $entry (@{$import->toplevel}) {
+				push @{ $menuOpml->toplevel }, $entry;
+			}
+		}
+	}
+
+	$menuOpml->save;
+}
+
 sub searchDirs {
 	return @searchDirs;
 }
@@ -161,7 +229,7 @@ sub _menuUrl {
 	if (-r $file) {
 
 		if (-w $file) {
-			$log->info("infobrowser menu file: $file");
+			main::INFOLOG && $log->info("infobrowser menu file: $file");
 
 		} else {
 			$log->warn("unable to write to infobrowser menu file: $file");
@@ -169,13 +237,13 @@ sub _menuUrl {
 
 	} else {
 
-		$log->info("creating infobrowser menu file: $file");
+		main::INFOLOG && $log->info("creating infobrowser menu file: $file");
 
 		my $newopml = Slim::Plugin::Favorites::Opml->new;
 		$newopml->title(Slim::Utils::Strings::string('PLUGIN_INFOBROWSER'));
 		$newopml->save($file);
 
-		Slim::Plugin::InfoBrowser::Settings->importNewMenuFiles('clear');
+		$class->importNewMenuFiles('clear');
 	}
 
 	return $menuUrl;
@@ -190,6 +258,8 @@ sub _searchDirs {
 	my @pluginDirs = Slim::Utils::OSDetect::dirsFor('Plugins');
 
 	for my $dir (@pluginDirs) {
+
+		next unless -d $dir;
 
 		opendir(DIR, $dir);
 

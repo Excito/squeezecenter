@@ -2,7 +2,7 @@ package Slim::Formats::Playlists::PLS;
 
 # $Id
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -31,7 +31,7 @@ sub read {
 	my @items  = ();
 	my $data   = '';
 
-	$log->info("Parsing: $url");
+	main::INFOLOG && $log->info("Parsing: $url");
 
 	# Bug: 3697 - Haven't seen pls files used on disk (or at least with
 	# multiple encodings perl file), but have seen UTF-16 playlists on
@@ -54,7 +54,7 @@ sub read {
 
 	for my $line (split(/\n/, $data)) {
 
-		$log->debug("Parsing line: $line");
+		main::DEBUGLOG && $log->debug("Parsing line: $line");
 
 		# strip carriage return from dos playlists
 		$line =~ s/\cM//g;
@@ -95,10 +95,10 @@ sub read {
 sub write {
 	my $class        = shift;
 	my $listRef      = shift;
-	my $playlistname = shift || "SqueezeCenter " . Slim::Utils::Strings::string("PLAYLIST");
+	my $playlistname = shift || "Squeezebox " . Slim::Utils::Strings::string("PLAYLIST");
 	my $filename     = shift;
 
-	$log->info("Writing out: $filename");
+	main::INFOLOG && $log->info("Writing out: $filename");
 
 	my $string  = '';
 	my $output  = $class->_filehandleFromNameOrString($filename, \$string) || return;
@@ -110,7 +110,7 @@ sub write {
 
 		$itemnum++;
 
-		my $track = Slim::Schema->rs('Track')->objectForUrl($item);
+		my $track = Slim::Schema->objectForUrl($item);
 
 		if (!blessed($track) || !$track->can('title')) {
 

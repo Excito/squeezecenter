@@ -1,6 +1,6 @@
 package Slim::Plugin::Favorites::Settings;
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,11 +13,11 @@ use Slim::Utils::Prefs;
 my $prefs = preferences('plugin.favorites');
 
 sub name {
-	return Slim::Web::HTTP::protectName('FAVORITES');
+	return Slim::Web::HTTP::CSRF->protectName('FAVORITES');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('plugins/Favorites/settings/basic.html');
+	return Slim::Web::HTTP::CSRF->protectURI('plugins/Favorites/settings/basic.html');
 }
 
 sub prefs {

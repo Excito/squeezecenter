@@ -2,7 +2,7 @@ package Slim::Plugin::MusicMagic::Importer;
 
 # $Id$
 
-# SqueezeCenter Copyright 2001-2007 Logitech
+# Squeezebox Server Copyright 2001-2009 Logitech
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -10,7 +10,7 @@ package Slim::Plugin::MusicMagic::Importer;
 use strict;
 
 use File::Spec::Functions qw(:ALL);
-use LWP::Simple;
+use LWP::UserAgent;
 use Scalar::Util qw(blessed);
 use Socket qw($LF);
 
@@ -27,10 +27,7 @@ use Slim::Utils::Versions;
 
 my $initialized = 0;
 my $MMMVersion  = 0;
-my $MMSHost;
 my $MMSport;
-
-my $isWin = Slim::Utils::OSDetect::isWindows();
 
 my $log = Slim::Utils::Log->addLogCategory({
 	'category'     => 'plugin.musicip',
@@ -71,7 +68,7 @@ sub useMusicMagic {
 
 	Slim::Music::Import->useImporter($class, $use);
 
-	$log->info("Using musicip: $use");
+	main::INFOLOG && $log->info("Using musicip: $use");
 
 	return $use;
 }
@@ -90,18 +87,17 @@ sub initPlugin {
 	Slim::Plugin::MusicMagic::Common::checkDefaults();
 
 	$MMSport = $prefs->get('port');
-	$MMSHost = $prefs->get('host');
 
-	$log->info("Testing for API on $MMSHost:$MMSport");
-
-	my $initialized = get("http://$MMSHost:$MMSport/api/version");
+	main::INFOLOG && $log->info("Testing for API on localhost:$MMSport");
+	
+	my $initialized = get( "http://localhost:$MMSport/api/version", 5 );
 
 	if (defined $initialized) {
 
 		# Note: Check version restrictions if any
 		chomp($initialized);
 
-		$log->info($initialized);
+		main::INFOLOG && $log->info($initialized);
 
 		($MMMVersion) = ($initialized =~ /Version ([\d\.]+)$/);
 
@@ -117,12 +113,12 @@ sub initPlugin {
 
 		$initialized = 0;
 
-		$log->info("Cannot Connect");
+		main::INFOLOG && $log->info("Cannot Connect");
 	}
 
 	# supported file formats differ on platforms
 	# http://www.musicip.com/mixer/mixerfaq.jsp#1
-	if ($isWin) {
+	if (main::ISWINDOWS) {
 		@supportedFormats = ('alc', 'm4a', 'mp3', 'wma', 'ogg', 'flc', 'wav');
 	}
 	elsif (Slim::Utils::OSDetect::OS() eq 'mac') {
@@ -137,7 +133,7 @@ sub initPlugin {
 
 sub resetState {
 
-	$log->debug("Resetting Last Library Change Time.");
+	main::DEBUGLOG && $log->debug("Resetting Last Library Change Time.");
 
 	Slim::Music::Import->setLastScanTime('MMMLastLibraryChange', 0);
 }
@@ -149,7 +145,7 @@ sub startScan {
 		return;
 	}
 		
-	$log->debug("Start export");
+	main::DEBUGLOG && $log->debug("Start export");
 
 	if (Slim::Music::Import->scanPlaylistsOnly) {
 
@@ -166,9 +162,9 @@ sub startScan {
 sub doneScanning {
 	my $class = shift;
 
-	$log->info("Done Scanning");
+	main::INFOLOG && $log->info("Done Scanning");
 
-	my $lastDate = get("http://$MMSHost:$MMSport/api/cacheid?contents");
+	my $lastDate = get("http://localhost:$MMSport/api/cacheid?contents");
 
 	if ($lastDate) {
 
@@ -184,7 +180,6 @@ sub exportFunction {
 	my $class = shift;
 
 	$MMSport = $prefs->get('port') unless $MMSport;
-	$MMSHost = $prefs->get('host') unless $MMSHost;
 
 	$class->exportSongs;
 	$class->exportPlaylists;
@@ -197,16 +192,16 @@ sub exportSongs {
 	my $fullRescan = $::wipe ? 1 : 0;
 
 	if ($fullRescan == 1 || $prefs->get('musicip') == 1) {
-		$log->info("MusicIP mixable status full scan");
+		main::INFOLOG && $log->info("MusicIP mixable status full scan");
 
-		my $count = get("http://$MMSHost:$MMSport/api/getSongCount");
+		my $count = get("http://localhost:$MMSport/api/getSongCount");
 		if ($count) {
 			# convert to integer
 			chomp($count);
 			$count += 0;
 		}
 
-		$log->info("Got $count song(s).");
+		main::INFOLOG && $log->info("Got $count song(s).");
 
 		my $progress = Slim::Utils::Progress->new({ 
 			'type'  => 'importer', 
@@ -219,10 +214,10 @@ sub exportSongs {
 		# down the entire library, separated by $LF$LF - this allows us to make
 		# 1 HTTP request, and the process the file.
 		if (Slim::Utils::Versions->compareVersions($MMMVersion, '1.5') >= 0) {
-			$log->info("Fetching ALL song data via songs/extended..");
+			main::INFOLOG && $log->info("Fetching ALL song data via songs/extended..");
 
-			my $MMMSongData = catdir( preferences('server')->get('cachedir'), 'mmm-song-data.txt' );
-			my $MMMDataURL  = "http://$MMSHost:$MMSport/api/songs?extended";
+			my $MMMSongData = catdir( preferences('server')->get('librarycachedir'), 'mmm-song-data.txt' );
+			my $MMMDataURL  = "http://localhost:$MMSport/api/songs?extended";
 
 			getstore($MMMDataURL, $MMMSongData);
 
@@ -236,7 +231,7 @@ sub exportSongs {
 				return;
 			};
 
-			$log->info("Finished fetching - processing.");
+			main::INFOLOG && $log->info("Finished fetching - processing.");
 
 			local $/ = "$LF$LF";
 
@@ -258,7 +253,7 @@ sub exportSongs {
 			unlink($MMMSongData);
 		} else {
 			for (my $scan = 0; $scan <= $count; $scan++) {
-				my $content = get("http://$MMSHost:$MMSport/api/getSong?index=$scan");
+				my $content = get("http://localhost:$MMSport/api/getSong?index=$scan");
 
 				$class->processSong($content, $progress);
 			}
@@ -267,7 +262,7 @@ sub exportSongs {
 		$progress->final($count) if $progress;
 	}
 	else {
-		$log->info("MusicIP mixable status scan for all songs not currently mixable");
+		main::INFOLOG && $log->info("MusicIP mixable status scan for all songs not currently mixable");
 
 		my @notMixableTracks = Slim::Schema->rs('Track')->search({
 			'audio' => '1', 
@@ -277,7 +272,7 @@ sub exportSongs {
 		});
 
 		my $count = @notMixableTracks;
-		$log->info("Got $count song(s).");
+		main::INFOLOG && $log->info("Got $count song(s).");
 
 		my $progress = Slim::Utils::Progress->new({ 
 			'type'  => 'importer', 
@@ -289,7 +284,7 @@ sub exportSongs {
 		for my $track (@notMixableTracks) {
 			my $trackurl = $track->url;
 
-			$log->debug("trackurl: $trackurl");
+			main::DEBUGLOG && $log->debug("trackurl: $trackurl");
 
 			# Convert $track->url to a path and call MusicIP
 			my $path = Slim::Utils::Misc::pathFromFileURL($trackurl);
@@ -297,13 +292,13 @@ sub exportSongs {
 			my $pathEnc = Slim::Plugin::MusicMagic::Common::escape($path);
 
 			# Set musicmagic_mixable on $track object and call $track->update to actually store it.
-			my $result = get("http://$MMSHost:$MMSport/api/status?song=$pathEnc");
+			my $result = get("http://localhost:$MMSport/api/status?song=$pathEnc");
 
 			if ($result =~ /^(\w+)\s+(.*)/) {
 
 				my $mixable = $1;
 				if ($mixable eq 1) {
-					$log->debug("track: $path is mixable");
+					main::DEBUGLOG && $log->debug("track: $path is mixable");
 					$class->setSongMixable($track);
 				}
 				else {
@@ -347,14 +342,14 @@ sub setMixable {
 	if ($active eq 'yes') {
 		my $fileurl = Slim::Utils::Misc::fileURLFromPath($file);
 	
-		my $track = Slim::Schema->rs('Track')->objectForUrl($fileurl)
+		my $track = Slim::Schema->objectForUrl($fileurl)
 		|| do {
 			$log->warn("Couldn't get track for $fileurl");
 			$progress->update($file);
 			return;
 		};
 
-		$log->debug("track: $file is mixable");
+		main::DEBUGLOG && $log->debug("track: $file is mixable");
 		$class->setSongMixable($track);
 	}
 
@@ -417,7 +412,7 @@ sub processSong {
 	# This breaks Linux however, so only do it on Windows & OS X
 	my @keys  = qw(album artist genre name);
 
-	if ($isWin) {
+	if (main::ISWINDOWS) {
 
 		push @keys, 'file';
 	}
@@ -441,11 +436,11 @@ sub processSong {
 	# need conversion to the current charset.
 	$songInfo{'file'} = Slim::Utils::Unicode::utf8encode_locale($songInfo{'file'});
 
-	$log->debug("Exporting song: $songInfo{'file'}");
+	main::DEBUGLOG && $log->debug("Exporting song: $songInfo{'file'}");
 
 	my $fileurl = Slim::Utils::Misc::fileURLFromPath($songInfo{'file'});
 
-	my $track   = Slim::Schema->rs('Track')->updateOrCreate({
+	my $track   = Slim::Schema->updateOrCreate({
 
 		'url'        => $fileurl,
 		'attributes' => \%attributes,
@@ -484,7 +479,7 @@ sub processSong {
 sub exportPlaylists {
 	my $class = shift;
 
-	my @playlists = split(/\n/, get("http://$MMSHost:$MMSport/api/playlists"));
+	my @playlists = split(/\n/, get("http://localhost:$MMSport/api/playlists"));
 
 	if (!scalar @playlists) {
 		return;
@@ -507,10 +502,10 @@ sub exportPlaylists {
 
 		my $listname = Slim::Plugin::MusicMagic::Common::decode($playlists[$i]);
 
-		my $playlist = get("http://$MMSHost:$MMSport/api/getPlaylist?index=$i") || next;
+		my $playlist = get("http://localhost:$MMSport/api/getPlaylist?index=$i") || next;
 		my @songs    = split(/\n/, $playlist);
 
-		if ( $log->is_info ) {
+		if ( main::INFOLOG && $log->is_info ) {
 			$log->info(sprintf("Got playlist %s with %d items", $listname, scalar @songs));
 		}
 		
@@ -527,13 +522,13 @@ sub exportDuplicates {
 		return;
 	}
 
-	$log->info("Checking for duplicates.");
+	main::INFOLOG && $log->info("Checking for duplicates.");
 
-	my @songs = split(/\n/, get("http://$MMSHost:$MMSport/api/duplicates"));
+	my @songs = split(/\n/, get("http://localhost:$MMSport/api/duplicates"));
 
 	$class->_updatePlaylist(string('MUSICIP_DUPLICATES'), \@songs);
 
-	if ( $log->is_info ) {
+	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf("Finished export (%d records)", scalar @songs));
 	}
 }
@@ -559,13 +554,11 @@ sub _updatePlaylist {
 
 	for my $song (@$songs) {
 
-		if ($isWin) {
-			$song = Slim::Plugin::MusicMagic::Common::decode($song);
+		if (main::ISWINDOWS) {
+			$song = Slim::Utils::Unicode::utf8encode_locale($song);
 		}
 
-		$song = Slim::Utils::Misc::fileURLFromPath(
-			Slim::Plugin::MusicMagic::Common::convertPath($song)
-		);
+		$song = Slim::Utils::Misc::fileURLFromPath($song);
 
 		push @{$attributes{'LIST'}}, $song;
 	}
@@ -576,6 +569,39 @@ sub _updatePlaylist {
 	$attributes{'MUSICMAGIC_MIXABLE'} = 1;
 
 	Slim::Music::Info::updateCacheEntry($url, \%attributes);
+}
+
+# Emulate LWP::Simple with an optional timeout
+sub get {
+	my $url     = shift;
+	my $timeout = shift || 60;
+	
+	my $ua = LWP::UserAgent->new(
+		timeout => $timeout,
+	);
+	
+	my $res = $ua->get($url);
+	
+	if ( $res->is_success ) {
+		return $res->content;
+	}
+	
+	return;
+}
+
+# Emulate LWP::Simple
+sub getstore {
+	my ( $url, $file, $timeout ) = @_;
+	
+	$timeout ||= 60;
+	
+	my $ua = LWP::UserAgent->new(
+		timeout => $timeout,
+	);
+	
+	my $res = $ua->get( $url, ':content_file' => $file );
+	
+	return $res->code;
 }
 
 1;

@@ -1,6 +1,6 @@
 package Slim::Plugin::LineIn::Plugin;
 
-# SqueezeCenter Copyright 2001-2008 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -37,7 +37,7 @@ sub getDisplayName {
 sub initPlugin {
 	my $class = shift;
 
-	$log->info("Initializing");
+	main::INFOLOG && $log->info("Initializing");
 	
 	$class->SUPER::initPlugin();
 
@@ -59,6 +59,10 @@ sub initPlugin {
 	[1, 0, 1, \&lineInLevelCommand]);
 	Slim::Control::Request::addDispatch(['setlinein', '_which'],
 	[1, 0, 0, \&setLineIn]);
+
+	if ( !main::SLIM_SERVICE ) {
+		Slim::Web::Pages->addPageLinks("icons", { $class->getDisplayName() => $class->_pluginDataFor('icon') });
+	}
 }
 
 # Called every time Jive main menu is updated after a player switch with $notify set to 0
@@ -97,6 +101,12 @@ sub lineInItem {
 	if ($notify) {
 		if ($client->lineInConnected) {
 			Slim::Control::Request::notifyFromArray( $client, [ 'menustatus', [ $lineInItem ], 'add',    $client->id() ] );
+			$client->showBriefly({
+				'jive' => {
+					type    => 'icon',
+					style   => 'lineIn',
+				},
+			});
 		} else {
 			Slim::Control::Request::notifyFromArray( $client, [ 'menustatus', [ $lineInItem ], 'remove', $client->id() ] );
 		}
@@ -192,16 +202,6 @@ sub lineInLevelCommand {
 	my $value   = $request->getParam('value');
 
 	$prefs->client($client)->set('lineInLevel', $value);
-
-	my $string = $client->string("LINE_IN_LEVEL") . ": " . $value;
-
-	$client->showBriefly({
-		'jive' => {
-			type    => 'popupplay',
-			text    => [ $string ],
-		}
-	});
-
 	$request->setStatusDone();
 }
 
@@ -271,10 +271,10 @@ sub updateLineIn {
 	$name =~ s/[{}]//g;
 	$name = $client->string($name);
 
-	$log->info("Calling addtracks on [$name] ($url)");
+	main::INFOLOG && $log->info("Calling addtracks on [$name] ($url)");
 
 	# Create an object in the database for this meta source: url.
-	my $obj = Slim::Schema->rs('Track')->updateOrCreate({
+	my $obj = Slim::Schema->updateOrCreate({
 		'url'        => $url,
 		'create'     => 1,
 		'readTags'   => 0,
@@ -307,8 +307,14 @@ sub updateLineIn {
 			$client->controller()->unsync($client);	
 		}
 
-		$client->execute([ 'playlist', 'inserttracks', 'listRef', [ $obj ] ]);
-		$client->execute([ 'playlist', 'index', '+1' ]);	
+		
+		# Remove it first if it is already there
+		$client->execute([ 'playlist', 'deleteitem', $line_in->{'url'} ] );
+		
+		# Bug 11809: get the index of the inserted track from the request result, rather than using skip
+		my $request = Slim::Control::Request->new($client->id, [ 'playlist', 'inserttracks', 'listRef', [ $obj ] ]);
+		$request->execute();
+		$client->execute([ 'playlist', 'index', $request->getResult('index') ]);	
 	}
 }
 
@@ -349,9 +355,8 @@ sub webPages {
 	} else {
 		Slim::Web::Pages->addPageLinks("plugins", { 'PLUGIN_LINE_IN' => undef });
 	}
-	Slim::Web::Pages->addPageLinks("icons", { $class->getDisplayName() => $class->_pluginDataFor('icon') });
 
-	Slim::Web::HTTP::addPageFunction($url, \&handleSetting);
+	Slim::Web::Pages->addPageFunction($url, \&handleSetting);
 }
 
 sub handleSetting {
@@ -376,7 +381,7 @@ sub _liosCallback {
 	
 	my $enabled = $request->getParam('_state');
 	
-	$log->debug( 'Line In state changed: ' . $enabled );
+	main::DEBUGLOG && $log->debug( 'Line In state changed: ' . $enabled );
 	
 	if ($enabled) {
 		# XXX - not sure it's a good idea to delete current playlist?

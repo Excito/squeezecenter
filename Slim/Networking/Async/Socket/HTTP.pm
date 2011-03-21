@@ -1,8 +1,8 @@
 package Slim::Networking::Async::Socket::HTTP;
 
-# $Id: HTTP.pm 18667 2008-04-10 21:22:36Z andy $
+# $Id: HTTP.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2003-2007 Logitech.
+# Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -14,7 +14,10 @@ use warnings;
 
 use base qw(Net::HTTP::NB Slim::Networking::Async::Socket);
 
-use Socket qw(:DEFAULT);
+# Get Exporter's import method here so as to avoid inheriting one from IO::Socket::INET
+use Exporter qw(import);
+
+use Socket qw(pack_sockaddr_in sockaddr_in);
 
 # IO::Socket::INET's connect method blocks, so we use our own connect method 
 # which is non-blocking.  Based on: http://www.perlmonks.org/?node_id=66135

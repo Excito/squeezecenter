@@ -1,6 +1,6 @@
 package Slim::Plugin::Amazon::Plugin;
 
-# $Id: Plugin.pm 24983 2009-02-12 21:37:44Z andy $
+# $Id: Plugin.pm 28550 2009-09-17 15:42:43Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -15,6 +15,7 @@ sub initPlugin {
 		tag    => 'amazon',
 		menu   => 'music_stores',
 		weight => 30,
+		is_app => 1,
 	);
 	
 	# Track Info item
@@ -28,14 +29,18 @@ sub getDisplayName {
 	return 'PLUGIN_AMAZON_MODULE_NAME';
 }
 
+# Don't add this item to any menu
+sub playerMenu { }
+
 sub trackInfoMenu {
 	my ( $client, $url, $track, $remoteMeta ) = @_;
 	
 	return unless $client;
 	
-	return unless Slim::Networking::SqueezeNetwork->isServiceEnabled( $client, 'Amazon' );
+	# Only show if in the app list
+	return unless $client->isAppEnabled('amazon');
 	
-	my $artist = $track->remote ? $remoteMeta->{artist} : ( $track->artist ? $track->artist->name : undef );
+	my $artist = $track->remote ? $remoteMeta->{artist} : $track->artistName;
 	my $album  = $track->remote ? $remoteMeta->{album}  : ( $track->album ? $track->album->name : undef );
 	my $title  = $track->remote ? $remoteMeta->{title}  : $track->title;
 	

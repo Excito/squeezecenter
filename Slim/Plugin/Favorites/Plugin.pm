@@ -1,6 +1,6 @@
 package Slim::Plugin::Favorites::Plugin;
 
-# $Id: Plugin.pm 24454 2008-12-31 15:05:56Z adrian $
+# $Id: Plugin.pm 28492 2009-09-11 08:50:22Z michael $
 
 # A Favorites implementation which stores favorites as opml files and allows
 # the favorites list to be edited from the web interface
@@ -9,7 +9,7 @@ package Slim::Plugin::Favorites::Plugin;
 
 # This code is derived from code with the following copyright message:
 #
-# SqueezeCenter Copyright 2005-2007 Logitech.
+# Squeezebox Server Copyright 2005-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -31,7 +31,7 @@ use Slim::Utils::Prefs;
 use Slim::Plugin::Favorites::Opml;
 use Slim::Plugin::Favorites::OpmlFavorites;
 
-if ( !main::SLIM_SERVICE ) {
+if ( !main::SLIM_SERVICE && !$::noweb ) {
  	require Slim::Plugin::Favorites::Settings;
 	require Slim::Web::XMLBrowser;
 }
@@ -51,18 +51,19 @@ sub initPlugin {
 
 	$class->SUPER::initPlugin(@_);
 	
+	Slim::Plugin::Favorites::OpmlFavorites->migrate();
+	
 	if ( main::SLIM_SERVICE ) {
 		Slim::Utils::Favorites::registerFavoritesClassName('Slim::Plugin::Favorites::SqueezeNetwork');
 	}
 	else {
-		Slim::Plugin::Favorites::Settings->new;
+		if ( !$::noweb ) {
+			Slim::Plugin::Favorites::Settings->new;
+		}
 		
 		# register opml based favorites handler
 		Slim::Utils::Favorites::registerFavoritesClassName('Slim::Plugin::Favorites::OpmlFavorites');
 	}
-
-	# register handler for playing favorites by remote hot button
-	Slim::Buttons::Common::setFunction('playFavorite', \&playFavorite);
 
 	# register cli handlers
 	Slim::Control::Request::addDispatch(['favorites', 'items', '_index', '_quantity'], [0, 1, 1, \&cliBrowse]);
@@ -82,8 +83,18 @@ sub initPlugin {
 	
 	# Track Info handler
 	Slim::Menu::TrackInfo->registerInfoProvider( favorites => (
-		after => 'bottom',
+		after => 'playitem',
 		func  => \&trackInfoHandler,
+	) );
+	# Album Info handler
+	Slim::Menu::AlbumInfo->registerInfoProvider( favorites => (
+		after => 'playitem',
+		func  => \&albumInfoHandler,
+	) );
+	# Artist Info handler
+	Slim::Menu::ArtistInfo->registerInfoProvider( favorites => (
+		after => 'playitem',
+		func  => \&artistInfoHandler,
 	) );
 }
 
@@ -133,7 +144,6 @@ sub deleteMode {
 	
 	my $title = $client->modeParam('title'); # title to display
 	my $index = $client->modeParam('index'); # favorite index to delete
-	my $hotkey= $client->modeParam('hotkey');# favorite hotkey
 	my $depth = $client->modeParam('depth'); # number of levels to pop out of when done
 	
 	# Bug 6177, Menu to confirm favorite removal
@@ -182,61 +192,11 @@ sub deleteMode {
 	} );
 }
 
-sub playFavorite {
-	my $client = shift;
-	my $button = shift;
-	my $digit  = shift;
-
-	my $favs  = Slim::Utils::Favorites->new($client);
-
-	# play the favorite with the hotkey of $digit, or if not set the favorite with index $digit
-	my $index = $favs->hasHotkey($digit);
-	my $entry = defined $index ? $favs->entry($index) : $favs->entry($digit ? $digit-1 : 9);
-
-	if (defined $entry && $entry->{'type'} && $entry->{'type'} =~ /audio|playlist/) {
-
-		my $url   = $entry->{'URL'} || $entry->{'url'};
-		my $title = $entry->{'text'};
-
-		if ($entry->{'parser'} || $entry->{'type'} eq 'playlist') {
-
-			$log->info("Playing favorite number $digit $title $url via xmlbrowser");
-
-			my $item = {
-				'url'   => $url,
-				'title' => $title,
-				'type'  => $entry->{'type'},
-				'parser'=> $entry->{'parser'},
-			};
-
-			Slim::Buttons::XMLBrowser::playItem($client, $item);
-
-		} else {
-
-			$log->info("Playing favorite number $digit $title $url");
-
-			Slim::Music::Info::setTitle($url, $title);
-			
-			$client->showBriefly($client->currentSongLines({ suppressDisplay => Slim::Buttons::Common::suppressStatus($client) }));
-			
-			$client->execute(['playlist', 'play', $url]);
-		}
-
-	} else {
-
-		$log->info("Can't play favorite number $digit - not an audio entry");
-
-		$client->showBriefly({
-			 'line' => [ sprintf($client->string('FAVORITES_NOT_DEFINED'), $digit) ],
-		});
-	}
-}
-
 sub webPages {
 	my $class = shift;
 
-	Slim::Web::HTTP::addPageFunction('plugins/Favorites/favcontrol.html', \&toggleButtonHandler);
-	Slim::Web::HTTP::addPageFunction('plugins/Favorites/index.html', \&indexHandler);
+	Slim::Web::Pages->addPageFunction('plugins/Favorites/favcontrol.html', \&toggleButtonHandler);
+	Slim::Web::Pages->addPageFunction('plugins/Favorites/index.html', \&indexHandler);
 
 	Slim::Web::Pages->addPageLinks('browse', { 'FAVORITES' => 'plugins/Favorites/index.html' });
 
@@ -300,7 +260,7 @@ sub indexHandler {
 
 		$sessId = $params->{'sess'};
 
-		$log->info("existing editing session [$sessId]");
+		main::INFOLOG && $log->info("existing editing session [$sessId]");
 
 		$opml     = $sessions{ $sessId }->{'opml'};
 		$deleted  = $sessions{ $sessId }->{'deleted'};
@@ -316,20 +276,20 @@ sub indexHandler {
 
 		if (Slim::Music::Info::isURL($url)) {
 
-			$log->info("new opml editting session [$sessId] - opening $url");
+			main::INFOLOG && $log->info("new opml editting session [$sessId] - opening $url");
 
 			$opml = Slim::Plugin::Favorites::Opml->new({ 'url' => $url });
 
 		} else {
 
-			$log->info("new opml editing session [$sessId]");
+			main::INFOLOG && $log->info("new opml editing session [$sessId]");
 
 			$opml = Slim::Plugin::Favorites::Opml->new();
 		}
 
 	} else {
 
-		$log->info("new favorites editing session");
+		main::INFOLOG && $log->info("new favorites editing session");
 
 		$opml = Slim::Plugin::Favorites::OpmlFavorites->new($client);
 		$deleted  = undef;
@@ -344,7 +304,7 @@ sub indexHandler {
 
 		# favorites editor cannot follow remote links, so pass through to xmlbrowser as index does not appear to be edittable
 		# also pass through play/add to reuse xmlbrowser handling of playall etc
-		$log->info("passing through to xmlbrowser");
+		main::INFOLOG && $log->info("passing through to xmlbrowser");
 			
 		return Slim::Web::XMLBrowser->handleWebIndex( {
 			client => $client,
@@ -532,7 +492,7 @@ sub indexHandler {
 						
 					} elsif (!$params->{'fetched'}) {
 						
-						$log->info("checking content type for $url");
+						main::INFOLOG && $log->info("checking content type for $url");
 						
 						Slim::Networking::Async::HTTP->new()->send_request( {
 							'request'     => HTTP::Request->new( GET => $url ),
@@ -550,55 +510,30 @@ sub indexHandler {
 
 						if ($type) {
 
-							$log->info("got mime type $mime");
+							main::INFOLOG && $log->info("got mime type $mime");
 
 						} else {
 
-							$log->info("unknown mime type $mime, inferring from url");
+							main::INFOLOG && $log->info("unknown mime type $mime, inferring from url");
 
 							$type = Slim::Music::Info::typeFromPath($url);
 						}
 
 						if (Slim::Music::Info::isSong(undef, $type) || Slim::Music::Info::isPlaylist(undef, $type)) {
 							
-							$log->info("content type $type - treating as audio");
+							main::INFOLOG && $log->info("content type $type - treating as audio");
 							
 							$entry->{'type'} = 'audio';
 							
 						} else {
 							
-							$log->info("content type $type - treating as non audio");
+							main::INFOLOG && $log->info("content type $type - treating as non audio");
 
 							delete $entry->{'type'};
 						}
 					}
 
 					$entry->{'URL'} = $url;
-				}
-
-				if (!$favs) {
-
-					my $hotkey = $params->{'entryhotkey'};
-
-					if (!defined $hotkey || $hotkey eq '') {
-
-						$log->info("removing hotkey from entry");
-
-						delete $entry->{'hotkey'};
-
-					} else {
-
-						my $oldindex = $opml->hasHotkey($hotkey);
-
-						if (defined $oldindex) {
-
-							$opml->setHotkey($oldindex, undef);
-						}
-
-						$log->info("setting hotkey for entry to $hotkey");
-
-						$entry->{'hotkey'} = $hotkey;
-					}
 				}
 			}
 
@@ -617,11 +552,6 @@ sub indexHandler {
 			my $entry = @$level[$indexLevel];
 
 			$favs->deleteUrl( $entry->{'URL'} );
-		}
-
-		if ($action eq 'hotkey' && defined $params->{'index'} && $opml->isa('Slim::Plugin::Favorites::OpmlFavorites')) {
-
-			$opml->setHotkey( $params->{'index'}, $params->{'hotkey'} ne '' ? $params->{'hotkey'} : undef );
 		}
 	}
 
@@ -706,21 +636,12 @@ sub indexHandler {
 			$entry->{'favorites'} = $favs->hasUrl($entry->{'url'}) ? 2 : 1;
 		}
 
-		if (!$favs && defined $opmlEntry->{'hotkey'}) {
-			$entry->{'hotkey'} = $opmlEntry->{'hotkey'};
-		}
-
 		push @entries, $entry;
 	}
 
 	$params->{'entries'}       = \@entries;
 	$params->{'levelindex'}    = join '.', @indexPrefix;
 	$params->{'indexOnLevel'}  = $indexLevel;
-
-	# for favorites add the currently used hotkeys
-	if (!$favs) {
-		$params->{'hotkeys'}   = $opml->hotkeys;
-	}
 
 	# add the top level title to pwd_list
 	push @{$params->{'pwd_list'}}, {
@@ -852,6 +773,7 @@ sub cliAdd {
 	my $title  = $request->getParam('title');
 	my $icon   = $request->getParam('icon');
 	my $index  = $request->getParam('item_id');
+	my $type   = $request->getParam('type');
 	my $hotkey = $request->getParam('hotkey');
 	
 	if ( main::SLIM_SERVICE ) {
@@ -861,27 +783,20 @@ sub cliAdd {
 		
 		if ( $command eq 'add' && defined $title && defined $url ) {
 
-			$log->info("adding entry $title - $url");
+			main::INFOLOG && $log->info("adding entry $title - $url");
 			
 			my $index = $favs->add( $url, $title );
-
-			if (defined $hotkey) {
-				$favs->setHotkey($index, $hotkey);
-			}
 			
 			$request->addResult( 'count', 1 );
 			
-			# show feedback if this action came from jive cometd session
-			if ( $request->source && $request->source =~ /\/slim\/request/ ) {
-				$client->showBriefly( {
-					'jive' => { 
-						'text' => [
-							$client->string('FAVORITES_ADDING'),
-							$title,
-						],
-					},
-				} );
-			}
+			$client->showBriefly( {
+				'jive' => { 
+					'text' => [
+						$client->string('FAVORITES_ADDING'),
+						$title,
+					],
+				},
+			} );
 
 			$request->setStatusDone();
 		}
@@ -902,12 +817,12 @@ sub cliAdd {
 
 		if ($command eq 'add' && defined $title && defined $url) {
 
-			$log->info("adding entry $title $url at index $index");
+			main::INFOLOG && $log->info("adding entry $title $url at index $index");
 
 			$entry = {
 				'text' => $title,
 				'URL'  => $url,
-				'type' => 'audio',
+				'type' => $type || 'audio',
 				'icon' => $icon || $favs->icon($url),
 			};
 			
@@ -915,7 +830,7 @@ sub cliAdd {
 
 		} elsif ($command eq 'addlevel' && defined $title) {
 
-			$log->info("adding new level $title at index $index");
+			main::INFOLOG && $log->info("adding new level $title at index $index");
 
 			$entry = {
 				'text'    => $title,
@@ -926,7 +841,7 @@ sub cliAdd {
 
 		} else {
 
-			$log->info("can't perform $command bad title or url");
+			main::INFOLOG && $log->info("can't perform $command bad title or url");
 
 			$request->setStatusBadParams();
 			return;
@@ -943,26 +858,29 @@ sub cliAdd {
 
 		$favs->save;
 
-		if (defined $hotkey && (my $index = $favs->findUrl($url))) {
-			$favs->setHotkey($index, $hotkey);
+		# XXX: leave this around in case people are using this to set hotkeys
+		if (defined $hotkey ) {
+			$log->error('hotkeys (presets) can no longer be set with this command');
 		}
 
-		# show feedback if this action came from jive cometd session
-		if ($request->source && $request->source =~ /\/slim\/request/) {
-			$client->showBriefly({
-				'jive' => { 
-				'text' => [ $client->string('FAVORITES_ADDING'),
-						$title,
-					   ],
-				}
-			});
-		}
+		# show feedback to jive
+		$client->showBriefly({
+			jive => { 
+			type => 'mixed',
+			style => 'favorite',
+			#'icon-id' => $icon ? $icon : '/html/images/cover.png',
+			'icon' => $icon || $favs->icon($url),
+			text => [ $client->string('FAVORITES_ADDING'),
+					$title,
+				   ],
+			},
+		});
 
 		$request->setStatusDone();
 
 	} else {
 
-		$log->info("index $index invalid");
+		main::INFOLOG && $log->info("index $index invalid");
 
 		$request->setStatusBadParams();
 	}
@@ -1031,7 +949,7 @@ sub cliRename {
 		return;
 	}
 
-	$log->info("rename index $index to $title");
+	main::INFOLOG && $log->info("rename index $index to $title");
 
 	$favs->entry($index)->{'text'} = $title;
 	$favs->save;
@@ -1061,7 +979,7 @@ sub cliMove {
 		return;
 	}
 
-	$log->info("moving item from index $from to index $to");
+	main::INFOLOG && $log->info("moving item from index $from to index $to");
 
 	splice @$toLevel, $toIndex, 0, (splice @$fromLevel, $fromIndex, 1);
 	
@@ -1071,15 +989,36 @@ sub cliMove {
 }
 
 sub trackInfoHandler {
-	my ( $client, $url, $track, $remoteMeta, $tags ) = @_;
+	my $return = _objectInfoHandler( @_, 'track');
+	return $return;
+}
+
+sub albumInfoHandler {
+	my $return = _objectInfoHandler( @_, 'album');
+	return $return;
+}
+
+sub artistInfoHandler {
+	my $return = _objectInfoHandler( @_, 'artist');
+	return $return;
+}
+
+sub _objectInfoHandler {
+	my ( $client, $url, $obj, $remoteMeta, $tags, $objectType ) = @_;
 	$tags ||= {};
 	
-	my ($index, $hotkey) = Slim::Utils::Favorites->new($client)->findUrl($url);
+	my $index = Slim::Utils::Favorites->new($client)->findUrl($url);
 	
 	my $jive;
+	my $title;
+	if ($objectType eq 'artist') {
+		$title = $obj->name;
+	} else {
+		$title = $obj->title;
+	}
 	if ( !defined $index ) {
 
-		$log->debug( "Item is not a favorite [$url]" );
+		main::DEBUGLOG && $log->debug( "Item is not a favorite [$url]" );
 
 		if ( $tags->{menuMode} ) {
 			my $actions = {
@@ -1087,30 +1026,31 @@ sub trackInfoHandler {
 					player => 0,
 					cmd    => [ 'jivefavorites', 'add' ],
 					params => {
-						title   => $track->title,
-                                                url     => $track->url,
+						title   => $title,
+                                                url     => $obj->url,
+						isContextMenu => 1,
 					},
 				},
 			};
 			$jive->{actions} = $actions;
 			return {
 				type        => 'text',
-				name        => cstring($client, 'JIVE_ADD_TO_FAVORITES'),
+				name        => cstring($client, 'JIVE_SAVE_TO_FAVORITES'),
 				jive        => $jive,
 			};
 		} else {
 			return {
 				type        => 'link',
-				name        => cstring($client, 'PLUGIN_FAVORITES_ADD'),
-				url         => \&trackInfoAddFavorite,
-				passthrough => [ $track ],
+				name        => cstring($client, 'PLUGIN_FAVORITES_SAVE'),
+				url         => \&objectInfoAddFavorite,
+				passthrough => [ $obj ],
 				favorites   => 0,
 			};
 		}
 	}
 	else {
 
-		$log->debug( "Item is a favorite [$url]" );
+		main::DEBUGLOG && $log->debug( "Item is a favorite [$url]" );
 
 		if ( $tags->{menuMode} ) {
 			my $actions = {
@@ -1118,9 +1058,10 @@ sub trackInfoHandler {
 					player => 0,
 					cmd    => [ 'jivefavorites', 'delete' ],
 					params => {
-						title   => $track->title,
-                                                url     => $track->url,
+						title   => $title,
+                                                url     => $obj->url,
 						item_id => $index,
+						isContextMenu => 1,
 					},
 				},
 			};
@@ -1135,8 +1076,8 @@ sub trackInfoHandler {
 			return {
 				type        => 'link',
 				name        => cstring($client, 'PLUGIN_FAVORITES_REMOVE'),
-				url         => \&trackInfoRemoveFavorite,
-				passthrough => [ $track ],
+				url         => \&objectInfoRemoveFavorite,
+				passthrough => [ $obj ],
 				favorites   => 0,
 			};
 		}
@@ -1145,17 +1086,17 @@ sub trackInfoHandler {
 	return;
 }
 
-sub trackInfoAddFavorite {
-	my ( $client, $callback, $track ) = @_;
+sub objectInfoAddFavorite {
+	my ( $client, $callback, $obj ) = @_;
 	
 	my $favorites = Slim::Utils::Favorites->new($client);
 	
-	my ($favIndex, $hotKey) = $favorites->add(
-		$track,
-		$track->title || $track->url,
+	my $favIndex = $favorites->add(
+		$obj,
+		$obj->title || $obj->url,
 		undef,
 		undef,
-		'hotkey',
+		undef,
 	);
 	
 	my $menu = {
@@ -1169,8 +1110,8 @@ sub trackInfoAddFavorite {
 	$callback->( $menu );
 }
 
-sub trackInfoRemoveFavorite {
-	my ( $client, $callback, $track ) = @_;
+sub objectInfoRemoveFavorite {
+	my ( $client, $callback, $obj ) = @_;
 	
 	my $menu = [
 		{
@@ -1195,7 +1136,7 @@ sub trackInfoRemoveFavorite {
 				my $callback = $_[1];
 				
 				my $favorites = Slim::Utils::Favorites->new($client);
-				my ($index, $hotkey) = Slim::Utils::Favorites->new($client)->findUrl( $track->url );
+				my $index = Slim::Utils::Favorites->new($client)->findUrl( $obj->url );
 				
 				$favorites->deleteIndex($index);
 				

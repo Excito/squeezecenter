@@ -1,8 +1,8 @@
 package Slim::Buttons::BrowseDB;
 
-# $Id: BrowseDB.pm 24008 2008-11-21 21:23:23Z bklaas $
+# $Id: BrowseDB.pm 28492 2009-09-11 08:50:22Z michael $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,7 +13,7 @@ Slim::Buttons::BrowseDB
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::BrowseTree> is a SqueezeCenter module which adds several
+L<Slim::Buttons::BrowseTree> is a Squeezebox Server module which adds several
 modes for browsing a music collection using a variety of 'hierarchies' and 
 music metadata stored in a database.
 
@@ -183,10 +183,13 @@ sub init {
 				$line2 = $client->modeParam('itemTitle') || browsedbItemName($client, $currentItem);
 			}
 
-			$client->showBriefly({
-				'line'    => [ $line1, $line2 ],
-				'overlay' => [ undef, $client->symbols('notesymbol') ],
-			});
+			if ($addorinsert == 1 || $addorinsert == 2) {
+
+				$client->showBriefly({
+					'line'    => [ $line1, $line2 ],
+					'overlay' => [ undef, $client->symbols('notesymbol') ],
+				});
+			}
 
 			# Include the current item
 			if ($levelName ne 'track' && !$all) {
@@ -271,6 +274,10 @@ sub init {
 					}
 				}
 			}
+			
+			if ($addorinsert == 0) {
+				Slim::Buttons::Common::pushModeLeft($client, 'playlist');
+			}
 		},
 
 		'create_mix' => sub  {
@@ -296,7 +303,7 @@ sub init {
 
 			if (scalar @mixers == 1) {
 				
-				logger('server.plugin')->info("Running Mixer $mixers[0]");
+				main::INFOLOG && logger('server.plugin')->info("Running Mixer $mixers[0]");
 
 				&{$Imports->{$mixers[0]}->{'mixer'}}($client);
 				
@@ -351,7 +358,7 @@ sub mixerExitHandler {
 
 		if (defined $Imports->{$mixer}->{'mixer'}) {
 
-			logger('server.plugin')->info("Running Mixer $mixer");
+			main::INFOLOG && logger('server.plugin')->info("Running Mixer $mixer");
 
 			&{$Imports->{$mixer}->{'mixer'}}($client);
 
@@ -432,7 +439,6 @@ sub browsedbExitCallback {
 
 			my $favorites = Slim::Utils::Favorites->new($client);
 			my $index = $client->modeParam('favorite');
-			my $hotkey = $client->modeParam('hotkey');
 			my $track = Slim::Schema->find('Track', $client->modeParam('findCriteria')->{'playlist.id'});
 
 			if (!blessed($track) || !$track->can('title')) {
@@ -448,14 +454,13 @@ sub browsedbExitCallback {
 
 			if ( !defined $index ) {
 
-				($index, $hotkey) = $favorites->add($track, $track->title, undef, undef, 'hotkey');
+				$index = $favorites->add($track, $track->title, undef, undef, undef);
 
 				$client->showBriefly( {
 					'line' => [ $client->string('FAVORITES_ADDING'), $track->title ]
 				});
 
 				$client->modeParam('favorite', $index);
-				$client->modeParam('hotkey', $hotkey);
 
 			} else {
 				
@@ -463,7 +468,6 @@ sub browsedbExitCallback {
 				Slim::Buttons::Common::pushModeLeft( $client, 'favorites.delete', {
 					title => $track->title,
 					index => $index,
-					hotkey=> $hotkey,
 					depth => 2,
 				} );
 				
@@ -553,12 +557,11 @@ sub browsedbItemName {
 	if (!$blessed && $item eq 'FAVORITE') {
 
 		my $index = $client->modeParam('favorite');
-		my $hotkey = $client->modeParam('hotkey');
 
 		if (defined $index) {
 			return $client->string('PLUGIN_FAVORITES_REMOVE');
 		} else {
-			$item = $client->string('PLUGIN_FAVORITES_ADD');
+			$item = $client->string('PLUGIN_FAVORITES_SAVE');
 		}
 
 		return $item
@@ -705,7 +708,7 @@ sub setMode {
 	my $search    = $client->modeParam('search');
 	my $log       = logger('database.info');
 
-	$log->debug("hierarchy: $hierarchy level: $level");
+	main::DEBUGLOG && $log->debug("hierarchy: $hierarchy level: $level");
 
 	# Parse the hierarchy list into an array
 	my @levels   = split(',', $hierarchy);
@@ -839,10 +842,9 @@ sub setMode {
 
 		if (blessed($track) && $track->can('id')) {
 
-			my ($index, $hotkey) = Slim::Utils::Favorites->new($client)->findUrl($track->url);
+			my $index = Slim::Utils::Favorites->new($client)->findUrl($track->url);
 
 			$client->modeParam('favorite', $index);
-			$client->modeParam('hotkey', $hotkey);
 
 			push @items, 'FAVORITE';
 		}
@@ -879,7 +881,7 @@ sub setMode {
 		$selectionKey = join(':', $hierarchy, $level, Storable::freeze($find));
 		$listIndex    = $client->lastID3Selection($selectionKey) || 0;
 
-		$log->debug("last position from selection key $selectionKey is $listIndex");
+		main::DEBUGLOG && $log->debug("last position from selection key $selectionKey is $listIndex");
 	}
 
 	my %params = (
@@ -906,7 +908,6 @@ sub setMode {
 		findCriteria      => $filters,
 		selectionCriteria => $selectionCriteria,
 		favorite          => $client->modeParam('favorite'),
-		hotkey            => $client->modeParam('hotkey'),
 	);
 
 	# If this is a list of containers (e.g. albums, artists, genres)

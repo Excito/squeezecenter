@@ -1,8 +1,8 @@
 package Slim::Utils::Network;
 
-# $Id: Network.pm 16842 2008-01-28 19:10:17Z andy $
+# $Id: Network.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -45,7 +45,7 @@ Set the passed socket to be blocking (1) or non-blocking (0)
 sub blocking {   
 	my $sock = shift;
 
- 	return $sock->blocking(@_) unless $^O =~ /Win32/;
+ 	return $sock->blocking(@_) unless main::ISWINDOWS;
 
 	my $nonblocking = $_[0] ? "0" : "1";
 	my $retval = ioctl($sock, 0x8004667e, \$nonblocking);

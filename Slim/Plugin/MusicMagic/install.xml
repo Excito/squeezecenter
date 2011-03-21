@@ -9,7 +9,11 @@
 	<creator>Slim Devices/Logitech</creator>
 	<email>support@slimdevices.com</email>
 
-	<defaultState>enabled</defaultState>
+	<defaultState>
+		<mac>enabled</mac>
+		<win>enabled</win>
+		<other>disabled</other>
+	</defaultState>
 
 	<homepageURL>http://www.slimdevices.com/</homepageURL>
 	<icon>plugins/MusicMagic/html/images/icon.png</icon>
@@ -17,7 +21,7 @@
 	<type>2</type><!-- type=extension -->
 
 	<targetApplication>
-		<id>SqueezeCenter</id>
+		<id>Squeezebox Server</id>
 		<minVersion>7.0a</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>

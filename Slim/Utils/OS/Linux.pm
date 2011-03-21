@@ -1,5 +1,10 @@
 package Slim::Utils::OS::Linux;
 
+# Squeezebox Server Copyright 2001-2009 Logitech.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License, 
+# version 2.
+
 use strict;
 use base qw(Slim::Utils::OS::Unix);
 
@@ -22,6 +27,10 @@ sub getFlavor {
 
 		return 'Netgear RAIDiator';
 			
+	} elsif (-f '/etc/squeezeos.version') {
+	
+		return 'SqueezeOS';
+	
 	} elsif (-f '/etc/debian_version') {
 	
 		return 'Debian';
@@ -33,6 +42,10 @@ sub getFlavor {
 	} elsif (-f '/etc/SuSE-release') {
 			
 		return 'SuSE';
+
+	} elsif (-f '/etc/synoinfo.conf' || -f '/etc.defaults/synoinfo.conf') {
+
+		return 'Synology DiskStation';
 	}
 
 	return 'Linux';

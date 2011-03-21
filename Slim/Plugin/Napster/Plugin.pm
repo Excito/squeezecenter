@@ -1,6 +1,6 @@
 package Slim::Plugin::Napster::Plugin;
 
-# $Id: Plugin.pm 25038 2009-02-17 14:03:15Z andy $
+# $Id: Plugin.pm 28550 2009-09-17 15:42:43Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -39,6 +39,7 @@ sub initPlugin {
 		tag    => 'napster',
 		menu   => 'music_services',
 		weight => 25,
+		is_app => 1,
 	);
 	
 	if ( main::SLIM_SERVICE ) {
@@ -69,9 +70,9 @@ sub initPlugin {
 		);
 	}
 	
-	if ( !main::SLIM_SERVICE ) {
+	if ( !main::SLIM_SERVICE && !$::noweb ) {
 		# Add a function to view trackinfo in the web
-		Slim::Web::HTTP::addPageFunction( 
+		Slim::Web::Pages->addPageFunction( 
 			'plugins/napster/trackinfo.html',
 			sub {
 				my $client = $_[0];
@@ -107,13 +108,12 @@ sub initPlugin {
 	}
 }
 
-sub playerMenu () {
-	return 'MUSIC_SERVICES';
-}
-
 sub getDisplayName () {
 	return 'PLUGIN_NAPSTER_MODULE_NAME';
 }
+
+# Don't add this item to any menu
+sub playerMenu { }
 
 # SLIM_SERVICE
 sub myLibraryMode {
@@ -148,11 +148,10 @@ sub trackInfoMenu {
 	
 	return unless $client;
 	
-	return unless Slim::Networking::SqueezeNetwork->isServiceEnabled( $client, 'Napster' );
+	# Only show if in the app list
+	return unless $client->isAppEnabled('napster');
 	
-	return unless Slim::Networking::SqueezeNetwork->hasAccount( $client, 'napster' );
-	
-	my $artist = $track->remote ? $remoteMeta->{artist} : ( $track->artist ? $track->artist->name : undef );
+	my $artist = $track->remote ? $remoteMeta->{artist} : $track->artistName;
 	my $album  = $track->remote ? $remoteMeta->{album}  : ( $track->album ? $track->album->name : undef );
 	my $title  = $track->remote ? $remoteMeta->{title}  : $track->title;
 	

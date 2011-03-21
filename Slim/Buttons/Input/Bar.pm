@@ -1,8 +1,8 @@
 package Slim::Buttons::Input::Bar;
 
-# $Id: Bar.pm 22939 2008-08-28 16:42:33Z andy $
+# $Id: Bar.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -19,7 +19,7 @@ Slim::Buttons::Common::pushMode($client, 'INPUT.Bar', $params);
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Home> is a SqueezeCenter module for creating and
+L<Slim::Buttons::Home> is a Squeezebox Server module for creating and
 navigating a configurable multilevel menu structure.
 
 Avilable Parameters and their defaults:
@@ -214,11 +214,11 @@ sub init {
 			my $listIndex = $client->modeParam('listIndex');
 			my $log       = logger('player.ui');
 
-			$log->debug("Got a knob event for the bar: knobpos: $knobPos listindex: $listIndex");
+			main::DEBUGLOG && $log->debug("Got a knob event for the bar: knobpos: $knobPos listindex: $listIndex");
 
 			changePos($client, $knobPos - $listIndex, $funct);
 
-			if ( $log->is_debug ) {
+			if ( main::DEBUGLOG && $log->is_debug ) {
 				$log->debug("New listindex: ", $client->modeParam('listIndex'));
 			}
 		},

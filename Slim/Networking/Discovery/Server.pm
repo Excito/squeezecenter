@@ -2,13 +2,13 @@ package Slim::Networking::Discovery::Server;
 
 # $Id: Server.pm 15258 2007-12-13 15:29:14Z mherger $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
 
 use strict;
-use IO::Socket;
+use IO::Socket qw(SO_BROADCAST sockaddr_in inet_aton inet_ntoa);
 use Net::IP;
 
 use Slim::Networking::UDP;
@@ -16,6 +16,7 @@ use Slim::Networking::Discovery::Players;
 use Slim::Utils::Log;
 use Slim::Utils::Network;
 use Slim::Utils::Timers;
+use Slim::Utils::Unicode;
 
 my $log = logger('network.protocol');
 
@@ -33,7 +34,7 @@ Slim::Networking::Discovery::Server
 
 =head1 DESCRIPTION
 
-This module implements a UDP discovery protocol, used by SqueezeCenter to discover other servers in the network.
+This module implements a UDP discovery protocol, used by Squeezebox Server to discover other servers in the network.
 
 
 =head1 FUNCTIONS
@@ -51,7 +52,7 @@ sub init {
 
 =head2 fetch_servers()
 
-Poll the SqueezeCenter/SlimServers in our network
+Poll the Squeezebox Server/SlimServers in our network
 
 =cut
 
@@ -65,7 +66,7 @@ sub fetch_servers {
 
 	_purge_server_list();
 
-	# broadcast command to discover SlimServers
+	# broadcast command to discover servers
 	my $opt = $udpsock->sockopt(SO_BROADCAST);
 	$udpsock->sockopt(SO_BROADCAST, 1);
 
@@ -90,8 +91,8 @@ purge servers from the list when they haven't been discovered in two poll cycles
 sub _purge_server_list {
 	foreach my $server (keys %{$server_list}) {
 		
-		if ($server_list->{$server}->{timestamp} < time() + (2 x POLL_INTERVAL)) {
-			
+		if (!$server_list->{$server}->{ttl} || $server_list->{$server}->{ttl} < time()) {
+
 			delete $server_list->{$server};
 		}
 	}
@@ -158,7 +159,7 @@ sub gotTLVResponse {
 		return;
 	}
 
-	$log->info("discovery response packet:");
+	main::INFOLOG && $log->info("discovery response packet:");
 
 	# chop of leading character
 	$msg = substr($msg, 1);
@@ -174,7 +175,7 @@ sub gotTLVResponse {
 		$len2 = unpack("xxxxC", $msg);
 		$val  = $len2 ? substr($msg, 5, $len2) : undef;
 
-		$log->debug(" TLV: $tag len: $len2, $val");
+		main::DEBUGLOG && $log->debug(" TLV: $tag len: $len2, $val");
 
 		$server->{$tag} = $val;
 
@@ -194,14 +195,16 @@ sub gotTLVResponse {
 #		}
 	}
 
-	if ($log->is_debug) {	
+	if (main::DEBUGLOG && $log->is_debug) {	
 		$log->debug(" Discovered server $server->{NAME} ($server->{IP}), using port $server->{JSON}");
 	}
 
 	if ($server->{NAME}) {
 		
-		$server_list->{$server->{NAME}}              = $server;
-		$server_list->{$server->{NAME}}->{timestamp} = time();
+		$server->{NAME} = Slim::Utils::Unicode::utf8decode($server->{NAME});
+		
+		$server_list->{$server->{NAME}}        = $server;
+		$server_list->{$server->{NAME}}->{ttl} = time() + 2 * POLL_INTERVAL;
 
 		unless (is_self($server->{IP})) {
 

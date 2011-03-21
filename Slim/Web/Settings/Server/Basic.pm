@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::Basic;
 
-# $Id: Basic.pm 23362 2008-10-01 07:07:30Z mherger $
+# $Id: Basic.pm 28553 2009-09-17 18:30:46Z michael $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -10,19 +10,23 @@ package Slim::Web::Settings::Server::Basic;
 use strict;
 use base qw(Slim::Web::Settings);
 
+use MIME::Base64 qw(decode_base64);
+
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 
+my $prefs = preferences('server');
+
 sub name {
-	return Slim::Web::HTTP::protectName('BASIC_SERVER_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('BASIC_SERVER_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/server/basic.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/server/basic.html');
 }
 
 sub prefs {
-	return (preferences('server'), qw(language audiodir playlistdir) );
+	return ($prefs, qw(language audiodir playlistdir libraryname) );
 }
 
 # FIXME - add importers back as these are in different namespaces... perhaps they should be in the server namespace...
@@ -39,6 +43,13 @@ sub handler {
 
 	# prefs setting handled by SUPER::handler
 
+	# Use the base64 versions to avoid any encoding issues
+	for my $pref (qw(audiodir playlistdir)) {
+		if ( $paramRef->{"pref_${pref}_b64"} ) {
+			$paramRef->{"pref_$pref"} = decode_base64( $paramRef->{"pref_${pref}_b64"} );
+		}
+	}
+
 	if ($paramRef->{'pref_rescan'}) {
 
 		my $rescanType = ['rescan'];
@@ -53,8 +64,8 @@ sub handler {
 		}
 
 		for my $pref (qw(audiodir playlistdir)) {
-	
-			my (undef, $ok) = preferences('server')->set($pref, $paramRef->{"pref_$pref"});
+
+			my (undef, $ok) = $prefs->set($pref, $paramRef->{"pref_$pref"});
 
 			if ($ok) {
 				$paramRef->{'validated'}->{$pref} = 1; 
@@ -65,38 +76,24 @@ sub handler {
 			}
 		}
 
-		if ( logger('scan.scanner')->is_info ) {
+		if ( main::INFOLOG && logger('scan.scanner')->is_info ) {
 			logger('scan.scanner')->info(sprintf("Initiating scan of type: %s",join (" ",@{$rescanType})));
 		}
 
 		Slim::Control::Request::executeRequest(undef, $rescanType);
 	}
-
+	
 	if ( $paramRef->{'saveSettings'} ) {
-		my $curLang = preferences('server')->get('language');
+		my $curLang = $prefs->get('language');
 		my $lang    = $paramRef->{'pref_language'};
 
 		# Bug 5443, Change the MySQL collation if switching to a language that doesn't work right with UTF8 collation
 		if ( $lang && $lang ne $curLang ) {
-			if ( $lang eq 'CS' ) {
-				Slim::Schema->changeCollation( 'utf8_czech_ci' );
-			}
-			elsif ( $lang eq 'SV' ) {
-				Slim::Schema->changeCollation( 'utf8_swedish_ci' );
-			}
-			elsif ( $lang eq 'DA' ) {
-				Slim::Schema->changeCollation( 'utf8_danish_ci' );
-			}
-			elsif ( $lang eq 'ES' ) {
-				Slim::Schema->changeCollation( 'utf8_spanish_ci' );
-			}
-			else {
-				Slim::Schema->changeCollation( 'utf8_general_ci' );
-			}
+			$class->changeCollation($lang, $curLang);
 
 			# use Classic instead of Default skin if the server's language is set to Hebrew
-			if ($lang eq 'HE' && preferences('server')->get('skin') eq 'Default') {
-				preferences('server')->set('skin', 'Classic');
+			if ($lang eq 'HE' && $prefs->get('skin') eq 'Default') {
+				$prefs->set('skin', 'Classic');
 				$paramRef->{'warning'} .= '<span id="popupWarning">' . Slim::Utils::Strings::string("SETUP_SKIN_OK") . '</span>';
 			}	
 
@@ -111,6 +108,54 @@ sub handler {
 	$paramRef->{'languageoptions'} = Slim::Utils::Strings::languageOptions();
 
 	return $class->SUPER::handler($client, $paramRef);
+}
+
+sub changeCollation {
+	my ($class, $lang, $curLang) = @_;
+	
+	return if !Slim::Schema::hasLibrary();
+	
+	my $newCollation;
+	
+	if ( $lang eq 'CS' ) {
+		$newCollation = 'utf8_czech_ci';
+	}
+	elsif ( $lang eq 'SV' ) {
+		$newCollation = 'utf8_swedish_ci';
+	}
+	elsif ( $lang eq 'DA' ) {
+		$newCollation = 'utf8_danish_ci';
+	}
+	elsif ( $lang eq 'ES' ) {
+		$newCollation = 'utf8_spanish_ci';
+	}
+	elsif ($curLang =~ /(?:CS|SV|DA|ES)/) {
+		$newCollation = 'utf8_general_ci';
+	}
+	
+	return unless $newCollation;
+	
+	if (Slim::Music::Import->stillScanning) {
+
+		my $autoCommit = Slim::Schema->storage->dbh->{'AutoCommit'};
+	
+		if ($autoCommit) {
+			Slim::Schema->storage->dbh->{'AutoCommit'} = 0;
+		}
+	
+		my $setCollation = Slim::Schema->rs('MetaInformation')->find_or_create({
+			'name' => 'setCollation'
+		});
+	
+		$setCollation->value($newCollation);
+		$setCollation->update;
+	
+		Slim::Schema->storage->dbh->{'AutoCommit'} = $autoCommit;
+	}
+	else {
+
+		Slim::Schema->changeCollation( $newCollation );
+	}
 }
 
 sub beforeRender {

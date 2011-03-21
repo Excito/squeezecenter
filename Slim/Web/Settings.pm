@@ -1,8 +1,8 @@
 package Slim::Web::Settings;
 
-# $Id: Settings.pm 23300 2008-09-25 16:21:39Z mherger $
+# $Id: Settings.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -49,7 +49,7 @@ sub new {
 
 	if ($class->can('page') && $class->can('handler') && $class->page) {
 
-		Slim::Web::HTTP::addPageFunction($class->page, $class);
+		Slim::Web::Pages->addPageFunction($class->page, $class);
 	}
 
 	if ($class->can('page') && $class->can('name') && $class->page && $class->name) {

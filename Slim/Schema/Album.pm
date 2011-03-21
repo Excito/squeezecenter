@@ -1,9 +1,11 @@
 package Slim::Schema::Album;
 
-# $Id: Album.pm 24729 2009-01-21 14:21:41Z michael $
+# $Id: Album.pm 28539 2009-09-16 13:02:39Z michael $
 
 use strict;
 use base 'Slim::Schema::DBI';
+
+use Slim::Schema::ResultSet::Album;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -42,7 +44,7 @@ my $log = logger('database.info');
 	$class->has_many('contributorAlbums' => 'Slim::Schema::ContributorAlbum' => 'album');
 
 	if ($] > 5.007) {
-		$class->utf8_columns(qw/title titlesort/);
+		$class->utf8_columns(qw/title titlesort titlesearch/);
 	}
 
 	$class->resultset_class('Slim::Schema::ResultSet::Album');
@@ -54,7 +56,7 @@ my $log = logger('database.info');
 sub url {
 	my $self = shift;
 
-	return sprintf('db:album.titlesearch=%s', URI::Escape::uri_escape($self->titlesearch));
+	return sprintf('db:album.titlesearch=%s', URI::Escape::uri_escape_utf8($self->titlesearch));
 }
 
 sub name { 
@@ -94,7 +96,7 @@ sub title {
 	);
 }
 
-# return the raw title untainted by SqueezeCenter logic
+# return the raw title untainted by Squeezebox Server logic
 sub rawtitle {
 	my $self = shift;
 	
@@ -200,7 +202,7 @@ sub artists {
 
 	} elsif (scalar @artists == 0) {
 
-		if ( $log->is_debug ) {
+		if ( main::DEBUGLOG && $log->is_debug ) {
 			$log->debug(sprintf("\%artists == 0 && \$self->contributor - returning: [%s]", $self->contributors));
 		}
 
@@ -248,6 +250,19 @@ sub contributorid {
 	return $self->get_column('contributor');
 }
 
+# Rescan this album, this simply means to make sure at least 1 track
+# from this album still exists in the database.  If not, delete the album.
+# XXX: should also look for changes to things like album gain.
+# XXX native DBI
+sub rescan {
+	my $self = shift;
+	
+	my $count = Slim::Schema->rs('Track')->search( album => $self->id )->count;
+	
+	if ( !$count ) {
+		$self->delete;
+	}
+}
 
 1;
 

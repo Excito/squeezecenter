@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::Debugging;
 
-# $Id: Debugging.pm 23246 2008-09-23 13:33:50Z mherger $
+# $Id: Debugging.pm 27975 2009-08-01 03:28:30Z andy $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -14,11 +14,11 @@ use Slim::Utils::Log;
 use Slim::Utils::Strings qw(string);
 
 sub name {
-	return Slim::Web::HTTP::protectName('DEBUGGING_SETTINGS');
+	return Slim::Web::HTTP::CSRF->protectName('DEBUGGING_SETTINGS');
 }
 
 sub page {
-	return Slim::Web::HTTP::protectURI('settings/server/debugging.html');
+	return Slim::Web::HTTP::CSRF->protectURI('settings/server/debugging.html');
 }
 
 sub handler {
@@ -31,15 +31,8 @@ sub handler {
 
 		if ($paramRef->{'logging_group'}) {
 
-			my $levels = Slim::Utils::Log->logLevels($paramRef->{'logging_group'});
-			
-			for my $category (keys %{$categories}) {
-				
-				Slim::Utils::Log->setLogLevelForCategory(
-					$category, $levels->{$category} || 'ERROR'
-				);
-			}
-			
+			Slim::Utils::Log->setLogGroup($paramRef->{'logging_group'});
+
 		}
 
 		else {
@@ -88,8 +81,8 @@ sub handler {
 sub getLogs {
 	return [
 		{SERVER  => Slim::Utils::Log->serverLogFile},
-		{SCANNER => Slim::Utils::Log->scannerLogFile},
-		{PERFMON => ($::perfmon ? Slim::Utils::Log->perfmonLogFile : undef )},
+		{SCANNER => (Slim::Schema::hasLibrary() ? Slim::Utils::Log->scannerLogFile : undef)},
+		{PERFMON => (main::PERFMON ? Slim::Utils::Log->perfmonLogFile : undef )},
 	]
 }
 

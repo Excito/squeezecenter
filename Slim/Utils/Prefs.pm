@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs;
 
-# $Id: Prefs.pm 25152 2009-02-24 22:10:53Z andy $
+# $Id: Prefs.pm 28672 2009-09-29 00:32:50Z andy $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -84,8 +84,6 @@ use Slim::Utils::Log;
 
 our @EXPORT = qw(preferences);
 
-my $DEFAULT_DBSOURCE = 'dbi:mysql:hostname=127.0.0.1;port=9092;database=%s';
-
 my $log   = logger('prefs');
 
 my $path; # path to directory where preferences are stored
@@ -98,10 +96,14 @@ $::prefsdir = $path;
 
 $path ||= Slim::Utils::OSDetect::dirsFor('prefs');
 
+unless (-d $path) {
+	Slim::Utils::OSDetect->getOS()->migratePrefsFolder($path);
+}
+
 my $prefs = preferences('server');
 
 # make sure these server prefs has the utf8flag turned off before they get used
-$prefs->setUtf8Off(qw(audiodir playlistdir cachedir coverArt));
+$prefs->setUtf8Off(qw(audiodir playlistdir cachedir librarycachedir coverArt));
 
 
 =head2 preferences( $namespace )
@@ -129,13 +131,17 @@ sub namespaces {
 }
 
 sub init {
+	my $sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass();
+	my $default_dbsource = $sqlHelperClass->default_dbsource();
+	
 	my %defaults = (
 		# Server Prefs not settable from web pages
 		'bindAddress'           => '127.0.0.1',            # Default MySQL bind address
-		'dbsource'              => $DEFAULT_DBSOURCE,
+		'dbsource'              => $default_dbsource,
 		'dbusername'            => 'slimserver',
 		'dbpassword'            => '',
 		'cachedir'              => \&defaultCacheDir,
+		'librarycachedir'       => \&defaultCacheDir,
 		'securitySecret'        => \&makeSecuritySecret,
 		'ignoreDirRE'           => '',
 		# My Music menu ordering
@@ -161,6 +167,8 @@ sub init {
 		'displaytexttimeout'    => 1,
 		'checkVersion'          => 1,
 		'checkVersionInterval'	=> 60*60*24,
+		# enable auto download of SC updates on Windows only (for now)
+		'autoDownloadUpdate'    => sub { Slim::Utils::OSDetect::getOS->canAutoUpdate() },
 		'noGenreFilter'         => 0,
 		'searchSubString'       => 0,
 		'ignoredarticles'       => "The El La Los Las Le Les",
@@ -191,7 +199,6 @@ sub init {
 		'maxWMArate'            => 9999,
 		'tcpConnectMaximum'	    => 30,             # not on web page
 		'udpChunkSize'          => 1400,           # only used for Slimp3
-		'mDNSname'              => 'SqueezeCenter',
 		# Server Settings - Performance
 		'disableStatistics'     => 0,
 		'serverPriority'        => '',
@@ -239,8 +246,9 @@ sub init {
 		'thumbSize'             => 100,
 		# Server Settings - jive UI
 		'jivealbumsort'		=> 'album',
-		# Server Settings - SqueezeNetwork
+		# Server Settings - mysqueezebox.com
 		'sn_sync'               => 1,
+		'sn_disable_stats'		=> 0,
 		# Bug 5557, disable UPnP support by default
 		'noupnp'                => 1,
 	);
@@ -294,7 +302,7 @@ sub init {
 							 mp3SilencePrelude preampVolumeControl digitalOutputEncoding clockSource polarityInversion wordClockOutput
 							 replayGainMode mp3StreamingMethod
 							 playername titleFormat titleFormatCurr playingDisplayMode playingDisplayModes
-							 screensaver idlesaver offsaver screensavertimeout visualMode visualModes
+							 screensaver alarmsaver idlesaver offsaver screensavertimeout visualMode visualModes
 							 powerOnBrightness powerOffBrightness idleBrightness autobrightness
 							 scrollMode scrollPause scrollPauseDouble scrollRate scrollRateDouble scrollPixels scrollPixelsDouble
 							 activeFont idleFont activeFont_curr idleFont_curr doublesize offDisplaySize largeTextFont
@@ -314,15 +322,32 @@ sub init {
 		
 			1;
 		});
+
+		$prefs->migrate( 3, sub {
+			
+			if ($prefs->exists('cachedir') && $prefs->get('cachedir') =~ /SqueezeCenter/i) {
+				
+				$prefs->set('cachedir', defaultCacheDir());
+				makeCacheDir();
+				
+			}
+			
+			1;
+		} );
+		
+		$prefs->migrate( 4, sub {
+			$prefs->set('librarycachedir', $prefs->get('cachedir'));
+			1;
+		} );
 	}
 
 	# migrate client prefs to version 2 - sync prefs changed
 	$prefs->migrateClient(2, sub {
 		my $cprefs = shift;
 		my $defaults = $Slim::Player::Player::defaultPrefs;
-		$cprefs->set( syncBufferThreshold => $defaults->{'syncBufferThreshold'}) if ($cprefs->get('syncBufferThreshold') > 255);
-		$cprefs->set( minSyncAdjust       => $defaults->{'minSyncAdjust'}      ) if ($cprefs->get('minSyncAdjust') < 1);
-		$cprefs->set( packetLatency       => $defaults->{'packetLatency'}      ) if ($cprefs->get('packetLatency') < 1);
+		$cprefs->set( syncBufferThreshold => $defaults->{'syncBufferThreshold'}) if (defined $cprefs->get('syncBufferThreshold') && $cprefs->get('syncBufferThreshold') > 255);
+		$cprefs->set( minSyncAdjust       => $defaults->{'minSyncAdjust'}      ) if (defined $cprefs->get('minSyncAdjust') && $cprefs->get('minSyncAdjust') < 1);
+		$cprefs->set( packetLatency       => $defaults->{'packetLatency'}      ) if (defined $cprefs->get('packetLatency') && $cprefs->get('packetLatency') < 1);
 		1;
 	});
 
@@ -518,6 +543,63 @@ sub init {
 			1;
 		} );
 	}
+	
+	# migrateClient 9 is in Slim::Player::Player
+	
+	# Bug 13248, migrate global presets to per-player presets
+	$prefs->migrateClient( 10, sub {
+		my ( $cprefs, $client ) = @_;
+
+		if ( Slim::Utils::Favorites->enabled ) {
+			my $fav = Slim::Utils::Favorites->new($client);
+
+			my $uuid    = main::SLIM_SERVICE ? undef : $prefs->get('server_uuid');
+			my $presets = [];
+
+			for my $hotkey ( @{ $fav->hotkeys } ) {
+				my $preset;
+				if ( $hotkey->{used} ) {
+					my $item = $fav->entry( $hotkey->{index} );
+
+					my $isRemote = Slim::Music::Info::isRemoteURL( $item->{URL} );
+
+					$preset = {
+						URL    => $item->{URL},
+						text   => $item->{text},
+						type   => $item->{type},
+						server => $isRemote ? undef : $uuid,
+					};
+					$preset->{parser} = $item->{parser} if $item->{parser};
+				}
+				push @{$presets}, $preset;
+			}
+			$prefs->client($client)->set( presets => $presets );
+		}
+		
+		1;
+	} );
+	
+	if ( !main::SLIM_SERVICE ) {
+		# Bug 13229, migrate menuItem pref so everyone gets the correct menu structure for 7.4
+		$prefs->migrateClient( 11, sub {
+			my ( $cprefs, $client ) = @_;
+			my $defaults = $Slim::Player::Player::defaultPrefs;
+
+			if ( $client->hasDigitalIn ) {
+				$defaults = $Slim::Player::Transporter::defaultPrefs;
+			}
+
+			if ( $client->isa('Slim::Player::Boom') ) {
+				$defaults = $Slim::Player::Boom::defaultPrefs;
+			}
+
+			if ($defaults && defined $defaults->{menuItem}) {
+				# clone for each client
+				$cprefs->set( menuItem => Storable::dclone($defaults->{menuItem}) );
+			}
+			1;
+		} );
+	}
 
 	# initialise any new prefs
 	$prefs->init(\%defaults);
@@ -525,11 +607,11 @@ sub init {
 	# set validation functions
 	$prefs->setValidate( 'num',   qw(displaytexttimeout browseagelimit remotestreamtimeout screensavertimeout 
 									 itemsPerPage refreshRate thumbSize httpport bufferSecs remotestreamtimeout) );
-	$prefs->setValidate( 'dir',   qw(cachedir playlistdir audiodir artfolder) );
+	$prefs->setValidate( 'dir',   qw(cachedir librarycachedir playlistdir audiodir artfolder) );
 	$prefs->setValidate( 'array', qw(guessFileFormats titleFormat disabledformats) );
 
 	# allow users to set a port below 1024 on windows which does not require admin for this
-	my $minP = Slim::Utils::OSDetect::isWindows() ? 1 : 1024;
+	my $minP = main::ISWINDOWS ? 1 : 1024;
 	$prefs->setValidate({ 'validator' => 'intlimit', 'low' => $minP,'high'=>  65535 }, 'httpport'    );
 	
 	$prefs->setValidate({ 'validator' => 'intlimit', 'low' =>    3, 'high' =>    30 }, 'bufferSecs'  );
@@ -594,7 +676,7 @@ sub init {
 		$prefs->setChange( sub { Slim::Utils::Strings::setLanguage($_[1]) }, 'language' );
 	}
 	
-	$prefs->setChange( \&main::checkVersion, 'checkVersion' );
+	$prefs->setChange( \&Slim::Utils::Update::checkVersion, 'checkVersion' );
 
 	$prefs->setChange( 
 		sub { Slim::Control::Request::executeRequest(undef, ['wipecache']) },
@@ -610,11 +692,13 @@ sub init {
 
 	$prefs->setChange( sub {
 		Slim::Buttons::BrowseTree->init;
+		require Slim::Music::MusicFolderScan;
 		Slim::Music::MusicFolderScan->init;
 		Slim::Control::Request::executeRequest(undef, ['wipecache']);
 	}, 'audiodir');
 
 	$prefs->setChange( sub {
+		require Slim::Music::PlaylistFolderScan;
 		Slim::Music::PlaylistFolderScan->init;
 		Slim::Control::Request::executeRequest(undef, ['rescan', 'playlists']);
 		for my $client (Slim::Player::Client::clients()) {
@@ -673,15 +757,32 @@ sub init {
 	# Clear SN cookies from the cookie jar if the session changes
 	if ( !main::SLIM_SERVICE ) {
 		$prefs->setChange( sub {
+			# XXX the sn.com hostnames can be removed later
 			my $cookieJar = Slim::Networking::Async::HTTP::cookie_jar();
 			$cookieJar->clear( 'www.squeezenetwork.com' );
 			$cookieJar->clear( 'www.test.squeezenetwork.com' );
+			$cookieJar->clear( 'www.mysqueezebox.com' );
+			$cookieJar->clear( 'www.test.mysqueezebox.com' );
 			if ( $ENV{SN_DEV} ) {
 				$cookieJar->clear( '127.0.0.1' );
 			}
 			$cookieJar->save();
-			logger('network.squeezenetwork')->debug( 'SN session has changed, removing cookies' );
+			main::DEBUGLOG && logger('network.squeezenetwork')->debug( 'SN session has changed, removing cookies' );
 		}, 'sn_session' );
+		
+		$prefs->setChange( sub {
+			Slim::Utils::Timers::setTimer(
+				$_[1],
+				time() + 30,
+				sub {
+					my $isDisabled = shift;
+					my $http = Slim::Networking::SqueezeNetwork->new(sub {}, sub {});
+					
+					$http->get( $http->url( '/api/v1/stats/mark_disabled/' . $isDisabled ? 1 : 0 ) );					
+				},
+			);
+			
+		}, 'sn_disable_stats');
 	}
 	
 	# Rebuild Jive cache if VA setting is changed
@@ -751,9 +852,9 @@ use File::Spec::Functions qw(:ALL);
 use Digest::MD5;
 
 sub makeSecuritySecret {
-	# each SqueezeCenter installation should have a unique,
+	# each Squeezebox Server installation should have a unique,
 	# strongly random value for securitySecret. This routine
-	# will be called by the first time SqueezeCenter is started
+	# will be called by the first time Squeezebox Server is started
 	# to "seed" the prefs file with a value for this installation
 
 	my $hash = new Digest::MD5;
@@ -763,7 +864,7 @@ sub makeSecuritySecret {
 	my $secret = $hash->hexdigest();
 
 	if ($log) {
-		$log->debug("Creating a securitySecret for this installation.");
+		main::DEBUGLOG && $log->debug("Creating a securitySecret for this installation.");
 	}
 
 	$prefs->set('securitySecret', $secret);
@@ -793,7 +894,7 @@ sub defaultPlaylistDir {
 		# We've seen people have the defaultPlayListDir be a file. So
 		# change the path slightly to allow for that.
 		if (-f $path) {
-			$path .= 'SqueezeCenter';
+			$path .= 'Squeezebox';
 		}
 
 		if (!-d $path) {
@@ -815,12 +916,12 @@ sub defaultCacheDir {
 	if ((!-e $CacheDir && !-w $CacheParent) || (-e $CacheDir && !-w $CacheDir)) {
 		$CacheDir = undef;
 	}
-
+	
 	return $CacheDir;
 }
 
 sub makeCacheDir {
-	my $cacheDir = $prefs->get('cachedir') || defaultCacheDir();
+	my $cacheDir = shift || $prefs->get('cachedir') || defaultCacheDir();
 
 	if (defined $cacheDir && !-d $cacheDir) {
 
@@ -872,7 +973,7 @@ sub maxRate {
 	}
 
 	if ( $rate != 0 && logger('player.source')->is_debug ) {
-		logger('player.source')->debug(sprintf("Setting maxBitRate for %s to: %d", $client->name, $rate));
+		main::DEBUGLOG && logger('player.source')->debug(sprintf("Setting maxBitRate for %s to: %d", $client->name, $rate));
 	}
 	
 	# if we're the master, make sure we return the lowest common denominator bitrate.

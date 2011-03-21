@@ -1,6 +1,6 @@
 package Slim::Plugin::Classical::Plugin;
 
-# $Id: Plugin.pm 25038 2009-02-17 14:03:15Z andy $
+# $Id: Plugin.pm 28265 2009-08-25 19:58:11Z andy $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -25,11 +25,12 @@ sub initPlugin {
 		tag    => 'classical',
 		menu   => 'music_services',
 		weight => 38,
+		is_app => 1,
 	);
 	
-	if ( !main::SLIM_SERVICE ) {
+	if ( !main::SLIM_SERVICE && !$::noweb ) {
 		# Add a function to view trackinfo in the web
-		Slim::Web::HTTP::addPageFunction( 
+		Slim::Web::Pages->addPageFunction( 
 			'plugins/classical/trackinfo.html',
 			sub {
 				my $client = $_[0];
@@ -68,5 +69,8 @@ sub initPlugin {
 sub getDisplayName () {
 	return 'PLUGIN_CLASSICAL_MODULE_NAME';
 }
+
+# Don't add this item to any menu
+sub playerMenu { }
 
 1;

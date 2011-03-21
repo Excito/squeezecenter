@@ -1,8 +1,8 @@
 package Slim::Buttons::BrowseTree;
 
-# $Id: BrowseTree.pm 24179 2008-12-02 01:35:41Z mherger $
+# $Id: BrowseTree.pm 28611 2009-09-23 13:10:36Z michael $
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,7 +13,7 @@ Slim::Buttons::BrowseTree
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::BrowseTree> is a SqueezeCenter module for browsing through a
+L<Slim::Buttons::BrowseTree> is a Squeezebox Server module for browsing through a
 folder structure and displaying information about music files on a Slim
 Devices Player display.
 
@@ -39,7 +39,7 @@ our $mixer;
 
 =head2 init( )
 
-When a music folder preference exists for SqueezeCenter, init will create a menu item for Browse Music Folder and register the required mode
+When a music folder preference exists for Squeezebox Server, init will create a menu item for Browse Music Folder and register the required mode
 init() also creates the function hash for the required button handling whiel in 'browsetree' mode.
 
 =cut
@@ -136,7 +136,7 @@ sub init {
 
 				$client->execute(['playlist', 'clear']);
 
-				$log->info("Playing all in folder, starting with $listIndex");
+				main::INFOLOG && $log->info("Playing all in folder, starting with $listIndex");
 
 				my @playlist = ();
 
@@ -149,7 +149,7 @@ sub init {
 
 					if (!Slim::Music::Info::isSong($items->[$i])) {
 
-						$log->info("Dropping $items->[$i] from play all in folder at index $i");
+						main::INFOLOG && $log->info("Dropping $items->[$i] from play all in folder at index $i");
 
 						if ($i < $listIndex) {
 							$listIndex--;
@@ -161,7 +161,7 @@ sub init {
 					unshift (@playlist, $items->[$i]);
 				}
 
-				$log->info("Load folder playlist, now starting at index: $listIndex");
+				main::INFOLOG && $log->info("Load folder playlist, now starting at index: $listIndex");
 
 				$client->execute(['playlist', 'addtracks','listref', \@playlist]);
 				$client->execute(['playlist', 'jump', $listIndex]);
@@ -169,6 +169,10 @@ sub init {
 				if ($wasShuffled) {
 					$client->execute(['playlist', 'shuffle', 1]);
 				}
+			}
+
+			if ($command eq 'play') {
+				Slim::Buttons::Common::pushModeLeft($client, 'playlist');
 			}
 		},
 		
@@ -198,7 +202,7 @@ sub init {
 
 			if (scalar @mixers == 1) {
 
-				logger('server.plugin')->info("Running Mixer $mixers[0]");
+				main::INFOLOG && logger('server.plugin')->info("Running Mixer $mixers[0]");
 
 				&{$Imports->{$mixers[0]}->{'mixer'}}($client);
 
@@ -314,26 +318,31 @@ sub browseTreeItemName {
 		# Dynamically pull the object from the DB. This prevents us from
 		# having to do so at initial load time of possibly hundreds of items.
 		my $url = Slim::Utils::Misc::fixPath($item, $client->modeParam('topLevelPath')) || return;
+		my $name;
 
-		if (Slim::Utils::OSDetect::isWindows() && Slim::Music::Info::isWinShortcut($url)) {
-
-			$url = Slim::Utils::Misc::fileURLFromWinShortcut($url);
+		if (main::ISWINDOWS && Slim::Music::Info::isWinShortcut($url)) {
+			($name, $url) = Slim::Utils::OS::Win32->getShortcut($url);
 		}
 
 		my $items = $client->modeParam('listRef');
 
-		my $track = Slim::Schema->rs('Track')->objectForUrl({
+		my $track = Slim::Schema->objectForUrl({
 			'url'      => $url,
 			'create'   => 1,
 			'readTags' => 1,
 			'commit'   => 1,
 
-		}) || return $url;
+		}) || return ($name || $url);
 
 		${$client->modeParam('valueRef')} = $item = $items->[$index] = $track;
+		
+		# bug 8202 - keep track of the shortcut's name
+		$client->modeParam('winShortcuts')->{$item->url} = $name if $name;
 	}
 
-	return Slim::Utils::Unicode::utf8on( Slim::Music::Info::fileName($item->url) );
+	return Slim::Music::Info::fileName(
+		$client->modeParam('winShortcuts')->{$item->url} || $item->url 
+	);
 }
 
 =head2 browseTreeExitCallback( $client, $item)
@@ -439,6 +448,7 @@ sub setMode {
 		# for on-the-fly object creation.
 		'externRef'      => \&browseTreeItemName,
 		'externRefArgs'  => 'CVI',
+		'winShortcuts'   => {},
 
 		'overlayRef'     => \&browseTreeOverlay,
 

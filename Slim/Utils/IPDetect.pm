@@ -2,13 +2,13 @@ package Slim::Utils::IPDetect;
 
 # $Id:$
 
-# SqueezeCenter Copyright 2001-2007 Logitech.
+# Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
 
 use strict;
-use Socket;
+use Socket qw(inet_aton inet_ntoa sockaddr_in pack_sockaddr_in PF_INET SOCK_DGRAM INADDR_ANY);
 use Symbol;
 use Slim::Utils::Log;
 

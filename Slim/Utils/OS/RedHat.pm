@@ -1,7 +1,11 @@
 package Slim::Utils::OS::RedHat;
 
+# Squeezebox Server Copyright 2001-2009 Logitech.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License, 
+# version 2.
+
 use strict;
-use File::Spec::Functions qw(:ALL);
 use FindBin qw($Bin);
 
 use base qw(Slim::Utils::OS::Linux);
@@ -20,7 +24,7 @@ sub initDetails {
 
 Return OS Specific directories.
 
-Argument $dir is a string to indicate which of the SqueezeCenter directories we
+Argument $dir is a string to indicate which of the Squeezebox Server directories we
 need information for.
 
 =cut
@@ -30,27 +34,27 @@ sub dirsFor {
 
 	my @dirs = ();
 	
-	if ($dir eq 'oldprefs') {
+	if ($dir =~ /^(?:oldprefs|updates)$/) {
 
 		push @dirs, $class->SUPER::dirsFor($dir);
 
 	} elsif ($dir =~ /^(?:Firmware|Graphics|HTML|IR|MySQL|SQL|lib|Bin)$/) {
 
-		push @dirs, "/usr/share/squeezecenter/$dir";
+		push @dirs, "/usr/share/squeezeboxserver/$dir";
 
 	} elsif ($dir eq 'Plugins') {
 			
 		push @dirs, $class->SUPER::dirsFor($dir);
-		push @dirs, "/usr/share/squeezecenter/Plugins";
+		push @dirs, "/usr/share/squeezeboxserver/Plugins";
 		push @dirs, "/usr/lib/perl5/vendor_perl/Slim/Plugin";
 		
 	} elsif ($dir =~ /^(?:strings|revision)$/) {
 
-		push @dirs, "/usr/share/squeezecenter";
+		push @dirs, "/usr/share/squeezeboxserver";
 
 	} elsif ($dir eq 'libpath') {
 
-		push @dirs, "/usr/share/squeezecenter";
+		push @dirs, "/usr/share/squeezeboxserver";
 
 	# Because we use the system MySQL, we need to point to the right
 	# directory for the errmsg. files. Default to english.
@@ -60,19 +64,19 @@ sub dirsFor {
 
 	} elsif ($dir =~ /^(?:types|convert)$/) {
 
-		push @dirs, "/etc/squeezecenter";
+		push @dirs, "/etc/squeezeboxserver";
 
 	} elsif ($dir eq 'prefs') {
 
-		push @dirs, $::prefsdir || "/var/lib/squeezecenter/prefs";
+		push @dirs, $::prefsdir || "/var/lib/squeezeboxserver/prefs";
 
 	} elsif ($dir eq 'log') {
 
-		push @dirs, $::logdir || "/var/log/squeezecenter";
+		push @dirs, $::logdir || "/var/log/squeezeboxserver";
 
 	} elsif ($dir eq 'cache') {
 
-		push @dirs, $::cachedir || "/var/lib/squeezecenter/cache";
+		push @dirs, $::cachedir || "/var/lib/squeezeboxserver/cache";
 
 	} elsif ($dir =~ /^(?:music|playlists)$/) {
 
@@ -88,7 +92,7 @@ sub dirsFor {
 
 
 sub scanner {
-	return '/usr/libexec/squeezecenter-scanner';
+	return '/usr/libexec/squeezeboxserver-scanner';
 }
 
 
