@@ -1,6 +1,6 @@
 package Slim::Utils::Misc;
 
-# $Id: Misc.pm 28535 2009-09-15 20:41:17Z andy $
+# $Id: Misc.pm 28828 2009-10-13 11:16:09Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -855,7 +855,11 @@ sub findAndScanDirectoryTree {
 		
 		# make sure we have a valid URL...
 		if (!defined $url) {
-			$url = Slim::Utils::Misc::fileURLFromPath($prefs->get('audiodir'));
+			$url = $prefs->get('audiodir');
+		}
+
+		if (!Slim::Music::Info::isURL($url)) {
+			$url = fileURLFromPath($url);
 		}
 
 		$topLevelObj = Slim::Schema->objectForUrl({
@@ -1001,6 +1005,7 @@ sub userAgentString {
 	my $osDetails = Slim::Utils::OSDetect::details();
 
 	# We masquerade as iTunes for radio stations that really want it.
+	# Note: Using SqueezeNetwork/SqueezeCenter here until RadioTime relaxes their user-agent restrictions
 	$userAgentString = sprintf("iTunes/4.7.1 (%s; N; %s; %s; %s; %s) %s/$::VERSION/$::REVISION",
 
 		$osDetails->{'os'},
@@ -1008,7 +1013,7 @@ sub userAgentString {
 		($osDetails->{'osArch'} || 'Unknown'),
 		$prefs->get('language'),
 		Slim::Utils::Unicode::currentLocale(),
-		main::SLIM_SERVICE ? 'mysqueezebox.com' : 'Squeezebox Server',
+		main::SLIM_SERVICE ? 'SqueezeNetwork' : 'SqueezeCenter, Squeezebox Server',
 	);
 
 	return $userAgentString;
@@ -1259,6 +1264,11 @@ sub shouldCacheURL {
 	my $host = URI->new($url)->host;
 	
 	return 0 if $host !~ /\./;
+	
+	if ( main::SLIM_SERVICE ) {
+		# Don't cache URLs local to SN, it can break translations, etc
+		return 0 if $host =~ /(?:mysqueezebox|squeezenetwork)/;
+	}
 	
 	# If the host doesn't start with a number, cache it
 	return 1 if $host !~ /^\d/;

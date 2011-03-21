@@ -47,14 +47,19 @@ if ( main::SLIM_SERVICE ) {
 	$internal_http_host = SDI::Util::SNConfig::get_config_value('internal_http_host');
 	
 	my $sn_server = __PACKAGE__->get_server('sn');
-	my $old_sn_server = $sn_server =~ /test/
+	
+	my $mysb_host = SDI::Util::SNConfig::get_config_value('use_test_sn')
+		? 'www.test.mysqueezebox.com'
+		: 'www.mysqueezebox.com';
+	my $sn_host = SDI::Util::SNConfig::get_config_value('use_test_sn')
 		? 'www.test.squeezenetwork.com'
 		: 'www.squeezenetwork.com';
 	
 	$_sn_hosts = join(q{|},
 	        map { qr/\Q$_\E/ } (
 			$sn_server,
-			$old_sn_server,
+			$mysb_host,
+			$sn_host,
 			$internal_http_host,
 			($ENV{SN_DEV} ? '127.0.0.1' : ())
 		)
@@ -328,6 +333,8 @@ sub getHeaders {
 		my $name = $client->name;
 		utf8::encode($name);
 		push @headers, 'X-Player-Name', encode_base64( $name, '' );
+		
+		push @headers, 'X-Player-Model', $client->model;
 		
 		# Bug 13963, Add "controlled by" string so SN knows what kind of menu to return
 		if ( my $controller = $client->controlledBy ) {

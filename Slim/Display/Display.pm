@@ -1,6 +1,6 @@
 package Slim::Display::Display;
 
-# $Id: Display.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Display.pm 28759 2009-10-02 19:20:44Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -490,7 +490,8 @@ sub curLines {
 			
 			if ( main::SLIM_SERVICE ) {
 				my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($linefunc);
-				SDI::Service::Control->mailError( "Display crash: $name", $@ );
+				$@ =~ s/"/'/g;
+				SDI::Util::Syslog::error("service=SS-Display method=${name} error=\"$@\"");
 			}
 		}
 	}

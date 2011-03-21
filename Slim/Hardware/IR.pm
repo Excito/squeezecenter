@@ -1,6 +1,6 @@
 package Slim::Hardware::IR;
 
-# $Id: IR.pm 28568 2009-09-18 21:25:29Z adrian $
+# $Id: IR.pm 28884 2009-10-16 05:56:46Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -403,7 +403,7 @@ sub initClient {
 	my $client = shift;
 
 	my @codes;
-	my %disabled = map { $_ => 1 } @{ $prefs->client($client)->get('disabledirsets') };
+	my %disabled = map { $_ => 1 } @{ $prefs->client($client)->get('disabledirsets') || [] };
 
 	for my $code (keys %irCodes) {
 		if (!$disabled{$code}) {

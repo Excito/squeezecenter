@@ -1,6 +1,6 @@
 package Slim::Web::Pages::Home;
 
-# $Id: Home.pm 28610 2009-09-23 12:08:16Z michael $
+# $Id: Home.pm 28615 2009-09-23 15:15:03Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

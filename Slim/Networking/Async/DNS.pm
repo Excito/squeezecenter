@@ -1,6 +1,6 @@
 package Slim::Networking::Async::DNS;
 
-# $Id: DNS.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: DNS.pm 28843 2009-10-14 00:47:33Z andy $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -51,6 +51,14 @@ sub resolve {
 	
 	AnyEvent::DNS::resolver->resolve( $host => 'a', sub {
 		my $res = shift;
+		
+		if ( !$res ) {
+			# Lookup failed
+			main::DEBUGLOG && $log->is_debug && $log->debug("Lookup failed for $host");
+			
+			$args->{ecb} && $args->{ecb}->( @{ $args->{pt} || [] } );
+			return;
+		}
 		
 		my $addr = $res->[3];
 		my $ttl	 = $res->[4];

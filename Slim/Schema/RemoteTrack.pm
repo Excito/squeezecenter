@@ -1,6 +1,6 @@
 package Slim::Schema::RemoteTrack;
 
-# $Id: RemoteTrack.pm 28617 2009-09-23 17:03:17Z ayoung $
+# $Id: RemoteTrack.pm 28822 2009-10-12 19:47:16Z andy $
 
 # This is an emulation of the Slim::Schema::Track API for remote tracks
 
@@ -38,6 +38,7 @@ my @allAttributes = (qw(
 	comment genre
 	
 	stash
+	error
 ));
 
 {
@@ -167,7 +168,7 @@ sub new {
 	
 	my $self = $class->SUPER::new;
 
-	main::DEBUGLOG && $log->debug("$class, $url");
+	main::DEBUGLOG && $log->is_debug && $log->debug("$class, $url");
 #	main::DEBUGLOG && $log->logBacktrace();
 	
 	$self->init_accessor(_url => $url, id => -int($self), secs => 0, stash => {});
@@ -181,13 +182,18 @@ sub new {
 }
 
 my %localTagMapping = (
-	artist      => 'artistname',
-	albumartist => 'artistname',
-	trackartist => 'artistname',
-	album       => 'albumname',
-	composer    => undef,
-	conductor   => undef,
-	band        => undef,
+	artist                 => 'artistname',
+	albumartist            => 'artistname',
+	trackartist            => 'artistname',
+	album                  => 'albumname',
+	composer               => undef,
+	conductor              => undef,
+	band                   => undef,
+	discc                  => undef,
+	replaygain_track_gain  => 'replay_gain',	# Bug 14468: iTunes
+												# Should really be handled by Schema::_preCheckAttributes
+												# but that is not called for remote tracks at present.
+	replaygain_track_peak  => 'replay_peak',	# Potentially used from tracks in CUE files.
 );
 
 sub setAttributes {
@@ -224,7 +230,7 @@ sub updateOrCreate {
 		my $id = $idIndex{$self->id} if $self; # refresh ID index cache
 	}
 	
-	main::DEBUGLOG && $log->debug($url);
+	main::DEBUGLOG && $log->is_debug && $log->debug($url);
 	
 	if ($self) {
 		$self->setAttributes($attributes, $tagMapping);
@@ -243,7 +249,7 @@ sub fetch {
 	my $id = $idIndex{$self->id} if $self; # refresh ID index cache
 	
 	if ($self && $playlist && !$self->isa('Slim::Schema::RemotePlaylist')) {
-		main::DEBUGLOG && $log->debug("$url upcast to RemotePlaylist");
+		main::DEBUGLOG && $log->is_debug && $log->debug("$url upcast to RemotePlaylist");
 		bless $self, 'Slim::Schema::RemotePlaylist';
 	}
 	
@@ -259,7 +265,7 @@ sub fetchById {
 sub get {
 	my ($self, $attribute) = @_;
 
-	main::DEBUGLOG && $log->debug($self->_url, ', ', $attribute, '->', $self->$attribute());
+	main::DEBUGLOG && $log->is_debug && $log->debug($self->_url, ', ', $attribute, '->', $self->$attribute());
 	
 	return($self->$attribute());
 }

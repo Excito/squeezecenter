@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner::Remote;
 
-# $Id: Remote.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Remote.pm 28759 2009-10-02 19:20:44Z andy $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -227,6 +227,8 @@ sub scanURL {
 				if ( main::SLIM_SERVICE ) {
 					$client->logStreamEvent( 'failed-scan', { error => $error } );
 				}
+				
+				$track->error( $error );
 
 				return $cb->( undef, $error, @{$pt} );
 			},
@@ -709,7 +711,16 @@ sub streamAudioData {
 	my $formatClass = Slim::Formats->classForFormat($type);
 	
 	if ( $formatClass && Slim::Formats->loadTagFormatForType($type) && $formatClass->can('scanBitrate') ) {
-		($bitrate, $vbr) = $formatClass->scanBitrate( $fh, $track->url );
+		($bitrate, $vbr) = eval { $formatClass->scanBitrate( $fh, $track->url ) };
+		
+		if ( $@ ) {
+			$log->error("Unable to scan bitrate for " . $track->url . ": $@");
+			if ( main::SLIM_SERVICE ) {
+				$@ =~ s/"/'/g;
+				SDI::Util::Syslog::error("service=Audio-Scan method=scanBitrate error=\"$@ " . $track->url . "\"");
+			}
+			$bitrate = 0;
+		}
 		
 		if ( $bitrate > 0 ) {
 			$track = Slim::Music::Info::setBitrate( $track->url, $bitrate, $vbr );
@@ -874,10 +885,20 @@ sub parsePlaylist {
 					if ( !$ready ) {
 						main::DEBUGLOG && $log->is_debug && $log->debug( 'No audio tracks found in playlist' );
 						
+						# Get error of last item we tried in the playlist, or a generic error
+						my $error;
+						for my $track ( $playlist->tracks ) {
+							if ( $track->error ) {
+								$error = $track->error;
+							}
+						}
+						
+						$error ||= 'PLAYLIST_NO_ITEMS_FOUND';
+						
 						# Delete bad playlist
 						$playlist->delete;
 						
-						$cb->( undef, 'PLAYLIST_NO_ITEMS_FOUND', @{$pt} );
+						$cb->( undef, $error, @{$pt} );
 					}
 				}
 			},

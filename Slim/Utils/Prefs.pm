@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs;
 
-# $Id: Prefs.pm 28672 2009-09-29 00:32:50Z andy $
+# $Id: Prefs.pm 28819 2009-10-12 17:27:13Z michael $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -96,14 +96,12 @@ $::prefsdir = $path;
 
 $path ||= Slim::Utils::OSDetect::dirsFor('prefs');
 
-unless (-d $path) {
-	Slim::Utils::OSDetect->getOS()->migratePrefsFolder($path);
-}
+Slim::Utils::OSDetect->getOS()->migratePrefsFolder($path);
 
 my $prefs = preferences('server');
 
-# make sure these server prefs has the utf8flag turned off before they get used
-$prefs->setUtf8Off(qw(audiodir playlistdir cachedir librarycachedir coverArt));
+# File paths need to be prepared in order to correctly read the file system
+$prefs->setFilepaths(qw(audiodir playlistdir cachedir librarycachedir coverArt));
 
 
 =head2 preferences( $namespace )
@@ -547,6 +545,8 @@ sub init {
 	# migrateClient 9 is in Slim::Player::Player
 	
 	# Bug 13248, migrate global presets to per-player presets
+	# Note this has a bug and does not migrate presets that defaulted from favorites
+	# That is handled below in #12
 	$prefs->migrateClient( 10, sub {
 		my ( $cprefs, $client ) = @_;
 
@@ -600,6 +600,42 @@ sub init {
 			1;
 		} );
 	}
+	
+	# Bug 14406, fill out missing presets from favorites, if necessary
+	$prefs->migrateClient( 12, sub {
+		my ( $cprefs, $client ) = @_;
+		
+		if ( Slim::Utils::Favorites->enabled ) {
+			my $fav = Slim::Utils::Favorites->new($client);
+
+			my $uuid    = main::SLIM_SERVICE ? undef : $prefs->get('server_uuid');
+			my $presets = $cprefs->get('presets') || [];
+			
+			my $index = 0;
+			for my $preset ( @{$presets} ) {
+				if ( !$preset ) {
+					# Fill in empty preset slot from favorites
+					my $item = $fav->entry( $index );
+					if ( $item && $item->{URL} ) {
+						my $isRemote = Slim::Music::Info::isRemoteURL( $item->{URL} );
+
+						$preset = {
+							URL    => $item->{URL},
+							text   => $item->{text},
+							type   => $item->{type},
+							server => $isRemote ? undef : $uuid,
+						};
+						$preset->{parser} = $item->{parser} if $item->{parser};
+					}
+				}
+				$index++;
+			}
+			
+			$cprefs->set( presets => $presets );
+		}
+		
+		1;
+	} );
 
 	# initialise any new prefs
 	$prefs->init(\%defaults);

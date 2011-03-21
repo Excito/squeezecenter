@@ -1,6 +1,6 @@
 package Slim::Player::Song;
 
-# $Id: Song.pm 28227 2009-08-20 06:34:51Z ayoung $
+# $Id: Song.pm 28729 2009-10-01 21:46:19Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -301,7 +301,12 @@ sub getNextSong {
 					}
 				}
 				else {
+					# Notify of failure via cant_open, this is used to pick
+					# up the failure for automatic RadioTime reporting
+					Slim::Control::Request::notifyFromArray( $client, [ 'playlist', 'cant_open', $url, $error ] );
+					
 					$error ||= 'PROBLEM_OPENING_REMOTE_URL';
+					
 					$failCb->($error, $url);
 				}
 			},

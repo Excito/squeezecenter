@@ -1,6 +1,6 @@
 package Slim::Formats::Movie;
 
-# $Id: Movie.pm 28618 2009-09-23 17:05:32Z michael $
+# $Id: Movie.pm 28829 2009-10-13 11:37:58Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -75,6 +75,15 @@ sub getTag {
 		}
 		elsif ( $track->{encoding} && $track->{encoding} eq 'drms' ) {
 			$tags->{DRM} = 1;
+		}
+		
+		# Check for HD-AAC file, if the file has 2 tracks and AOTs of 2/37
+		if ( defined $track->{audio_object_type} && (my $track2 = $info->{tracks}->[1]) ) {
+			if ( $track->{audio_object_type} == 2 && $track2->{audio_object_type} == 37 ) {
+				$tags->{LOSSLESS}  = 1;
+				$tags->{VBR_SCALE} = 1;
+				# XXX: may want to use a different content-type for HD?
+			}
 		}
 	}
 	elsif ( $info->{bitrate} ) {

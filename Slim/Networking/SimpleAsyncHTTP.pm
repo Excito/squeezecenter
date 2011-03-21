@@ -1,6 +1,6 @@
 package Slim::Networking::SimpleAsyncHTTP;
 
-# $Id: SimpleAsyncHTTP.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: SimpleAsyncHTTP.pm 28725 2009-10-01 20:22:45Z andy $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -317,7 +317,8 @@ sub onBody {
 						if ( $cc =~ /max-age=(-?\d+)/i ) {
 							$expires = $1;
 						}
-						elsif ( $cc =~ /no-cache|no-store|must-revalidate/i ) {
+						
+						if ( $cc =~ /no-cache|no-store|must-revalidate/i ) {
 							$expires = 0;
 						}
 					}			

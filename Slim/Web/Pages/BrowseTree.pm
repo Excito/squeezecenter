@@ -1,6 +1,6 @@
 package Slim::Web::Pages::BrowseTree;
 
-# $Id: BrowseTree.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: BrowseTree.pm 28819 2009-10-12 17:27:13Z michael $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -128,8 +128,6 @@ sub browsetree {
 		my $descend = Slim::Music::Info::isList($item) 
 						|| ($item->content_type eq 'unk' && -d Slim::Utils::Misc::pathFromMacAlias($url));
 
-		# Turn the utf8 flag on for proper display - since this is
-		# coming directly from the filesystem.
 		my %form = (
 			'text'      => $name || Slim::Music::Info::fileName($url),
 			'hierarchy' => join('/', @levels, $item->id),

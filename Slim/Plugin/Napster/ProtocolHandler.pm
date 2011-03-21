@@ -1,6 +1,6 @@
 package Slim::Plugin::Napster::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 28634 2009-09-24 19:55:25Z andy $
+# $Id: ProtocolHandler.pm 28837 2009-10-13 16:48:40Z andy $
 
 # Napster handler for napster:// URLs.
 
@@ -369,6 +369,7 @@ sub _gotTrackInfo {
 		album     => $info->{album},
 		title     => $info->{title},
 		cover     => $info->{cover},
+		duration  => $info->{duration},
 		bitrate   => '128k CBR',
 		type      => 'WMA (Napster)',
 		info_link => 'plugins/napster/trackinfo.html',

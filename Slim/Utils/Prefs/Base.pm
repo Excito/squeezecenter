@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Base;
 
-# $Id: Base.pm 28189 2009-08-14 19:33:36Z andy $
+# $Id: Base.pm 28819 2009-10-12 17:27:13Z michael $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -257,6 +257,10 @@ sub set {
 			if ( ref $old eq 'ARRAY' && !ref $new ) {
 				$new = [ $new ];
 			}
+		}
+
+		if (main::ISWINDOWS && $root->{'filepathPrefs'}->{ $pref }) {
+			$new = Win32::GetANSIPathName($new);
 		}
 
 		$class->{'prefs'}->{ $pref } = $new;

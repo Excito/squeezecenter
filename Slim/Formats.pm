@@ -1,6 +1,6 @@
 package Slim::Formats;
 
-# $Id: Formats.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Formats.pm 28878 2009-10-15 22:10:25Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -267,6 +267,18 @@ sub readTags {
 
 				$tags->{$tag} =~ s/$Slim::Utils::Unicode::bomRE//;
 				$tags->{$tag} =~ s/\000$//;
+			}
+			
+			# Bug 14587, sanity check all MusicBrainz ID tags to ensure it is a UUID and nothing more
+			if ( $tag =~ /^MUSICBRAINZ.*ID$/ ) {
+				if ( $tags->{$tag} =~ /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i ) {
+					$tags->{$tag} = lc($1);
+				}
+				else {
+					$log->error("Invalid MusicBrainz tag found in $file: $tag -> $value");
+					delete $tags->{$tag};
+					next;
+				}
 			}
 		}
 		

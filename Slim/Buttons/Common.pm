@@ -1,6 +1,6 @@
 package Slim::Buttons::Common;
 
-# $Id: Common.pm 28451 2009-09-06 15:32:00Z tom $
+# $Id: Common.pm 28759 2009-10-02 19:20:44Z andy $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -2045,7 +2045,8 @@ sub pushMode {
 				
 				if ( main::SLIM_SERVICE ) {
 					my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($exitFun);
-					SDI::Service::Control->mailError( "Button crash: $exitFun", $@ );
+					$@ =~ s/"/'/g;
+					SDI::Util::Syslog::error("service=SS-Common method=${name} error=\"$@\"");
 				}
 			}
 		}
@@ -2084,7 +2085,8 @@ sub pushMode {
 		
 		if ( main::SLIM_SERVICE ) {
 			my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($newModeFunction);
-			SDI::Service::Control->mailError( "Button crash: $name", $@ );
+			$@ =~ s/"/'/g;
+			SDI::Util::Syslog::error("service=SS-Common method=${name} error=\"$@\"");
 		}
 
 		pop @{$scrollClientHash->{$client}{scrollParamsStack}};
@@ -2151,7 +2153,8 @@ sub popMode {
 				
 				if ( main::SLIM_SERVICE ) {
 					my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($exitFun);
-					SDI::Service::Control->mailError( "Button crash: $name", $@ );
+					$@ =~ s/"/'/g;
+					SDI::Util::Syslog::error("service=SS-Common method=${name} error=\"$@\"");
 				}
 			}
 		}
@@ -2176,7 +2179,8 @@ sub popMode {
 			
 			if ( main::SLIM_SERVICE ) {
 				my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($fun);
-				SDI::Service::Control->mailError( "Button crash: $name", $@ );
+				$@ =~ s/"/'/g;
+				SDI::Util::Syslog::error("service=SS-Common method=${name} error=\"$@\"");
 			}
 		}
 	}
@@ -2437,7 +2441,8 @@ sub _periodicUpdate {
 			
 			if ( main::SLIM_SERVICE ) {
 				my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($linefunc);
-				SDI::Service::Control->mailError( "Button crash: $name", $@ );
+				$@ =~ s/"/'/g;
+				SDI::Util::Syslog::error("service=SS-Common method=${name} error=\"$@\"");
 			}
 		}
 

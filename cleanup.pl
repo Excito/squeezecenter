@@ -40,6 +40,7 @@ use constant RESIZER      => 0;
 use constant DEBUG        => 1;
 use constant ISWINDOWS    => ( $^O =~ /^m?s?win/i ) ? 1 : 0;
 use constant ISMAC        => ( $^O =~ /darwin/i ) ? 1 : 0;
+use constant INFOLOG      => 0;
 
 # load these later, don't need them right now
 require File::Path;
@@ -49,7 +50,7 @@ require Getopt::Long;
 require Slim::Utils::OSDetect;
 require Slim::Utils::Light;
 
-our $VERSION = '7.4';
+our $VERSION = '7.4.1';
 
 BEGIN {
 	if (ISWINDOWS) {
@@ -312,8 +313,8 @@ sub showSplashScreen {
 
 		$splash = Wx::SplashScreen->new(
 			$bitmap, 
-			Wx::wxSPLASH_CENTRE_ON_SCREEN() | Wx::wxSPLASH_TIMEOUT(),
-			10000,
+			Wx::wxSPLASH_CENTRE_ON_SCREEN() | Wx::wxSPLASH_NO_TIMEOUT(),
+			0,
 			undef,
 			-1, [-1, -1], [-1, -1],
 			Wx::wxSIMPLE_BORDER() | Wx::wxSTAY_ON_TOP()

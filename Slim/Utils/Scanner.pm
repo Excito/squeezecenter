@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner;
 
-# $Id: Scanner.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Scanner.pm 28829 2009-10-13 11:37:58Z michael $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -125,6 +125,11 @@ sub findFilesMatching {
 	my $file_filter = sub {
 		return Slim::Utils::Misc::fileFilter($File::Next::dir, $_, $types);
 	};
+
+
+	if (utf8::is_utf8($topDir)) {
+		utf8::encode($topDir);
+	}
 
 	my $iter  = File::Next::files({
 		'file_filter'     => $file_filter,
@@ -323,7 +328,7 @@ sub scanDirectory {
 	for my $file (@{$files}) {
 		
 		# Skip client playlists
-		next if $args->{types} eq 'list' && $file =~ /clientplaylist.*\.m3u$/;
+		next if $args->{types} && $args->{types} eq 'list' && $file =~ /clientplaylist.*\.m3u$/;
 		
 		if ( main::SCANNER && !$main::progress ) {
 			$log->error("Scanning: $file");
