@@ -1,9 +1,19 @@
-Author: Carl Fürstenberg <carl@excito.com>
-Description: Remove the DBIx::Migration, as it's not anything we want, 
-we take care of the migration at packager level instead
---- squeezecenter.orig/Slim/Schema.pm
-+++ squeezecenter/Slim/Schema.pm
-@@ -28,7 +28,6 @@
+From: =?UTF-8?q?Carl=20F=C3=BCrstenberg?= <carl@excito.com>
+Date: Mon, 21 Mar 2011 13:30:00 +0100
+Subject: [PATCH] Remove dbix migration
+
+we take care of the migration at packager level instead of delegating
+dynamic updating to squeezeboxserver itself, as it's generally only
+decreasing performance and is to little use
+---
+ Slim/Schema.pm |   72 +-------------------------------------------------------
+ 1 files changed, 1 insertions(+), 71 deletions(-)
+
+diff --git a/Slim/Schema.pm b/Slim/Schema.pm
+index 8c33672..804308f 100644
+--- a/Slim/Schema.pm
++++ b/Slim/Schema.pm
+@@ -28,7 +28,6 @@ use warnings;
  
  use base qw(DBIx::Class::Schema);
  
@@ -11,7 +21,7 @@ we take care of the migration at packager level instead
  use File::Basename qw(basename dirname);
  use File::Copy qw(move);
  use File::Spec::Functions qw(:ALL);
-@@ -450,76 +449,7 @@
+@@ -450,76 +449,7 @@ data files handed to L<DBIx::Migration>.
  =cut
  
  sub migrateDB {
@@ -89,3 +99,4 @@ we take care of the migration at packager level instead
  	return 0;
  }
  
+-- 

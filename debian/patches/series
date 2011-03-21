@@ -1,3 +1,3 @@
-custom_os_detect.patch
-remove_dbix_migration.patch
-debian-changes-7.5.1.dfsg1-5
+0001-Custom-OS-detection.patch
+0002-Remove-dbix-migration.patch
+0003-Remove-max-Audio-Scan-version.patch

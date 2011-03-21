@@ -1,9 +1,20 @@
-Author: Carl Fürstenberg <carl@excito.com>
-Description: No description.
-Index: squeezecenter/Slim/Utils/OS/Custom.pm
+From: =?UTF-8?q?Carl=20F=C3=BCrstenberg?= <carl@excito.com>
+Date: Mon, 21 Mar 2011 13:30:00 +0100
+Subject: [PATCH] Custom OS detection
+
+Adding custom OS detection for the Bubba platform
+
 ===================================================================
---- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ squeezecenter/Slim/Utils/OS/Custom.pm	2010-04-07 16:54:52.000000000 +0200
+---
+ Slim/Utils/OS/Custom.pm |  136 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 136 insertions(+), 0 deletions(-)
+ create mode 100644 Slim/Utils/OS/Custom.pm
+
+diff --git a/Slim/Utils/OS/Custom.pm b/Slim/Utils/OS/Custom.pm
+new file mode 100644
+index 0000000..92c98c3
+--- /dev/null
++++ b/Slim/Utils/OS/Custom.pm
 @@ -0,0 +1,136 @@
 +
 +
@@ -141,3 +152,4 @@ Index: squeezecenter/Slim/Utils/OS/Custom.pm
 +
 +
 +1;
+-- 
