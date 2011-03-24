@@ -1,11 +1,11 @@
-squeezecenter (7.5.3-1) UNRELEASED; urgency=low
+squeezecenter (7.5.3-1) vincent hugo; urgency=low
 
   * Imported Upstream version 7.5.3
   * run patches through git-buildpackage patch queue
   * Bumping Standard-Version to 3.9.1
   * Updating Audio::Scan version depends
 
- -- Carl Fürstenberg <carl@excito.com>  Mon, 21 Mar 2011 14:55:21 +0100
+ -- Carl Fürstenberg <carl@excito.com>  Thu, 24 Mar 2011 12:24:07 +0100
 
 squeezecenter (7.5.1.dfsg1-5) vincent; urgency=low
 
