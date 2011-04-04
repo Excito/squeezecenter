@@ -1,3 +1,10 @@
+squeezecenter (7.5.3-2) vincent; urgency=low
+
+  * Generalize mysql-server dependice to avoid versioning distribution upgrade
+    issues
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 04 Apr 2011 14:01:30 +0200
+
 squeezecenter (7.5.3-1) vincent hugo; urgency=low
 
   * Imported Upstream version 7.5.3
