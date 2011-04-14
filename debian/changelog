@@ -1,3 +1,9 @@
+squeezecenter (7.5.3.dfsg1-2build1) claire estelle; urgency=low
+
+  * build for B2 
+
+ -- Carl Fürstenberg <carl@excito.com>  Thu, 14 Apr 2011 17:00:42 +0200
+
 squeezecenter (7.5.3.dfsg1-2) vincent; urgency=low
 
   * Generalize mysql-server dependice to avoid versioning distribution upgrade
