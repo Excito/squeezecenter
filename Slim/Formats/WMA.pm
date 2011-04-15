@@ -1,6 +1,6 @@
 package Slim::Formats::WMA;
 
-# $Id: WMA.pm 30602 2010-04-14 20:34:16Z agrundman $
+# $Id: WMA.pm 31939 2011-02-22 16:51:59Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -26,6 +26,7 @@ my %tagMapping = (
 	'WM/Genre'              => 'GENRE',
 	'WM/TrackNumber'        => 'TRACKNUM',
 	'WM/PartOfACompilation' => 'COMPILATION',
+	'compilation'           => 'COMPILATION', # Bug 16991
 	'Description'           => 'COMMENT',
 	'replaygain_track_gain' => 'REPLAYGAIN_TRACK_GAIN',
 	'replaygain_track_peak' => 'REPLAYGAIN_TRACK_PEAK',

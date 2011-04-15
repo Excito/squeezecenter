@@ -1,6 +1,6 @@
 package Slim::Plugin::InternetRadio::Plugin;
 
-# $Id: Plugin.pm 30026 2010-02-05 03:34:35Z andy $
+# $Id: Plugin.pm 32164 2011-03-23 14:46:47Z agrundman $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -240,7 +240,7 @@ sub feed {
 	\$feed .= ( \$feed =~ /\\\?/ ) ? '&' : '?';
 	\$feed .= \$val;
 	
-	return \$feed;
+	return \$class->radiotimeFeed( \$feed, \$client );
 }
 };
 	}
