@@ -1,6 +1,6 @@
 package Slim::Menu::TrackInfo;
 
-# $Id: TrackInfo.pm 30634 2010-04-15 20:13:06Z agrundman $
+# $Id: TrackInfo.pm 31824 2011-01-25 03:41:26Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -84,12 +84,12 @@ sub registerDefaultInfoProviders {
 		func      => \&showArtwork,
 	) );
 
-	if ( !main::SLIM_SERVICE ) {
-		$class->registerInfoProvider( contributors => (
-			after => 'top',
-			func  => \&infoContributors,
-		) );
+	$class->registerInfoProvider( contributors => (
+		after => 'top',
+		func  => \&infoContributors,
+	) );
 
+	if ( !main::SLIM_SERVICE ) {
 		$class->registerInfoProvider( album => (
 			after => 'contributors',
 			func  => \&infoAlbum,
@@ -333,6 +333,8 @@ sub infoContributors {
 		};
 	}
 	else {
+		return if main::SLIM_SERVICE;
+		
 		# Loop through the contributor types and append
 		for my $role ( sort $track->contributorRoles ) {
 			for my $contributor ( $track->contributorsOfType($role) ) {

@@ -252,7 +252,7 @@ our @AUTHORS = (
 
 my $prefs        = preferences('server');
 
-our $VERSION     = '7.5.3';
+our $VERSION     = '7.5.4';
 our $REVISION    = undef;
 our $BUILDDATE   = undef;
 our $audiodir    = undef;
@@ -302,6 +302,9 @@ our (
 
 sub init {
 	$inInit = 1;
+	
+	# May get overridden by object-leak or nytprof usage below
+	$SIG{USR2} = \&Slim::Utils::Log::logBacktrace;
 	
 	# Can only have one of NYTPROF and Object-Leak at a time
 	if ( $ENV{OBJECT_LEAK} ) {

@@ -1,6 +1,6 @@
 package Slim::Networking::Async::Socket::UDP;
 
-# $Id: UDP.pm 30416 2010-03-25 13:51:32Z agrundman $
+# $Id: UDP.pm 31882 2011-02-07 15:44:36Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -79,6 +79,7 @@ sub _constant {
 		'MSWin32' => [10,12],
 		'cygwin'  => [3,5],
 		'darwin'  => [10,12],
+		'freebsd' => [10,12],
 		'default' => [33,35],
 	);
 	
