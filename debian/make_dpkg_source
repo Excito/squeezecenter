@@ -15,8 +15,8 @@ rm -rf */Bin;
 rm -rf */Firmware/*.bin;
 rm -f */HTML/EN/html/ext/resources/images/default/grid/Thumbs.db;
 find * -regex '.*\.\(png\|gif\|html\)$$' -exec chmod -x '{}' ';';
-tar --create --lzma --file squeezeboxserver-$version.dfsg1.tar.lzma *;
+tar --create --gzip --file squeezeboxserver-$version.dfsg1.tar.gz *;
 )
-mv $tmpdir/squeezeboxserver-$version.dfsg1.tar.lzma .;
+mv $tmpdir/squeezeboxserver-$version.dfsg1.tar.gz .;
 rm -rf $tmpdir;
 
