@@ -1,6 +1,6 @@
 package Slim::Player::Song;
 
-# $Id: Song.pm 31693 2010-12-23 22:29:08Z adrian $
+# $Id: Song.pm 32476 2011-05-27 04:29:35Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -9,7 +9,6 @@ package Slim::Player::Song;
 
 use bytes;
 use strict;
-use warnings;
 
 use base qw(Slim::Utils::Accessor);
 
@@ -62,7 +61,7 @@ my @_playlistCloneAttributes = qw(
 		qw(
 			_status
 	
-			startOffset
+			startOffset streamLength
 			seekdata initialAudioBlock
 			_canSeek _canSeekError
 	
@@ -70,6 +69,8 @@ my @_playlistCloneAttributes = qw(
 			_transcoded directstream
 			
 			samplerate samplesize channels totalbytes offset blockalign isLive
+			
+			retryData
 		),
 	);
 }
@@ -417,6 +418,11 @@ sub open {
 	} else {
 		require Slim::Player::CapabilitiesHelper;
 		
+		# Set the correct format for WAV/AAC playback
+		if ( exists $streamFormatMap{$format} ) {
+			$format = $streamFormatMap{$format};
+		}
+		
 		# Is format supported by all players?
 		if (!grep {$_ eq $format} Slim::Player::CapabilitiesHelper::supportedFormats($client)) {
 			$error = 'PROBLEM_CONVERT_FILE';
@@ -433,7 +439,7 @@ sub open {
 		
 		$transcoder = {
 			command => '-',
-			streamformat => ($streamFormatMap{$format} || $format),
+			streamformat => $format,
 			streamMode => 'I',
 			rateLimit => 0,
 		};
@@ -549,7 +555,7 @@ sub open {
 					return (undef, 'PROBLEM_CONVERT_FILE', $url);
 				}
 	
-				main::INFOLOG && $log->info("Tokenized command $command");
+				main::INFOLOG && $log->info('Tokenized command: ', Slim::Utils::Unicode::utf8decode_locale($command));
 	
 				my $pipeline;
 				
@@ -574,7 +580,7 @@ sub open {
 						
 						Win32::SetChildShowWindow();
 					} else {
-						$pipeline =  new FileHandle $command;
+						$pipeline = FileHandle->new($command);
 					}
 					
 					if ($pipeline && $pipeline->opened() && !defined(Slim::Utils::Network::blocking($pipeline, 0))) {
@@ -601,7 +607,7 @@ sub open {
 		$client->pauseTime(0);
 	}
 
-	my $streamControler;
+	my $streamController;
 	
 	######################
 	# make sure the filehandle was actually set
@@ -617,11 +623,15 @@ sub open {
 			$sock->sysseek($position, SEEK_SET) if $position;
 		}
 
-		if ( !main::SLIM_SERVICE ) {
+		if ( main::STATISTICS ) {
 			# XXXX - this really needs to happen in the caller!
 			# No database access here. - dsully
 			# keep track of some stats for this track
-			if ( my $persistent = $track->retrievePersistent ) {
+			if ( Slim::Music::Import->stillScanning() ) {
+				# bug 16003 - don't try to update the persistent DB while a scan is running
+				main::DEBUGLOG && $log->is_debug && $log->debug("Don't update the persistent DB - it's locked by the scanner.");
+			}
+			elsif ( my $persistent = $track->retrievePersistent ) {
 				$persistent->set( playcount  => ( $persistent->playcount || 0 ) + 1 );
 				$persistent->set( lastplayed => time() );
 				$persistent->update;
@@ -631,7 +641,7 @@ sub open {
 		$self->_streamFormat($transcoder->{'streamformat'});
 		$client->streamformat($self->_streamFormat()); # XXX legacy
 
-		$streamControler = Slim::Player::SongStreamController->new($self, $sock);
+		$streamController = Slim::Player::SongStreamController->new($self, $sock);
 
 	} else {
 
@@ -645,7 +655,7 @@ sub open {
 	
 	$client->metaTitle(undef);
 	
-	return $streamControler;
+	return $streamController;
 }
 
 # Static method
@@ -717,6 +727,12 @@ sub getSeekDataByPosition {
 	my ($self, $bytesReceived) = @_;
 	
 	return undef if $self->_transcoded();
+	
+	my $streamLength = $self->streamLength();
+	
+	if ($streamLength && $bytesReceived >= $streamLength) {
+		return {streamComplete => 1};
+	}
 	
 	my $handler = $self->currentTrackHandler();
 	
@@ -810,12 +826,7 @@ sub canDoSeek {
 	
 	else {
 
-		my $needEndSeek;
-		if (my $anchor = Slim::Utils::Misc::anchorFromURL($self->currentTrack->url())) {
-			$needEndSeek = ($anchor =~ /[\d.:]+-[\d.:]+/);
-		}
-		
-		if (!$needEndSeek && $handler->can('canSeek')) {
+		if ($handler->can('canSeek')) {
 			if ($handler->canSeek( $self->master(), $self )) {
 				return $self->_canSeek(1) if $handler->isRemote();
 				
@@ -911,7 +922,7 @@ sub icon {
 	$icon ||= Slim::Player::ProtocolHandlers->iconForURL($self->track()->url, $client);
 	
 	if (!$icon && $self->currentTrack()->isa('Slim::Schema::Track')) {
-		$icon = '/music/' . $self->currentTrack()->id . '/cover.jpg'
+		$icon = '/music/' . $self->currentTrack()->coverid . '/cover.jpg'
 	}
 	
 	return $icon;

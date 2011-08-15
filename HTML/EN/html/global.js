@@ -43,7 +43,7 @@ var myGlobalHandlers = {
 			}, 30*1000
 		);
 	},
-	onComplete: function() {
+	onComplete: function(request) {
 		if(Ajax.activeRequestCount == 0) {
 			if ($('systemWorking')) {
 				Element.hide('systemWorking');
@@ -343,6 +343,7 @@ function popUpAlbumInfo(attributes) {
 		
 		$('albumPopup').style.border='1px solid white';
 		
+		// FIXME: This will not work anymore as browsedb.html is obsolete
 		new Ajax.Updater( { success: 'trackInfo' }, webroot + 'browsedb.html?ajaxUpdate=1&player=' + player + '&' + attributes, {
 			method: 'get',
 			asynchronous: true,

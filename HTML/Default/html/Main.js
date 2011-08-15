@@ -7,10 +7,19 @@ Main = {
 		// overwrite some default Ext values
 		Ext.UpdateManager.defaults.indicatorText = '<div class="loading-indicator">' + SqueezeJS.string('loading') + '</div>';
 		SqueezeJS.UI.buttonTemplate = new Ext.Template(
-				'<table border="0" cellpadding="0" cellspacing="0"><tbody><tr>',
-				'<td></td><td><button type="{1}" style="padding:0" class="x-btn-text">{0}</button></td><td></td>',
-				'</tr></tbody></table>');
-		
+			'<table border="0" cellpadding="0" cellspacing="0"><tbody><tr>',
+			'<td></td><td><button type="{0}" style="padding:0" class="x-btn-text {2}"></button></td><td></td>',
+			'</tr></tbody></table>'
+		);
+		SqueezeJS.UI.buttonTemplate.compile();
+
+		SqueezeJS.UI.splitButtonTemplate = new Ext.Template(
+			'<table id="{4}" cellspacing="0" class="x-btn {3}"><tbody class="{1}">',
+			'<tr><td class="x-btn-ml"><i>&#160;</i></td><td class="x-btn-mc"><em class="{2}" unselectable="on"><button type="{0}"></button></em></td><td class="x-btn-mr"><i>&#160;</i></td></tr>',
+			'</tbody></table>'
+		);
+		SqueezeJS.UI.splitButtonTemplate.compile();
+
 		Ext.state.Manager.setProvider(new Ext.state.CookieProvider({
 			expires: new Date(new Date().getTime()+(60*60*24*365*1000))
 		}));
@@ -164,6 +173,9 @@ Main = {
 
 		Ext.EventManager.onWindowResize(this.onResize, this);
 		this.onResize(this.body.getWidth(), this.body.getHeight());
+		
+		if (!SqueezeJS.cookiesEnabled())
+			Ext.MessageBox.alert(SqueezeJS.string('squeezebox_server'), SqueezeJS.string('web_no_cookies_warning'));
 	},
 
 	onResize : function(width, height) {
@@ -374,20 +386,12 @@ Main = {
 						]
 					});
 	
-					new Ext.SplitButton({
+					new SqueezeJS.UI.SplitButton({
 						renderTo: 'btnPlaylistToggleArtwork',
 						icon: webroot + 'html/images/albumlist' + (noCover ? '2' : '0')  + '.gif',
 						cls: 'x-btn-icon',
 						menu: menu,
-						handler: function(ev){
-							if(this.menu && !this.menu.isVisible()){
-								this.menu.show(this.el, this.menuAlign);
-							}
-							this.fireEvent('arrowclick', this, ev);
-						},
-						tooltip: SqueezeJS.string('coverart'),
-						arrowTooltip: SqueezeJS.string('coverart'),
-						tooltipType: 'title'
+						arrowTooltip: SqueezeJS.string('coverart')
 					});
 				}
 	
@@ -423,7 +427,10 @@ Main = {
 	},
 
 	collapseExpand : function(ev){
-		var doExpand = ev.doExpand == null ? !SqueezeJS.getCookie('Squeezebox-expandPlayerControl') : ev.doExpand;
+		var expandCookie = SqueezeJS.getCookie('Squeezebox-expandPlayerControl');
+		expandCookie = expandCookie == 'false' ? false : true;
+		
+		var doExpand = ev.doExpand == null ? !expandCookie : ev.doExpand;
 
 		var art = Ext.get('ctrlCurrentArt');
 

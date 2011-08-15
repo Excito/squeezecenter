@@ -1,6 +1,6 @@
 package Slim::Formats::WMA;
 
-# $Id: WMA.pm 31939 2011-02-22 16:51:59Z agrundman $
+# $Id: WMA.pm 32462 2011-05-24 14:39:52Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -27,6 +27,8 @@ my %tagMapping = (
 	'WM/TrackNumber'        => 'TRACKNUM',
 	'WM/PartOfACompilation' => 'COMPILATION',
 	'compilation'           => 'COMPILATION', # Bug 16991
+	'Compilation'           => 'COMPILATION', # Bug 16991
+	'WM/IsCompilation'      => 'COMPILATION', # Bug 16991
 	'Description'           => 'COMMENT',
 	'replaygain_track_gain' => 'REPLAYGAIN_TRACK_GAIN',
 	'replaygain_track_peak' => 'REPLAYGAIN_TRACK_PEAK',
@@ -82,7 +84,20 @@ sub getTag {
 	}
 	
 	# Flag if we have embedded cover art
-	$tags->{HAS_COVER} = 1 if $tags->{'WM/Picture'};
+	if ( my $pic = $tags->{'WM/Picture'} ) {
+		if ( ref $pic eq 'ARRAY' ) {
+			# multiple images, use image with lowest image_type value
+			# In 'no artwork' mode, ARTWORK is the length
+			$tags->{COVER_LENGTH} = $ENV{AUDIO_SCAN_NO_ARTWORK} 
+				? ( sort { $a->{image_type} <=> $b->{image_type} } @{$pic} )[0]->{image}
+				: length( ( sort { $a->{image_type} <=> $b->{image_type} } @{$pic} )[0]->{image} );
+		}
+		else {
+			$tags->{COVER_LENGTH} = $ENV{AUDIO_SCAN_NO_ARTWORK}
+				? $pic->{image}
+				: length( $pic->{image} );
+		}
+	}
 	
 	return $tags;
 }
@@ -90,6 +105,9 @@ sub getTag {
 sub getCoverArt {
 	my $class = shift;
 	my $file  = shift || return undef;
+	
+	# Enable artwork in Audio::Scan
+	local $ENV{AUDIO_SCAN_NO_ARTWORK} = 0;
 	
 	my $s = Audio::Scan->scan_tags($file);
 	

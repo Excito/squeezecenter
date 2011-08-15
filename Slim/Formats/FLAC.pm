@@ -36,7 +36,6 @@ use Slim::Formats::Playlists::CUE;
 use Slim::Schema::Contributor;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
-use Slim::Utils::Unicode;
 
 my $log       = logger('formats.playlists');
 my $sourcelog = logger('player.source');
@@ -117,17 +116,9 @@ sub getTag {
 	#
 	# cue parsing will return file url references with start/end anchors
 	# we can now pretend that this (bare no-anchor) file is a playlist
-	push @$cuesheet, "    REM END " . sprintf(
-		"%02d:%02d:%02d",
-		int(int($tags->{SECS})/60),
-		int($tags->{SECS} % 60),
-		(($tags->{SECS} - int($tags->{SECS})) * 75)
-	);
+	push @$cuesheet, "    REM END " . $tags->{SECS};
 
 	$tags->{FILENAME} = $file;
-
-	# Bug 14386, $file is raw UTF-8, need to decode it here
-	utf8::decode($file);
 
 	# get the tracks from the cuesheet - tell parseCUE that we're dealing
 	# with an embedded cue sheet by passing in the filename
@@ -152,7 +143,8 @@ sub getTag {
 	$tags->{AUDIO} = 0;
 
 	# set a resonable "title" for the bare file
-	$tags->{TITLE} = $tags->{ALBUM};
+	# First choice: TITLE value from the cue sheet (stored in $tracks->{ALBUM}), or ALBUM tag
+	$tags->{TITLE} = $tracks->{1}->{ALBUM} || $tags->{ALBUM};
 
 	my $fileurl = Slim::Utils::Misc::fileURLFromPath($file) . "#$anchor";
 	my $fileage = (stat($file))[9];
@@ -163,8 +155,12 @@ sub getTag {
 
 		my $track = $tracks->{$key};
 
-		# Allow FLACs with embedded cue sheets to have a date.
+		# Allow FLACs with embedded cue sheets to have a date and size
 		$track->{AGE} = $fileage;
+		$track->{FS}  = $tags->{SIZE};
+		
+		# Mark track as virtual
+		$track->{VIRTUAL} = 1;
 
 		next unless exists $track->{URI};
 
@@ -199,6 +195,9 @@ Return any cover art embedded in the FLAC file's metadata.
 sub getCoverArt {
 	my $class = shift;
 	my $file  = shift;
+
+	# Enable artwork in Audio::Scan
+	local $ENV{AUDIO_SCAN_NO_ARTWORK} = 0;
 	
 	my $s = Audio::Scan->scan($file);
 	
@@ -300,7 +299,15 @@ sub _addArtworkTags {
 	}
 	
 	# Flag if we have embedded cover art
-	$tags->{HAS_COVER} = 1 if $tags->{ARTWORK};
+	if ( $tags->{ARTWORK} ) {
+		if ( $ENV{AUDIO_SCAN_NO_ARTWORK} ) {
+			# In 'no artwork' mode, ARTWORK is the length
+			$tags->{COVER_LENGTH} = $tags->{ARTWORK};
+		}
+		else {
+			$tags->{COVER_LENGTH} = length( $tags->{ARTWORK} );
+		}
+	}
 
 	return $tags;
 }
@@ -731,11 +738,8 @@ sub _getCUEinVCs {
 	return 0 unless exists $tags->{CUESHEET};
 
 	my @cuesheet = split(/\s*\n/, $tags->{'CUESHEET'});
-	push(@cuesheet, "    REM END " . sprintf("%02d:%02d:%02d",
-		int(int($tags->{'SECS'})/60),
-		int($tags->{'SECS'} % 60),
-		(($tags->{'SECS'} - int($tags->{'SECS'})) * 75)
-	));
+	
+	push @cuesheet, "    REM END " . $tags->{'SECS'};
 
 	# we don't have a proper dir to send parseCUE(), but we already have urls,
 	# so we can just fake it. Tell parseCUE that we're an embedded cue sheet

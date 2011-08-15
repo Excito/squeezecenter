@@ -1,6 +1,6 @@
 package Slim::Formats::MP3;
 
-# $Id: MP3.pm 30595 2010-04-14 18:38:17Z agrundman $
+# $Id: MP3.pm 30608 2010-04-15 02:18:17Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -109,8 +109,6 @@ sub getTag {
 	my $class = shift;
 	my $file  = shift;
 	
-	my $isDebug = $log->is_debug;
-
 	if (!$file) {
 		$log->error("No file was passed!");
 		return {};
@@ -156,6 +154,9 @@ Extract and return cover image from the file.
 sub getCoverArt {
 	my $class = shift;
 	my $file  = shift || return undef;
+	
+	# Enable artwork in Audio::Scan
+	local $ENV{AUDIO_SCAN_NO_ARTWORK} = 0;
 	
 	my $s = Audio::Scan->scan_tags($file);
 	
@@ -212,7 +213,7 @@ Locate MP3 frame boundaries when seeking through a file.
 sub findFrameBoundaries {
 	my ( $class, $fh, $offset, $time ) = @_;
 	
-	if ( !defined $fh || !defined $offset ) {
+	if ( !defined $fh || (!defined $offset && !defined $time) ) {
 		return 0;
 	}
 	
@@ -240,6 +241,8 @@ We also look for any ID3 tags and set the title based on any that are found.
 
 sub scanBitrate {
 	my ( $class, $fh, $url ) = @_;
+	
+	local $ENV{AUDIO_SCAN_NO_ARTWORK} = 0;
 	
 	# Scan the header for info/tags
 	seek $fh, 0, 0;
@@ -279,7 +282,7 @@ sub scanBitrate {
 				$pic = ( sort { $a->[1] <=> $b->[1] } @{$pic} )[0];
 			}
 			
-			$track->cover(1);
+			$track->cover( length( $pic->[3] ) );
 			$track->update;
 			
 			my $data = {
@@ -287,14 +290,8 @@ sub scanBitrate {
 				type  => $pic->[0] || 'image/jpeg',
 			};
 			
-			my $cache = Slim::Utils::Cache->new( 'Artwork', 1, 1 );
-			
-			if ( main::SLIM_SERVICE ) {
-				$cache->set( "cover_$url", $data, 86400 );
-			}
-			else {
-				$cache->set( "cover_$url", $data, $Cache::Cache::EXPIRES_NEVER );
-			}
+			my $cache = Slim::Utils::Cache->new();
+			$cache->set( "cover_$url", $data, 86400 * 7 );
 			
 			main::DEBUGLOG && $scannerlog->is_debug && $scannerlog->debug( 'Found embedded cover art, saving for ' . $track->url );
 		}
@@ -437,7 +434,20 @@ sub doTagMapping {
 	}
 	
 	# Flag if we have embedded cover art
-	$tags->{HAS_COVER} = 1 if $tags->{APIC};
+	if ( my $pic = $tags->{APIC} ) {
+		if ( ref $pic->[0] eq 'ARRAY' ) {
+			# multiple images, use image with lowest image_type value
+			# In 'no artwork' mode, ARTWORK is the length
+			$tags->{COVER_LENGTH} = $ENV{AUDIO_SCAN_NO_ARTWORK} 
+				? ( sort { $a->[1] <=> $b->[1] } @{$pic} )[0]->[3]
+				: length( ( sort { $a->[1] <=> $b->[1] } @{$pic} )[0]->[3] );
+		}
+		else {
+			$tags->{COVER_LENGTH} = $ENV{AUDIO_SCAN_NO_ARTWORK}
+				? $pic->[3]
+				: length( $pic->[3] );
+		}
+	}
 }
 
 sub canSeek { 1 }

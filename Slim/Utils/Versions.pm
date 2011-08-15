@@ -1,6 +1,6 @@
 package Slim::Utils::Versions;
 
-# $Id: Versions.pm 26931 2009-06-07 03:53:36Z michael $
+# $Id: Versions.pm 31258 2010-08-26 20:11:47Z adrian $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or modify it
@@ -109,9 +109,7 @@ sub _compareVersionPart {
 
 =head2 compareVersions( $left, $right )
 
-Returns true if the version string in $left is greater than the string in $right.
-
-Returns false otherwise.
+Returns: 1 if $left > $right, 0 if $left == $right, -1 if $left < $right
 
 =cut
 

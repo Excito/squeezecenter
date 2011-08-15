@@ -7,10 +7,9 @@ package Slim::Networking::UPnP::ControlPoint;
 
 # An asynchronous UPnP Control Point 
 
-# $Id: ControlPoint.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: ControlPoint.pm 30446 2010-03-31 12:11:29Z agrundman $
 
 use strict;
-use warnings;
 
 use IO::Socket qw(:DEFAULT :crlf);
 use HTML::Entities;

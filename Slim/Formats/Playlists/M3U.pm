@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists::M3U;
 
-# $Id: M3U.pm 28487 2009-09-10 10:16:47Z michael $
+# $Id: M3U.pm 31733 2011-01-12 17:56:45Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 #
@@ -18,17 +18,20 @@ use Socket qw(:crlf);
 use Slim::Music::Info;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
+use Slim::Utils::Prefs;
 use Slim::Utils::Unicode;
 
-my $log = logger('formats.playlists');
+my $log   = logger('formats.playlists');
+my $prefs = preferences('server');
 
 sub read {
 	my ($class, $file, $baseDir, $url) = @_;
 
 	my @items  = ();
-	my ($secs, $artist, $album, $title);
+	my ($secs, $artist, $album, $title, $trackurl);
 	my $foundBOM = 0;
 	my $fh;
+	my $audiodir;
 
 	if (defined $file && ref $file) {
 		$fh = $file;	# filehandle passed
@@ -59,22 +62,26 @@ sub read {
 		$entry =~ s/^\s*//; 
 		$entry =~ s/\s*$//; 
 		
-		# decode any HTML entities in-place
-		HTML::Entities::decode_entities($entry);
+		# If the line is not a filename (starts with #), handle encoding
+		# If it's a filename, accept it as raw bytes
+		if ( $entry =~ /^#/ ) {
+			# decode any HTML entities in-place
+			HTML::Entities::decode_entities($entry);
 
-		# Guess the encoding of each line in the file. Bug 1876
-		# includes a playlist that has latin1 titles, and utf8 paths.
-		my $enc = Slim::Utils::Unicode::encodingFromString($entry);
+			# Guess the encoding of each line in the file. Bug 1876
+			# includes a playlist that has latin1 titles, and utf8 paths.
+			my $enc = Slim::Utils::Unicode::encodingFromString($entry);
 
-		# Only strip the BOM off of UTF-8 encoded bytes. Encode will
-		# handle UTF-16
-		if (!$foundBOM && $enc eq 'utf8') {
+			# Only strip the BOM off of UTF-8 encoded bytes. Encode will
+			# handle UTF-16
+			if (!$foundBOM && $enc eq 'utf8') {
 
-			$entry = Slim::Utils::Unicode::stripBOM($entry);
-			$foundBOM = 1;
+				$entry = Slim::Utils::Unicode::stripBOM($entry);
+				$foundBOM = 1;
+			}
+
+			$entry = Slim::Utils::Unicode::utf8decode_guess($entry, $enc);
 		}
-
-		$entry = Slim::Utils::Unicode::utf8decode_guess($entry, $enc);
 
 		main::DEBUGLOG && $log->debug("  entry from file: $entry");
 
@@ -101,26 +108,39 @@ sub read {
 			main::DEBUGLOG && $log->debug("  found title: $title");
 		}
 
+		elsif ( $entry =~ /^#EXTURL:(.*?)$/ ) {
+			$trackurl = $1;
+			
+			main::DEBUGLOG && $log->debug("  found trackurl: $trackurl");
+		}
+
 		next if $entry =~ /^#/;
 		next if $entry =~ /#CURTRACK/;
 		next if $entry eq "";
 
 		$entry =~ s|$LF||g;
 
-		if (main::ISWINDOWS) {
-			$entry = Win32::GetANSIPathName($entry);	
+		if (!$trackurl) {
+
+			if (Slim::Music::Info::isRemoteURL($entry)) {
+	
+				$trackurl = $entry;
+	
+			} else {
+	
+				if (main::ISWINDOWS && !Slim::Music::Info::isFileURL($entry)) {
+					$entry = Win32::GetANSIPathName($entry);	
+				}
+				
+				$trackurl = Slim::Utils::Misc::fixPath($entry, $baseDir);
+			}
 		}
-		else {
-			$entry = Slim::Utils::Unicode::utf8encode_locale($entry);	
-		}
+		
+		if ($class->playlistEntryIsValid($trackurl, $url)) {
 
-		$entry = Slim::Utils::Misc::fixPath($entry, $baseDir);
+			main::DEBUGLOG && $log->debug("    valid entry: $trackurl");
 
-		if ($class->playlistEntryIsValid($entry, $url)) {
-
-			main::DEBUGLOG && $log->debug("    entry: $entry");
-
-			push @items, $class->_updateMetaData( $entry, {
+			push @items, $class->_updateMetaData( $trackurl, {
 				'TITLE'  => $title,
 				'ALBUM'  => $album,
 				'ARTIST' => $artist,
@@ -128,7 +148,28 @@ sub read {
 			} );
 
 			# reset the title
-			$title = undef;
+			($secs, $artist, $album, $title, $trackurl) = ();
+		}
+		else {
+			# Check if the playlist entry is relative to audiodir
+			$audiodir ||= Slim::Utils::Misc::getAudioDir();
+			
+			$trackurl = Slim::Utils::Misc::fixPath($entry, $audiodir);
+			
+			if ($class->playlistEntryIsValid($trackurl, $url)) {
+
+				main::DEBUGLOG && $log->debug("    valid entry: $trackurl");
+
+				push @items, $class->_updateMetaData( $trackurl, {
+					'TITLE'  => $title,
+					'ALBUM'  => $album,
+					'ARTIST' => $artist,
+					'SECS'   => ( defined $secs && $secs > 0 ) ? $secs : undef,
+				} );
+
+				# reset the title
+				($secs, $artist, $album, $title, $trackurl) = ();
+			}
 		}
 	}
 
@@ -211,6 +252,7 @@ sub write {
 	print $output "#CURTRACK $resumetrack\n" if defined($resumetrack);
 	print $output "#EXTM3U\n" if $addTitles;
 
+	my $i = 0;
 	for my $item (@{$listref}) {
 
 		my $track = Slim::Schema->objectForUrl($item);
@@ -220,23 +262,24 @@ sub write {
 			logError("Couldn't retrieve objectForUrl: [$item] - skipping!");
 			next;
 		};
+		
+		# Bug 16683: put the 'file:///' URL in an extra extension
+		print $output "#EXTURL:", $track->url, "\n";
 
 		if ($addTitles) {
 			
-			my $title = Slim::Utils::Unicode::utf8decode( $track->title );
+			my $title = $track->title;
 			my $secs = int($track->secs || -1);
 
 			if ($title) {
 				print $output "#EXTINF:$secs,$title\n";
 			}
 		}
-
-		# XXX - we still have a problem where there can be decomposed
-		# unicode characters. I don't know how this happens - it's
-		# coming from the filesystem.
-		my $path = Slim::Utils::Unicode::utf8decode( $class->_pathForItem($track->url, 1) );
-
-		print $output "$path\n";
+		
+		my $path = Slim::Utils::Unicode::utf8decode_locale( $class->_pathForItem($track->url) );
+		print $output $path, "\n";
+		
+		main::idleStreams() if ! (++$i % 20);
 	}
 
 	close $output if $filename;

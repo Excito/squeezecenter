@@ -1,6 +1,6 @@
 package Slim::Utils::Log;
 
-# $Id: Log.pm 31037 2010-07-12 14:20:55Z agrundman $
+# $Id: Log.pm 31045 2010-07-12 22:48:16Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Dan Sully, Logitech.
 # This program is free software; you can redistribute it and/or
@@ -585,6 +585,20 @@ sub scannerLogFile {
 	return _logFileName('scanner');
 }
 
+=head2 getLogFiles ( )
+
+Returns a list of the the locations of Squeezebox Server's log files.
+
+=cut
+
+sub getLogFiles {
+	return [
+		{SERVER  => serverLogFile},
+		{SCANNER => (Slim::Schema::hasLibrary() ? scannerLogFile() : undef)},
+		{PERFMON => (main::PERFMON ? perfmonLogFile() : undef )},
+	]
+}
+
 =head2 scannerLogMode ( )
 
 Returns the logging mode of Squeezebox Server's scanner log file.
@@ -803,6 +817,7 @@ sub logGroups {
 		SCANNER => {
 			categories => {
 				'scan'                   => 'DEBUG',
+				'scan.auto'              => 'DEBUG',
 				'scan.scanner'           => 'DEBUG',
 				'scan.import'            => 'DEBUG',
 				'artwork'                => 'DEBUG',
@@ -908,6 +923,7 @@ sub logLevels {
 		'player.ui'                  => 'ERROR',
 
 		'scan'                       => 'ERROR',
+		'scan.auto'                  => 'DEBUG', # XXX forced on because there will be problems
 		'scan.scanner'               => 'ERROR',
 		'scan.import'                => 'ERROR',
 

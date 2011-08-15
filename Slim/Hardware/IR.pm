@@ -1,6 +1,6 @@
 package Slim::Hardware::IR;
 
-# $Id: IR.pm 30810 2010-05-21 17:13:30Z agrundman $
+# $Id: IR.pm 30813 2010-05-21 19:32:03Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

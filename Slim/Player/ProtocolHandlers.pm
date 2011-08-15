@@ -1,6 +1,6 @@
 package Slim::Player::ProtocolHandlers;
 
-# $Id: ProtocolHandlers.pm 30006 2010-02-04 13:38:29Z ayoung $
+# $Id: ProtocolHandlers.pm 32811 2011-07-22 10:45:35Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -24,13 +24,13 @@ my %protocolHandlers = (
 	icy      => qw(Slim::Player::Protocols::HTTP),
 	mms      => qw(Slim::Player::Protocols::MMS),
 	spdr     => qw(Slim::Player::Protocols::SqueezePlayDirect),
-	rtsp     => 1,
 	playlist => 0,
 	db       => 1,
 );
 
 my %localHandlers = (
 	file     => 1,
+	db       => 1,
 );
 
 my %loadedHandlers = ();
@@ -140,7 +140,7 @@ sub iconForURL {
 	}
 
 	elsif ($url =~ /^db:album\.(\w+)=(.+)/) {
-		my $album = Slim::Schema->single('Album', { $1 => Slim::Utils::Misc::unescape($2) });
+		my $album = Slim::Schema->search('Album', { $1 => Slim::Utils::Misc::unescape($2) })->first;
 
 		if ($album && $album->artwork) {
 			return 'music/' . $album->artwork . '/cover.png';

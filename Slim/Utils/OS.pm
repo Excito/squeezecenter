@@ -35,7 +35,9 @@ sub details {
 	return shift->{osDetails};
 }
 
-sub initPrefs {};
+sub initPrefs {}
+
+sub postInitPrefs {}
 
 =head2 migratePrefsFolder()
 
@@ -45,9 +47,15 @@ Windows & OSX handle this in the installer
 
 =cut
 
-sub migratePrefsFolder {};
+sub migratePrefsFolder {}
 
-sub sqlHelperClass { 'Slim::Utils::MySQLHelper' }
+sub sqlHelperClass { 
+	if ( $main::dbtype ) {
+		return "Slim::Utils::${main::dbtype}Helper";
+	}
+	
+	return 'Slim::Utils::SQLiteHelper';
+}
 
 # Skip obsolete plugins, they should be deleted by installers
 sub skipPlugins {return (qw(Picks RadioIO ShoutcastBrowser Webcasters Health));}
@@ -207,15 +215,23 @@ sub decodeExternalHelperPath {
 	my $path = $_[1];
 	
 	# Bug 8118, only decode if filename can't be found
-	if ( !-e $path ) {
-		$path = Slim::Utils::Unicode::utf8decode_locale($path);
-	}
+	# No. We need to set the UFT8 flag if we have non-ASCII contents
+	
+	$path = Slim::Utils::Unicode::utf8decode_locale($path);
 	
 	return $path;
 }
 
 sub scanner {
 	return "$Bin/scanner.pl";
+}
+
+sub gdresize {
+	return "$Bin/gdresize.pl";
+}
+
+sub gdresized {
+	return "$Bin/gdresized.pl";
 }
 
 sub dontSetUserAndGroup { 0 }
@@ -389,6 +405,20 @@ sub canAutoUpdate { 0 };
 sub installerExtension { '' };
 sub installerOS { '' };
 
+
+=head2 directFirmwareDownload( )
+
+Return true if you don't want Squeezebox Server to download and cache firmware
+upgrades for your players. It will then tell the player to download them directly
+from SqueezeNetwork.
+
+Use this if you are running the server on low spec hardware or flash with limited capacity.
+
+=cut
+
+sub directFirmwareDownload { 0 };
+
+
 =head2 restartServer( )
 
 Squeezebox Server can initiate a restart on some systems. 
@@ -402,5 +432,7 @@ sub restartServer {
 }
 
 sub canRestartServer { 1 }
+
+sub progressJSON { }
 
 1;

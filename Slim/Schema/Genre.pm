@@ -1,6 +1,6 @@
 package Slim::Schema::Genre;
 
-# $Id: Genre.pm 28539 2009-09-16 13:02:39Z michael $
+# $Id: Genre.pm 32352 2011-04-26 15:00:17Z agrundman $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -30,7 +30,7 @@ use Slim::Utils::Log;
 	$class->has_many('genreTracks' => 'Slim::Schema::GenreTrack' => 'genre');
 
 	if ($] > 5.007) {
-		$class->utf8_columns(qw/name namesort namesearch/);
+		$class->utf8_columns(qw/name namesort/);
 	}
 
 	$class->resultset_class('Slim::Schema::ResultSet::Genre');
@@ -39,7 +39,7 @@ use Slim::Utils::Log;
 sub url {
 	my $self = shift;
 
-	return sprintf('db:genre.namesearch=%s', URI::Escape::uri_escape_utf8($self->namesearch));
+	return sprintf('db:genre.name=%s', URI::Escape::uri_escape_utf8($self->name));
 }
 
 sub tracks {
@@ -66,22 +66,23 @@ sub displayAsHTML {
 sub add {
 	my $class = shift;
 	my $genre = shift;
-	my $track = shift;
+	my $trackId = shift;
 	
 	# Using native DBI here to improve performance during scanning
 	# and because DBIC objects are not needed here
 	# This is around 20x faster than using DBIC
-	my $dbh = Slim::Schema->storage->dbh;
+	my $dbh = Slim::Schema->dbh;
 
 	for my $genreSub (Slim::Music::Info::splitTag($genre)) {
 
 		my $namesort = Slim::Utils::Text::ignoreCaseArticles($genreSub);
+		my $namesearch = Slim::Utils::Text::ignoreCaseArticles($genreSub, 1);
 
 		# So that ucfirst() works properly.
 		use locale;
 		
-		my $sth = $dbh->prepare_cached( 'SELECT id FROM genres WHERE namesearch = ?' );
-		$sth->execute($namesort);
+		my $sth = $dbh->prepare_cached( 'SELECT id FROM genres WHERE name = ?' );
+		$sth->execute( ucfirst($genreSub) );
 		my ($id) = $sth->fetchrow_array;
 		$sth->finish;
 		
@@ -92,7 +93,7 @@ sub add {
 				VALUES
 				(?, ?, ?)
 			} );
-			$sth->execute( $namesort, ucfirst($genreSub), $namesort );
+			$sth->execute( $namesort, ucfirst($genreSub), $namesearch );
 			$id = $dbh->last_insert_id(undef, undef, undef, undef);
 		}
 		
@@ -102,24 +103,31 @@ sub add {
 			VALUES
 			(?, ?)
 		} );
-		$sth->execute( $id, $track->id );
+		$sth->execute( $id, $trackId );
 	}
 	
 	return;
 }
 
-# XXX native DBI
 sub rescan {
 	my ( $class, @ids ) = @_;
+	
+	my $dbh = Slim::Schema->dbh;
 	
 	my $log = logger('scan.scanner');
 	
 	for my $id ( @ids ) {
-		my $count = Slim::Schema->rs('GenreTrack')->search( genre => $id )->count;
-		
+		my $sth = $dbh->prepare_cached( qq{
+			SELECT COUNT(*) FROM genre_track WHERE genre = ?
+		} );
+		$sth->execute($id);
+		my ($count) = $sth->fetchrow_array;
+		$sth->finish;
+				
 		if ( !$count ) {
 			main::DEBUGLOG && $log->is_debug && $log->debug("Removing unused genre: $id");
-			Slim::Schema->rs('Genre')->find($id)->delete;
+			
+			$dbh->do( "DELETE FROM genres WHERE id = ?", undef, $id );
 		}
 	}
 }

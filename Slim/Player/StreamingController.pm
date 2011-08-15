@@ -1,6 +1,6 @@
 package Slim::Player::StreamingController;
 
-# $Id: StreamingController.pm 31466 2010-10-25 17:49:57Z agrundman $
+# $Id: StreamingController.pm 32552 2011-06-24 13:52:40Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -9,7 +9,6 @@ package Slim::Player::StreamingController;
 
 use bytes;
 use strict;
-use warnings;
 
 use Scalar::Util qw(blessed weaken);
 use Slim::Utils::Log;
@@ -19,6 +18,7 @@ use Slim::Player::Song;
 use Slim::Player::ReplayGain;
 
 my $log = logger('player.source');
+my $synclog = logger('player.sync');
 
 my $prefs = preferences('server');
 
@@ -224,7 +224,7 @@ ReadyToStream =>
 	[	\&_NoOp,		\&_NextIfMore,	\&_NextIfMore,	\&_StreamIfReady],	# PAUSED
 ],
 Stopped =>
-[	[	\&_Invalid,		\&_BadState,	\&_BadState,	\&_Invalid],		# STOPPED	
+[	[	\&_Invalid,		\&_BadState,	\&_BadState,	\&_NoOp],			# STOPPED	
 	[	\&_BadState,	\&_NoOp,		\&_NoOp,		\&_BadState],		# BUFFERING
 	[	\&_BadState,	\&_Invalid,		\&_Invalid,		\&_BadState],		# WAITING_TO_SYNC
 	[	\&_Stopped,		\&_Buffering,	\&_Buffering,	\&_PlayIfReady],	# PLAYING
@@ -360,6 +360,7 @@ sub _Playing {
 	if (defined($last_song)) {
 		main::INFOLOG && $log->info("Song " . $last_song->index() . " has now started playing");
 		$last_song->setStatus(Slim::Player::Song::STATUS_PLAYING);
+		$last_song->retryData(undef);	# we are playing so we must be done retrying
 	}
 	
 	# Update a few timestamps
@@ -478,8 +479,6 @@ use constant PLAYPOINT_RECENT_THRESHOLD => 3.0;
 sub _CheckSync {
 	my ($self, $event, $params) = @_;
 	
-	my $log = logger('player.sync');
-	
 	# check to see if resynchronization is necessary
 
 	return unless scalar @{ $self->{'players'} } > 1;
@@ -496,7 +495,7 @@ sub _CheckSync {
 			&& $prefs->client($player)->get('maintainSync') );
 		my $playPoint = $player->playPoint();
 		if ( !defined $playPoint ) {
-			if ( main::DEBUGLOG && $log->is_debug ) {$log->debug( $player->id() . " bailing as no playPoint" );}
+			if ( main::DEBUGLOG && $synclog->is_debug ) {$synclog->debug( $player->id() . " bailing as no playPoint" );}
 			return;
 		}
 		if ( $playPoint->[0] > $recentThreshold ) {
@@ -508,8 +507,8 @@ sub _CheckSync {
 			);
 		}
 		else {
-			if ( main::DEBUGLOG && $log->is_debug ) {
-				$log->debug( $player->id() . " bailing as playPoint too old: "
+			if ( main::DEBUGLOG && $synclog->is_debug ) {
+				$synclog->debug( $player->id() . " bailing as playPoint too old: "
 					  . ( $now - $playPoint->[0] ) . "s" );
 			}
 			return;
@@ -517,14 +516,14 @@ sub _CheckSync {
 	}
 	return unless scalar(@playerPlayPoints);
 
-	if ( main::DEBUGLOG && $log->is_debug ) {
+	if ( main::DEBUGLOG && $synclog->is_debug ) {
 		my $first = $playerPlayPoints[0][1];
 		my $str = sprintf( "%s: %.3f", $playerPlayPoints[0][0]->id(), $first );
 		foreach ( @playerPlayPoints[ 1 .. $#playerPlayPoints ] ) {
 			$str .= sprintf( ", %s: %+5d",
 				$_->[0]->id(), ( $_->[1] - $first ) * 1000 );
 		}
-		$log->debug("playPoints: $str");
+		$synclog->debug("playPoints: $str");
 	}
 
 	# sort the play-points by decreasing apparent-start-time
@@ -557,8 +556,8 @@ sub _CheckSync {
 			# || $delta < $referenceMinAdjust
 		  );
 		if ( $i < $reference ) {
-			if ( main::INFOLOG && $log->is_info ) {
-				$log->info(sprintf("%s resync: skipAhead %dms",	$player->id(), $delta * 1000));
+			if ( main::INFOLOG && $synclog->is_info ) {
+				$synclog->info(sprintf("%s resync: skipAhead %dms",	$player->id(), $delta * 1000));
 			}
 			$player->skipAhead($delta);
 			$self->{'nextCheckSyncTime'} += 1;
@@ -567,8 +566,8 @@ sub _CheckSync {
 
  			# bug 6864: SB1s cannot reliably pause without skipping frames, so we don't try
 			if ( $player->can('pauseForInterval') ) {
-				if ( main::INFOLOG && $log->is_info ) {
-					$log->info(sprintf("%s resync: pauseFor %dms", $player->id(), $delta * 1000));
+				if ( main::INFOLOG && $synclog->is_info ) {
+					$synclog->info(sprintf("%s resync: pauseFor %dms", $player->id(), $delta * 1000));
 				}
 				$player->pauseForInterval($delta);
 				$self->{'nextCheckSyncTime'} += $delta;
@@ -687,6 +686,8 @@ sub _getNextTrack {			# getNextTrack -> TrackWait
 		pop @$queue;
 	}
 	
+	_showTrackwaitStatus($self, $song);
+
 	$song->getNextSong (
 		sub {	# success
 			_nextTrackReady($self, $id, $song);
@@ -696,7 +697,6 @@ sub _getNextTrack {			# getNextTrack -> TrackWait
 		}
 	);
 	
-	_showTrackwaitStatus($self, $song);
 }
 
 sub _showTrackwaitStatus {
@@ -710,9 +710,16 @@ sub _showTrackwaitStatus {
 			? $handler->getMetadataFor($self->master(), $song->currentTrack()->url)
 			: {};
 		my $icon = $song->icon();
+		my $message;
+
+		if (!$song->isRemote) {
+			$message = 'NOW_PLAYING';
+			$remoteMeta = undef;
+		} else {
+			$message = $song->isPlaylist() ? 'GETTING_TRACK_DETAILS' : 'GETTING_STREAM_INFO';
+		}
 		
-		_playersMessage($self, $song->currentTrack->url,
-			$remoteMeta, $song->isPlaylist() ? 'GETTING_TRACK_DETAILS' : 'GETTING_STREAM_INFO', $icon, 0, 30);
+		_playersMessage($self, $song->currentTrack->url, $remoteMeta , $message, $icon, 0, 30);
 	}
 }
 
@@ -784,13 +791,31 @@ sub _playersMessage {
 	my $iconType = $icon && Slim::Music::Info::isRemoteURL($icon) ? 'icon' : 'icon-id';
 	$icon ||= 0;
 
+	# don't pass remoteMeta if it does not contain a title so getCurrentTitle can extract from db
+	if ($remoteMeta && ref $remoteMeta eq 'HASH' && !$remoteMeta->{'title'}) {
+		$remoteMeta = undef;
+	}
+
 	foreach my $client (@{$self->{'players'}}) {
 
+		my ($lines, $overlay);
+
 		my $line2 = Slim::Music::Info::getCurrentTitle($client, $url, 0, $remoteMeta) || $url;
+
+		# use full now playing display if NOW_PLAYING message to get overlay
+		if ($message eq 'NOW_PLAYING' && $client->can('currentSongLines')) {
+			my $songLines = $client->currentSongLines();
+			$lines   = $songLines->{'line'};
+			$overlay = $songLines->{'overlay'};
+		} else {
+			$lines = [ $line1, $line2 ];
+		}
+
+		my $screen = Slim::Buttons::Common::msgOnScreen2($client) ? 'screen2' : 'screen1';
 	
 		# Show an error message
 		$client->showBriefly( {
-			line => [ $line1, $line2 ],
+			$screen => { line => $lines, overlay => $overlay },
 			jive => { type => ($isError ? 'popupplay' : 'song'), text => [ $line1, $line2 ], $iconType => $icon, duration => $duration * 1000},
 		}, {
 			scroll    => 1,
@@ -892,6 +917,7 @@ sub _RetryOrNext {		# -> Idle; IF [shouldretry && canretry] THEN continue
 			main::INFOLOG && $log->is_info && $log->info('Unable to re-stream ', $song->currentTrack()->url, ', duration=', $song->duration(), ' at time offset ', $elapsed + $stillToPlay);
 		} elsif (!$song->duration() && $song->isLive()) {	# unknown duration => assume radio
 			main::INFOLOG && $log->is_info && $log->info('Attempting to re-stream ', $song->currentTrack()->url, ' after time ', $elapsed);
+			$song->retryData({ count => 0, start => Time::HiRes::time()});
 			_Stream($self, $event, {song => $song});
 			return;
 		}
@@ -912,7 +938,10 @@ sub _Continue {
 		$seekdata = $song->getSeekDataByPosition($bytesReceived);
 	}	
 	
-	if (!$bytesReceived || $seekdata) {
+	if ($seekdata && $seekdata->{'streamComplete'}) {
+		main::INFOLOG && $log->is_info && $log->info("stream already complete at offset $bytesReceived");
+		_Streamout($self);
+	} elsif (!$bytesReceived || $seekdata) {
 		main::INFOLOG && $log->is_info && $log->info("Restarting stream at offset $bytesReceived");
 		_Stream($self, $event, {song => $song, seekdata => $seekdata, reconnect => 1});
 		if ($song == playingSong($self)) {
@@ -961,15 +990,19 @@ sub _NextIfMore {			# -> Idle; IF [moreTracks] THEN getNextTrack -> TrackWait EN
 	_getNextTrack($self, $params, 1);
 }
 
+# This action is only called for StreamingFailed; buffering or wait-to-sync
 sub _StopNextIfMore {		# -> Stopped, Idle; IF [moreTracks] THEN getNextTrack -> TrackWait ENDIF
 	my ($self, $event, $params) = @_;
 	
 	# bug 10165: need to force stop in case the failure that got use here did not stop all active players
 	_Stop(@_);
 	
+	return if _willRetry($self);
+	
 	_getNextTrack($self, $params, 1);
 }
 
+# This action is only called for StreamingFailed, PLAYING
 sub _SyncStopNext {		# -> [synced]Stopped, Idle; IF [moreTracks] THEN getNextTrack -> TrackWait ENDIF
 	my ($self, $event, $params) = @_;
 	
@@ -979,10 +1012,16 @@ sub _SyncStopNext {		# -> [synced]Stopped, Idle; IF [moreTracks] THEN getNextTra
 	} elsif ($params->{'errorDisconnect'}) {
 		# we are already playing, treat like EoS & give retry a chance
 		_setStreamingState($self, STREAMOUT);
-		return;
+		my $song = streamingSong($self);
+		if ($song && !$song->retryData()) {
+			return;
+		}
 	} else {
 		_setStreamingState($self, IDLE);
 	}
+
+	return if _willRetry($self);
+
 	_getNextTrack($self, $params, 1);
 }
 
@@ -1189,6 +1228,10 @@ sub _Stream {				# play -> Buffering, Streaming
 		
 	if (!$songStreamController) {
 		_errorOpening($self, $song->currentTrack()->url, @error);
+
+		# Bug 3161: more-agressive retries
+		return if _willRetry($self, $song);
+		
 		_NextIfMore($self, $event, {errorSong => $song});
 		return;	
 	}	
@@ -1335,6 +1378,64 @@ sub _Start {		# start -> Playing
 		# TODO maybe try synchronized resume
 		_Resume(@_);
 	}
+}
+
+my @retryIntervals = (5, 10, 15, 30);
+use constant RETRY_LIMIT          => 5 * 60;
+use constant RETRY_LIMIT_PLAYLIST => 30;
+
+# Bug 3161: more retries
+sub _willRetry {
+	my ($self, $song) = @_;
+	
+	$song ||= streamingSong($self);
+	return 0 if !$song;
+	
+	my $retry = $song->retryData();
+	if (!$retry) {
+		$log->info('no retry data');
+		return 0;
+	}
+	
+	my $limit;
+	my $next = nextsong($self);
+	if (defined $next && $next != $song->index) {
+		$limit = RETRY_LIMIT_PLAYLIST;
+	} else {
+		$limit = RETRY_LIMIT;
+	}
+	
+	my $interval = $retryIntervals[$retry->{'count'} > $#retryIntervals ? -1 : $retry->{'count'}];
+	my $retryTime = time() + $interval;
+
+	if ($retry->{'start'} + $limit < $retryTime) {
+		# too late, give up
+		$song->retryData(undef);
+		_errorOpening($self, $song->currentTrack()->url, 'RETRY_LIMIT_EXCEEDED');
+		_Stop($self);
+		$self->{'consecutiveErrors'} = 1;	# the failed retry counts as one error
+		return 0;
+	}
+	
+	$retry->{'count'} += 1;
+	my $id = ++$self->{'nextTrackCallbackId'};
+	$self->{'nextTrack'} = undef;
+	_setStreamingState($self, TRACKWAIT);
+	
+	Slim::Utils::Timers::setTimer(
+		$self,
+		$retryTime,
+		sub {
+			$song->setStatus(Slim::Player::Song::STATUS_READY);
+			$self->{'consecutiveErrors'} = 0;
+			_nextTrackReady($self, $id, $song);
+		},
+		undef
+	);
+	
+	_playersMessage($self, $song->currentTrack()->url, undef, 'RETRYING', undef, 0, $interval + 1);
+
+	return 1;
 }
 
 sub _syncStart {
@@ -1533,6 +1634,12 @@ sub isWaitingToSync {
 	return $_[0]->{'playingState'} == WAITING_TO_SYNC;
 }
 
+sub isRetrying {
+	my $self = shift;
+	my $song = streamingSong($self);
+	return $song && $song->retryData();
+}
+
 sub playingSongDuration {
 	my $song = playingSong($_[0]) || return;
 	return $song->duration();
@@ -1722,10 +1829,8 @@ sub localEndOfStream {
 sub sync {
 	my ($self, $player) = @_;
 
-	my $log = logger('player.sync');
-		
 	if ($player->controller() == $self) {
-		main::INFOLOG && $log->info($self->{'masterId'} . " sync-group already contains: " . $player->id());
+		main::INFOLOG && $synclog->info($self->{'masterId'} . " sync-group already contains: " . $player->id());
 		if ($player->power && $player->connected) {
 			$self->playerActive($player);
 		}
@@ -1739,13 +1844,13 @@ sub sync {
 		_stopClient($player);
 	}
 
-	main::INFOLOG && $log->info($self->{'masterId'} . " adding to syncGroup: " . $player->id()); # bt();
+	main::INFOLOG && $synclog->info($self->{'masterId'} . " adding to syncGroup: " . $player->id()); # bt();
 	
 	assert (@{$player->controller()->{'allPlayers'}} == 1); # can only add un-synced player
 	
 	foreach (@{$self->{'allPlayers'}}) {
 		if ($_ == $player) {
-			$log->error($player->id . " already in this syncgroup but has different controller");
+			$synclog->error($player->id . " already in this syncgroup but has different controller");
 			return;
 		}
 	}
@@ -1782,16 +1887,16 @@ sub sync {
 			_JumpToTime($self, undef, {newtime => playingSongElapsed($self), restartIfNoSeek => 1});
 		}
 	} else {
-		if (main::INFOLOG && $log->is_info) {
-			$log->info(sprintf("New player inactive: power=%d, connected=%d", $player->power, $player->connected));
+		if (main::INFOLOG && $synclog->is_info) {
+			$synclog->info(sprintf("New player inactive: power=%d, connected=%d", $player->power, $player->connected));
 		}
 	}
 	
 	Slim::Control::Request::notifyFromArray($self->master(), ['playlist', 'sync']);
 	
-	if (main::INFOLOG && $log->is_info) {
-		$log->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
-		$log->info($self->{'masterId'} . " active players are: " . join(',', map { $_->id } @{$self->{'players'}}));
+	if (main::INFOLOG && $synclog->is_info) {
+		$synclog->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
+		$synclog->info($self->{'masterId'} . " active players are: " . join(',', map { $_->id } @{$self->{'players'}}));
 	}
 }
 
@@ -1802,9 +1907,7 @@ sub unsync {
 	
 	if (@{$self->{'allPlayers'}} < 2) {return;}
 	
-	my $log = logger('player.sync');
-	
-	main::INFOLOG && $log->info($self->{'masterId'} . " unsync " . $player->id()); # bt();
+	main::INFOLOG && $synclog->info($self->{'masterId'} . " unsync " . $player->id()); # bt();
 		
 	# remove player from the lists
 	my $i = 0;
@@ -1855,9 +1958,9 @@ sub unsync {
 	
 	Slim::Control::Request::notifyFromArray($self->master(), ['playlist', 'sync']);
 	
-	if (main::INFOLOG && $log->is_info) {
-		$log->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
-		$log->info($self->{'masterId'} . " active players are: " . join(',', map { $_->id } @{$self->{'players'}}));
+	if (main::INFOLOG && $synclog->is_info) {
+		$synclog->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
+		$synclog->info($self->{'masterId'} . " active players are: " . join(',', map { $_->id } @{$self->{'players'}}));
 	}
 }
 

@@ -1,6 +1,6 @@
 package Slim::Plugin::RadioTime::Metadata;
 
-# $Id: Metadata.pm 30573 2010-04-14 01:13:57Z agrundman $
+# $Id: Metadata.pm 32799 2011-07-21 12:44:26Z mherger $
 
 use strict;
 
@@ -24,12 +24,12 @@ sub init {
 	my $class = shift;
 	
 	Slim::Formats::RemoteMetadata->registerParser(
-		match => qr/radiotime\.com/,
+		match => qr/(?:radiotime|tunein)\.com/,
 		func  => \&parser,
 	);
 	
 	Slim::Formats::RemoteMetadata->registerProvider(
-		match => qr/radiotime\.com/,
+		match => qr/(?:radiotime|tunein)\.com/,
 		func  => \&provider,
 	);
 }
@@ -216,8 +216,8 @@ sub _gotMetadata {
 	
 	# Also cache the image URL in case the stream has other metadata
 	if ( $meta->{cover} ) {
-		my $cache = Slim::Utils::Cache->new( 'Artwork', 1, 1 );
-		$cache->set( "remote_image_$url" => $meta->{cover}, 86400 );
+		my $cache = Slim::Utils::Cache->new();
+		$cache->set( "remote_image_$url" => $meta->{cover}, 86400 * 7 );
 	}
 	
 	if ( main::DEBUGLOG && $log->is_debug ) {

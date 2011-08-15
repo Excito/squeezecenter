@@ -93,6 +93,47 @@ sub song {
 	return $objOrUrl;
 }
 
+sub songs {
+
+	my ($client, $start, $end) = @_;
+
+	if (count($client) == 0) {
+		return;
+	}
+
+	my @tracks;
+
+	foreach (defined ${shuffleList($client)}[$start]
+				? (@{ playList($client) }[ @{shuffleList($client)} ])[$start .. $end]
+				: @{playList($client)}[$start .. $end])
+	{
+		# Use $_ here to use perl's inline replace semantics
+		
+		if ( $_ && !blessed($_) ) {
+						
+			# If we instantiate a Track from a URL then 
+			# back-patch the playlist item with the Track. This could be common
+			# for remote tracks.
+
+			my $track = Slim::Schema->objectForUrl({
+					'url'      => $_,
+					'create'   => 1,
+					'readTags' => 1,
+				});
+
+			if (defined $track) {
+				$_ = $track;
+			} else {
+				$log->warn('Cannot get Track object for: ', $_);
+			}
+		}
+		
+		push @tracks, $_ if $_ && blessed($_);
+	}
+
+	return @tracks;
+}
+
 # Refresh track(s) in a client playlist from the database
 sub refreshTrack {
 	my ( $client, $url ) = @_;
@@ -245,6 +286,11 @@ sub shuffle {
 	) {
 		return 0;
 	}
+
+	# Allow plugins to inhibit shuffle mode
+	if ($client->shuffleInhibit) {
+		return 0;
+	}
 	
 	return $prefs->client($client)->get('shuffle');
 }
@@ -260,42 +306,6 @@ sub repeat {
 	}
 	
 	return $prefs->client($client)->get('repeat');
-}
-
-sub playlistMode {
-	my $client  = shift;
-	my $mode    = shift;
-
-	$client     = $client->master();
-
-	# Bugs: 13896, 13689, 8878
-	# playlist/party mode is in conflict with 7.4 touch/press-to-play behavior
-	# fix for bug 13689 will be the complete fix, but for now ignore client pref and just always return 'off'
-	return 'off';
-
-	my $currentSetting = $prefs->client($client)->get('playlistmode');
-
-	if ( defined($mode) && $mode ne $currentSetting ) {
-		$prefs->client($client)->set('playlistmode', $mode);
-
-		my %modeStrings = (
-			disabled => 'PLAYLIST_MODE_DISABLED',
-			on       => 'PLAYLIST_MODE_ON',
-			off      => 'PLAYLIST_MODE_OFF',
-			party    => 'PARTY_MODE_ON',
-		);
-		$client->showBriefly({
-			duration => 3,
-			line     => [ "\n", $client->string($modeStrings{$mode}) ],
-			jive     => {
-				'type'    => 'popupplay',
-				'text'    => [ $client->string($modeStrings{$mode}) ],
-			}
-		});
-	}
-
-	return $prefs->client($client)->get('playlistmode');
-
 }
 
 sub copyPlaylist {
@@ -833,7 +843,7 @@ sub scheduleWriteOfPlaylist {
 	# This can happen if the user removes the
 	# playlist - because this is a closure, we get
 	# a bogus object back)
-	if (!blessed($playlistObj) || !$playlistObj->can('tracks') || !$prefs->get('playlistdir')) {
+	if (!blessed($playlistObj) || !$playlistObj->can('tracks') || !Slim::Utils::Misc::getPlaylistDir()) {
 
 		return 0;
 	}
@@ -869,7 +879,7 @@ sub removePlaylistFromDisk {
 
 	} else {
 
-		unlink catfile($prefs->get('playlistdir'), $playlistObj->title . '.m3u');
+		unlink catfile(Slim::Utils::Misc::getPlaylistDir(), $playlistObj->title . '.m3u');
 	}
 }
 
@@ -881,7 +891,7 @@ sub newSongPlaylist {
 	main::DEBUGLOG && logger('player.playlist')->debug("Begin function - reset: " . ($reset || 'false'));
 
 	return if Slim::Player::Playlist::shuffle($client);
-	return if !$prefs->get('playlistdir');
+	return if !Slim::Utils::Misc::getPlaylistDir();
 	
 	my $playlist = '';
 

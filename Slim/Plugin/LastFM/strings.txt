@@ -13,6 +13,21 @@ PLUGIN_LFM_MODULE_NAME
 	RU	Радиостанция Last.fm
 	SV	Last.fm-radio
 
+LASTFM_ACCOUNT
+	CS	Last.fm
+	DA	Last.fm
+	DE	Last.fm
+	EN	Last.fm
+	ES	Last.fm
+	FI	Last.fm
+	FR	Last.fm
+	IT	Last.fm
+	NL	Last.fm
+	NO	Last.fm
+	PL	Last.fm
+	RU	Last.fm
+	SV	Last.fm
+
 PLUGIN_LFM_MODULE_NAME_DESC
 	CS	Poslouchat stanice Last.fm Radio uživatelsky upravené podle historie vašeho poslechu.
 	DA	Lyt til radiostationer på Last.fm som er tilpasset ud fra hvad du har lyttet til tidligere.
@@ -53,11 +68,11 @@ PLUGIN_LFM_NO_TRACKS
 	FR	Impossible d'accéder à la piste suivante, appuyez sur PLAY pour réessayer.
 	HE	לא ניתן לאחזר את הרצועה הבאה, לחץ על PLAY (הפעלה) כדי לנסות שוב.
 	IT	Impossibile recuperare brano successivo. Premere PLAY per riprovare.
-	NL	Kan volgende nummer niet ophalen. Druk op PLAY om het nogmaals te proberen.
+	NL	Kan volgend nummer niet ophalen. Druk op PLAY om het nogmaals te proberen.
 	NO	Får ikke til å hente neste spor, trykk på PLAY for å prøve på nytt.
 	PL	Nie można pobrać następnego utworu, naciśnij przycisk PLAY, aby spróbować ponownie.
 	RU	Невозможно извлечь следующую дорожку. Нажмите кнопку воспроизведения, чтобы повторить попытку.
-	SV	Det gick inte att hämta nästa spår. Tryck på Play om du vill försöka igen.
+	SV	Det gick inte att hämta nästa spår. Tryck på Spela om du vill försöka igen.
 
 PLUGIN_LFM_STREAM_FAILED
 	CS	Zvukový proud odpojen, přeskočení na další stopu.
@@ -135,4 +150,19 @@ PLUGIN_LFM_ON_LASTFM
 	PL	Informacje o stacji radiowej Last.fm
 	RU	На радиостанции Last.fm
 	SV	På Last.fm Radio
+
+PLUGIN_LFM_ARTIST_SLIDESHOW
+	CS	Last.fm: Prezentace interpreta
+	DA	Last.fm: Diasshow over kunstnere
+	DE	Last.fm: Diashow der Interpreten
+	EN	Last.fm: Artist Slideshow
+	ES	Last.fm: presentación de artista
+	FI	Last.fm: Artistin diaesitys
+	FR	Last.fm: diaporama de l'artiste
+	IT	Last.fm: Presentazione artista
+	NL	Last.fm: diavoorstelling van artiesten
+	NO	Last.fm: Lysbildefremvisning med artist
+	PL	Last.fm: Pokaz slajdów wykonawców
+	RU	Last.fm: Слайд-шоу исполнителя
+	SV	Last.fm: Bildspel med artister
 

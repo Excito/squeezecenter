@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::FileTypes;
 
-# $Id: FileTypes.pm 30116 2010-02-09 22:38:00Z adrian $
+# $Id: FileTypes.pm 32359 2011-04-26 20:34:02Z adrian $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -69,7 +69,7 @@ sub handler {
 	for my $profile (sort { $a cmp $b } (grep { $_ !~ /transcode/ } (keys %{$formatslistref}))) {
 
 		# skip internal formats which should not be shown or disabled 
-		next if $profile =~ /^spdr/;
+		next if $profile =~ /^spdr|^test/;
 
 		my @profileitems = split('-', $profile);
 		my @binaries     = ('DISABLED');

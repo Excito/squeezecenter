@@ -1,6 +1,6 @@
 package Slim::Web::Pages::Playlist;
 
-# $Id: Playlist.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Playlist.pm 32130 2011-03-19 11:25:26Z adrian $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -105,7 +105,7 @@ sub playlist {
 
 			main::INFOLOG && $log->info("Rebuilding playlist from cached params.");
 
-			if ($prefs->get('playlistdir')) {
+			if (Slim::Utils::Misc::getPlaylistDir()) {
 				$params->{'cansave'} = 1;
 			}
 
@@ -180,11 +180,11 @@ sub playlist {
 			$form{'currentsong'} = "current";
 
 			if ( Slim::Music::Info::isRemoteURL( $track->url ) ) {
-				# For remote streams, add both the current title and the station title
-				$form{'title'}    = Slim::Music::Info::standardTitle(undef, $track) || $track->url;
+				# For remote streams, add both the current title and the station title if they differ
+				$form{'title'}    = Slim::Music::Info::standardTitle(undef, $track, undef, $titleFormat) || $track->url;
+				my $title_only    = Slim::Music::Info::standardTitle(undef, $track, undef, 'TITLE');
 				my $current_title = Slim::Music::Info::getCurrentTitle($client, $track->url, 'web');
-
-				if ( $current_title && $current_title ne $form{'title'} ) {
+				if ( $current_title && $current_title ne $form{'title'} && $current_title ne $title_only ) {
 					$form{'current_title'} = $current_title;
 				}
 			} else {
@@ -201,11 +201,6 @@ sub playlist {
 		my $handler = Slim::Player::ProtocolHandlers->handlerForURL( $track->url );
 		if ( $handler && $handler->can('getMetadataFor') ) {
 			$form{'plugin_meta'} = $handler->getMetadataFor( $client, $track->url );
-			
-			# Strip extension from icon path
-			if ( $form{'plugin_meta'}->{'icon'} ) {
-				$form{'plugin_meta'}->{'icon'} =~ s/\.png$//;
-			}
 			
 			# Only use cover if it's a full URL
 			if ( $form{'plugin_meta'}->{'cover'} && $form{'plugin_meta'}->{'cover'} !~ /^http/ ) {

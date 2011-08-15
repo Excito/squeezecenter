@@ -1,6 +1,6 @@
 package Slim::Utils::PerfMon;
 
-# $Id: PerfMon.pm 28568 2009-09-18 21:25:29Z adrian $
+# $Id: PerfMon.pm 32247 2011-04-08 06:11:04Z ayoung $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -71,7 +71,7 @@ sub check {
 		$string .= ref $stringref ? $stringref->() : $stringref;
 	}
 	
-	if ($coderef) {
+	if (main::INFOLOG && $coderef) {
 		$string .= Slim::Utils::PerlRunTime::realNameForCodeRef($coderef);
 	}
 	

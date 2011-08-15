@@ -1,6 +1,6 @@
 package Slim::Plugin::AudioScrobbler::Plugin;
 
-# $Id: Plugin.pm 31149 2010-08-03 20:02:20Z agrundman $
+# $Id: Plugin.pm 32504 2011-06-07 12:16:25Z agrundman $
 
 # This plugin handles submission of tracks to Last.fm's
 # Audioscrobbler service.
@@ -885,9 +885,12 @@ sub submitScrobble {
 		unshift @{$queue}, $current_item;
 	}
 	
-	setQueue( $client, $queue );
-	
 	if ( @tmpQueue ) {
+		# Only setQueue if tmpQueue is nonempty
+		# otherwise it means we didn't shift anything out of queue into tmpQueue
+		# and $queue is therefore unchanged. prevents disk writes enabling some disks to spindown
+		setQueue( $client, $queue );
+	
 		main::DEBUGLOG && $log->debug( "Submitting: $post" );
 	
 		my $http = Slim::Networking::SimpleAsyncHTTP->new(
@@ -1297,7 +1300,7 @@ sub infoLoveTrack {
 }
 
 sub infoLoveTrackSubmit {
-	my ( $client, $callback, $url ) = @_;
+	my ( $client, $callback, undef, $url ) = @_;
 	
 	$client->execute( [ 'audioscrobbler', 'loveTrack', $url ] );
 	

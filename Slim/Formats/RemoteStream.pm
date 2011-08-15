@@ -1,6 +1,6 @@
 package Slim::Formats::RemoteStream;
 		  
-# $Id: RemoteStream.pm 30416 2010-03-25 13:51:32Z agrundman $
+# $Id: RemoteStream.pm 31415 2010-10-07 11:51:43Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 #
@@ -28,7 +28,6 @@ use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Utils::Network;
 use Slim::Utils::Prefs;
-use Slim::Utils::Unicode;
 
 use constant MAXCHUNKSIZE => 32768;
 

@@ -1,4 +1,4 @@
-# $Id: my-highmem.tt 31367 2010-09-21 14:48:19Z agrundman $
+# $Id: my-highmem.tt 31300 2010-09-09 12:31:41Z agrundman $
 # 
 # Squeezebox Server specific MySQL Server config.
 # High-memory configuration by Moonbase

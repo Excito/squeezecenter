@@ -1,6 +1,6 @@
 package Slim::Networking::Async::Socket::UDP;
 
-# $Id: UDP.pm 31882 2011-02-07 15:44:36Z agrundman $
+# $Id: UDP.pm 31885 2011-02-07 15:45:31Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -10,7 +10,6 @@ package Slim::Networking::Async::Socket::UDP;
 # This class contains the socket we use for async multicast UDP communication
 
 use strict;
-use warnings;
 
 use base qw(IO::Socket::INET Slim::Networking::Async::Socket);
 

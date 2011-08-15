@@ -1171,6 +1171,9 @@ sub _timeout {
 	my $request = $client->execute(['pause', 1]);
 	$request->source('ALARM');
 
+	# Bug 15585: make sure CLI-based notifications get triggered when alarm times out
+	Slim::Control::Request::notifyFromArray($client, ['alarm', '_cmd']);
+
 	$self->stop;
 }
 
@@ -1458,6 +1461,9 @@ sub scheduleNext {
 
 	# Set/clear the client's RTC alarm if supported
 	$class->setRTCAlarm($client);
+			
+	# Bug 15755: make sure CLI-based notifications get triggered
+	Slim::Control::Request::notifyFromArray($client, ['alarm', '_cmd']);
 }
 
 =head2 setRTCAlarm( $client )

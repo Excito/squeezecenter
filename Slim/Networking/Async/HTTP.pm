@@ -1,6 +1,6 @@
 package Slim::Networking::Async::HTTP;
 
-# $Id: HTTP.pm 31352 2010-09-17 13:07:08Z agrundman $
+# $Id: HTTP.pm 31354 2010-09-17 13:08:57Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -10,7 +10,6 @@ package Slim::Networking::Async::HTTP;
 # This class provides an async HTTP implementation.
 
 use strict;
-use warnings;
 
 BEGIN {
 	my $hasSSL;

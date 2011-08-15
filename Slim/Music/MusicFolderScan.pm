@@ -20,7 +20,7 @@ use base qw(Class::Data::Inheritable);
 
 use Slim::Music::Info;
 use Slim::Utils::Log;
-use Slim::Utils::Scanner;
+use Slim::Utils::Scanner::Local;
 use Slim::Utils::Prefs;
 
 {
@@ -37,20 +37,23 @@ sub init {
 
 	# Enable Folder scan only if audiodir is set and is a valid directory
 	my $enabled  = 0;
-	my $audioDir = $prefs->get('audiodir');
+	my $audioDir = Slim::Utils::Misc::getAudioDir();
 
 	if (defined $audioDir && -d $audioDir) {
-
 		$enabled = 1;
 	}
 
-	Slim::Music::Import->addImporter($class);
+	Slim::Music::Import->addImporter( $class, {
+		type   => 'file',
+		weight => 1,   # always run the file importer first
+	} );
+	
 	Slim::Music::Import->useImporter($class, $enabled);
 }
 
 sub startScan {
 	my $class   = shift;
-	my $dir     = shift || $prefs->get('audiodir');
+	my $dir     = shift || Slim::Utils::Misc::getAudioDir();
 	my $recurse = shift;
 
 	if (!defined $dir || !-d $dir) {
@@ -76,19 +79,20 @@ sub startScan {
 
 	main::INFOLOG && $log->info("Starting music folder scan in $dir");
 	
-	Slim::Utils::Scanner->scanDirectory({
-		'url'       => $dir,
-		'recursive' => $recurse,
-		'types'     => 'audio',
-		'scanName'  => 'directory',
-		'progress'  => 1,
-	});
-
-	main::INFOLOG && $log->info("Finished background scan of music folder.");
+	my $changes = Slim::Utils::Scanner::Local->rescan( $dir, {
+		types    => 'audio',
+		scanName => 'directory',
+		no_async => 1,
+		progress => 1,
+	} );
+	
+	main::INFOLOG && $log->info("Finished scan of music folder (changes: $changes).");
 
 	$class->stillScanning(0);
 
 	Slim::Music::Import->endImporter($class);
+	
+	return $changes;
 }
 
 =head1 SEE ALSO

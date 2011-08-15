@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner;
 
-# $Id: Scanner.pm 29880 2010-01-22 02:28:18Z andy $
+# $Id: Scanner.pm 32352 2011-04-26 15:00:17Z agrundman $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -119,7 +119,7 @@ sub findFilesMatching {
 	my $descend_filter = sub {
 		return 0 if defined $args->{'recursive'} && !$args->{'recursive'};
 		
-		return Slim::Utils::Misc::folderFilter($File::Next::dir);
+		return Slim::Utils::Misc::folderFilter($File::Next::dir, 0, $types);
 	};
 
 	my $file_filter = sub {
@@ -127,9 +127,7 @@ sub findFilesMatching {
 	};
 
 
-	if (utf8::is_utf8($topDir)) {
-		utf8::encode($topDir);
-	}
+	$topDir = Slim::Utils::Unicode::encode_locale($topDir);
 
 	my $iter  = File::Next::files({
 		'file_filter'     => $file_filter,
@@ -150,7 +148,7 @@ sub findFilesMatching {
 			$url  = Slim::Utils::OS::Win32->fileURLFromShortcut($url) || next;
 			$file = Slim::Utils::Misc::pathFromFileURL($url);
 
-			my $audiodir = preferences('server')->get('audiodir');
+			my $audiodir = Slim::Utils::Misc::getAudioDir();
 
 			# Bug: 2485:
 			# Use Path::Class to determine if the file points to a
@@ -439,6 +437,7 @@ sub scanPlaylistFileHandle {
 
 		$playlist->title($title);
 		$playlist->titlesort( Slim::Utils::Text::ignoreCaseArticles( $title ) );
+		$playlist->titlesearch( Slim::Utils::Text::ignoreCaseArticles( $title, 1 ) );
 	}
 
 	# With the special url if the playlist is in the

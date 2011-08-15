@@ -1,6 +1,6 @@
 package Slim::Plugin::LastFM::Plugin;
 
-# $Id: Plugin.pm 30040 2010-02-05 19:58:44Z andy $
+# $Id: Plugin.pm 32475 2011-05-27 04:24:48Z mherger $
 
 # Play Last.fm Radio via mysqueezebox.com
 
@@ -14,6 +14,7 @@ use Slim::Utils::Strings qw(cstring);
 use Slim::Utils::Unicode;
 
 use URI::Escape qw(uri_escape_utf8);
+use JSON::XS::VersionOneAndTwo;
 
 my $log = Slim::Utils::Log->addLogCategory( {
 	category     => 'plugin.lfm',
@@ -88,6 +89,37 @@ sub initPlugin {
 		);
 	}
 }
+
+sub initCLI {
+	my ( $class, %args ) = @_;
+	
+	$class->SUPER::initCLI( %args );
+	
+	Slim::Control::Request::addDispatch(
+		[ $args{tag}, 'screensaver_artist' ],
+		[ 1, 1, 1, sub {
+			_screensaver_request( @_ );
+		} ]
+	);
+}
+
+# Extend initJive to setup screensavers
+sub initJive {
+	my ( $class, %args ) = @_;
+	
+	my $menu = $class->SUPER::initJive( %args );
+
+	return if !$menu;
+
+	$menu->[0]->{screensavers} = [
+		{
+			cmd         => [ $args{tag}, 'screensaver_artist' ],
+			stringToken => 'PLUGIN_LFM_ARTIST_SLIDESHOW',
+		},
+	];
+	
+	return $menu;
+}			
 
 sub getDisplayName () {
 	return 'PLUGIN_LFM_MODULE_NAME';
@@ -190,8 +222,9 @@ sub _rateTrackOK {
 	}
 	
 	# Parse the text out of the JSON
-	my ($text) = $http->content =~ m/"text":"([^"]+)/;	
-	$request->addResult( text => Slim::Utils::Unicode::utf8on($text) );
+	my ($text) = $http->content =~ m/"text":"([^"]+)/;
+	utf8::decode($text);	
+	$request->addResult($text);
 	
 	$request->setStatusDone();
 }
@@ -248,6 +281,82 @@ sub trackInfoMenu {
 	}
 	
 	return;
+}
+
+sub _screensaver_request {
+	my $request = shift;
+	my $client  = $request->client;
+	
+	my $artist = '';
+	
+	if ($client && (my $song = $client->playingSong()) ) {
+		my $track = $song->track();
+		$artist = $track->artistName() if $track;
+	}
+
+	# if nothing's playing, let's take some random artist...
+	if (!$artist) {
+		my $randomFunc = Slim::Utils::OSDetect->getOS()->sqlHelperClass()->randomFunction();
+		my @results;
+
+		@results = Slim::Schema->rs('contributor')->search(
+			undef,
+			{ 'order_by' => \$randomFunc },
+		)->first;
+
+		if (scalar @results) {
+			$artist = $results[0]->name;
+		}
+	}
+
+	my $url = Slim::Networking::SqueezeNetwork->url( '/api/lastfm/v1/screensaver/artist?artist=' . uri_escape_utf8($artist) );
+	
+	my $http = Slim::Networking::SqueezeNetwork->new(
+		\&_screensaver_ok,
+		\&_screensaver_error,
+		{
+			client  => $client,
+			request => $request,
+			timeout => 35,
+		},
+	);
+	
+	$http->get( $url );
+	
+	$request->setStatusProcessing();
+}
+
+sub _screensaver_ok {
+	my $http    = shift;
+	my $request = $http->params('request');
+	
+	my $data = eval { from_json( $http->content ) };
+	
+	if ( $@ || $data->{error} ) {
+		$http->error( $@ || $data->{error} );
+		_screensaver_error( $http );
+		return;
+	}
+	
+	$data->{caption} ||= '';
+	
+	$request->addResult( data => [ $data ] );
+	
+	$request->setStatusDone();
+}
+
+sub _screensaver_error {
+	my $http    = shift;
+	my $error   = $http->error;
+	my $request = $http->params('request');
+	
+	$request->addResult( data => [ {
+		caption => $error,
+	} ] );
+
+	# Not sure what status to use here
+#	$request->setStatusBadParams();
+	$request->setStatusDone();
 }
 
 1;

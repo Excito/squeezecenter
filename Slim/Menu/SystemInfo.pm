@@ -245,7 +245,7 @@ sub infoLibrary {
 			{
 				type => 'text',
 				name => cstring($client, 'INFORMATION_ARTISTS') . cstring($client, 'COLON') . ' '
-							. Slim::Utils::Misc::delimitThousands(Slim::Schema->rs('Contributor')->browse->count),
+							. Slim::Utils::Misc::delimitThousands(Slim::Schema->totals()->{'contributor'}),
 			},
 
 			{
@@ -329,11 +329,11 @@ sub infoServer {
 		},
 	];
 	
-	if ( Slim::Schema::hasLibrary() && Slim::Utils::OSDetect->getOS->sqlHelperClass =~ /MySQL/ ) {
+	if ( Slim::Schema::hasLibrary() ) {
 		push @{$items},	{
 			type => 'text',
-			name => cstring($client, 'MYSQL_VERSION') . cstring($client, 'COLON') . ' '
-						. Slim::Utils::OSDetect->getOS->sqlHelperClass->sqlVersionLong( Slim::Schema->storage->dbh ),
+			name => cstring($client, 'DATABASE_VERSION') . cstring($client, 'COLON') . ' '
+						. Slim::Utils::OSDetect->getOS->sqlHelperClass->sqlVersionLong( Slim::Schema->dbh ),
 		};
 	}
 	
@@ -429,7 +429,7 @@ sub infoPlugins {
 sub infoLogs {
 	my $client = shift;
 	
-	my $logs = Slim::Web::Settings::Server::Debugging::getLogs();
+	my $logs = Slim::Utils::Log->getLogFiles();
 	
 	my $item = {
 		name  => cstring($client, 'SETUP_DEBUG_SERVER_LOG'),
@@ -475,7 +475,7 @@ sub infoSqueezeNetwork {
 				my $ok = open(my $vfile, '<', '/etc/sn/versions');
 				
 				if ($ok) {
-					
+					local $_;
 					while(<$vfile>) {
 						chomp;
 						next unless /^(S[NS]):([^:]+)$/;

@@ -42,6 +42,7 @@ preset_4.down			= 00010026	# Boom: Preset 4
 preset_5.down			= 00010027	# Boom: Preset 5
 preset_6.down			= 00010028	# Boom: Preset 6
 snooze.down			= 00010029	# Boom: Sleep
+
 knob_left			= 0001005a	# Boom: Knob left
 knob_right			= 0001005b	# Boom: Knob right
 

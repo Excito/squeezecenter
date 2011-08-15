@@ -1,6 +1,6 @@
 package Slim::Buttons::Input::List;
 
-# $Id: List.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: List.pm 32504 2011-06-07 12:16:25Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -45,7 +45,6 @@ display parameters and entry/leave points.
 =cut
 
 use strict;
-use warnings;
 
 use Slim::Buttons::Common;
 use Slim::Utils::Prefs;
@@ -524,8 +523,6 @@ L<Slim::Buttons::Common>
 L<Slim::Utils::Timers>
 
 L<Slim::Buttons::Settings>
-
-L<Slim::Buttons::BrowseDB>
 
 =cut
 

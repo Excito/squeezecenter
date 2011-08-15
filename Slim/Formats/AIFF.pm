@@ -1,6 +1,6 @@
 package Slim::Formats::AIFF;
 
-# $Id: AIFF.pm 30804 2010-05-21 04:07:41Z agrundman $
+# $Id: AIFF.pm 30806 2010-05-21 04:08:38Z agrundman $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

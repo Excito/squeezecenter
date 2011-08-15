@@ -1,6 +1,6 @@
 package Slim::Web::Pages::Status;
 
-# $Id: Status.pm 28561 2009-09-18 08:02:45Z ayoung $
+# $Id: Status.pm 31564 2010-12-01 09:12:52Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -143,7 +143,7 @@ sub status {
 				string('KBPS')); 
 		}
 
-		if ($prefs->get('playlistdir')) {
+		if (Slim::Utils::Misc::getPlaylistDir()) {
 			$params->{'cansave'} = 1;
 		}
 	}
@@ -171,7 +171,7 @@ sub status {
 			$params->{'current_playlist_name'} = Slim::Music::Info::standardTitle($client, $client->currentPlaylist);
 		}
 	}
-
+	
 	return Slim::Web::HTTP::filltemplatefile($params->{'omit_playlist'} ? "status_header.html" : "status.html" , $params);
 }
 

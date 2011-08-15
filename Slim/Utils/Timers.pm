@@ -1,6 +1,6 @@
 package Slim::Utils::Timers;
 
-# $Id: Timers.pm 31048 2010-07-13 14:18:16Z agrundman $
+# $Id: Timers.pm 32244 2011-04-07 20:50:08Z adrian $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -255,10 +255,11 @@ sub _makeTimer {
 		main::PERFMON && Slim::Utils::PerfMon->check('timers', AnyEvent->time - $now, undef, $subptr);
 
 		if ( $@ ) {
-			logError("Timer failed: $@");
+			my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($subptr);
+
+			logError("Timer $name failed: $@");
 			
 			if ( main::SLIM_SERVICE ) {
-				my $name = Slim::Utils::PerlRunTime::realNameForCodeRef($subptr);
 				$@ =~ s/"/'/g;
 				SDI::Util::Syslog::error("service=SS-Timer method=${name} error=\"$@\"");
 			}

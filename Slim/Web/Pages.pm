@@ -1,6 +1,6 @@
 package Slim::Web::Pages;
 
-# $Id: Pages.pm 30040 2010-02-05 19:58:44Z andy $
+# $Id: Pages.pm 32504 2011-06-07 12:16:25Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -35,24 +35,24 @@ sub init {
 	require Slim::Web::Pages::Common;
 	require Slim::Web::Pages::Home;
 	require Slim::Web::Pages::BrowseDB;
-	require Slim::Web::Pages::BrowseTree;
-	require Slim::Web::Pages::Search;
 	require Slim::Web::Pages::Status;
 	require Slim::Web::Pages::EditPlaylist;
 	require Slim::Web::Pages::Playlist;
 	require Slim::Web::Pages::History;
 	require Slim::Web::Pages::Progress;
+	require Slim::Web::Pages::Trackinfo;
+	require Slim::Web::Pages::Search;
 
 	Slim::Web::Pages::Common->init();
 	Slim::Web::Pages::Home->init();
 	Slim::Web::Pages::BrowseDB->init();
-	Slim::Web::Pages::BrowseTree->init();
-	Slim::Web::Pages::Search->init();
 	Slim::Web::Pages::Status->init();
 	Slim::Web::Pages::EditPlaylist->init();
 	Slim::Web::Pages::Playlist->init();
 	Slim::Web::Pages::History->init();
 	Slim::Web::Pages::Progress->init();
+	Slim::Web::Pages::Trackinfo->init();
+	Slim::Web::Pages::Search->init();
 }
 
 sub addPageLinks {
@@ -145,8 +145,10 @@ sub getPageFunction {
 sub addRawFunction {
 	my ( $class, $regexp, $funcPtr ) = @_;
 
-	my $funcName = Slim::Utils::PerlRunTime::realNameForCodeRef($funcPtr);
-	main::INFOLOG && $log->is_info && $log->info("Adding RAW handler: /$regexp/ -> $funcName");
+	if ( main::INFOLOG && $log->is_info ) {
+		my $funcName = Slim::Utils::PerlRunTime::realNameForCodeRef($funcPtr);
+		$log->info("Adding RAW handler: /$regexp/ -> $funcName");
+	}
 
 	$rawFunctions{$regexp} = $funcPtr;
 }

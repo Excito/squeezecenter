@@ -31,7 +31,6 @@ sub initPrefs {
 	# if this is a sparc based ReadyNAS, do some performance tweaks
 	if ($class->{osDetails}->{osArch} =~ /sparc/) {	
 		$prefs->{scannerPriority}   = 20;
-		$prefs->{resampleArtwork}   = 0;
 		$prefs->{disableStatistics} = 1;
 	}
 }
@@ -92,6 +91,7 @@ sub ignoredItems {
 		'USB'       => '/',
 		'usr'       => '/',	
 		'var'       => '/',
+		'lib64'     => '/',
 		'lost+found'=> 1,
 	);
 }

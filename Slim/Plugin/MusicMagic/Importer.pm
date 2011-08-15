@@ -102,6 +102,8 @@ sub initPlugin {
 		($MMMVersion) = ($initialized =~ /Version ([\d\.]+)$/);
 
 		Slim::Music::Import->addImporter($class, {
+			'type'         => 'file',
+			'weight'       => 30, # Bug 14758: make sure MusicIP is run after iTunes, or it will miss iTunes imported files
 			'reset'        => \&resetState,
 			'playlistOnly' => 1,
 			'use'          => $prefs->get('musicip'),
@@ -157,6 +159,9 @@ sub startScan {
 	}
 
 	$class->doneScanning;
+	
+	# XXX return number of changes made
+	return 1;
 } 
 
 sub doneScanning {

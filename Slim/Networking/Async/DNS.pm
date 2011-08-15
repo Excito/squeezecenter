@@ -1,6 +1,6 @@
 package Slim::Networking::Async::DNS;
 
-# $Id: DNS.pm 31443 2010-10-16 16:30:32Z agrundman $
+# $Id: DNS.pm 32227 2011-04-05 01:53:04Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -114,6 +114,19 @@ sub resolve {
 		
 		$args->{cb}->( $addr, @{ $args->{pt} || [] } );
 	} );
+}
+
+# Return value from cache, used to replace gethostbyname calls
+sub cached {
+	my ( $class, $host ) = @_;
+	
+	if ( my $cached = $cache{$host} ) {
+		main::DEBUGLOG && $log->is_debug && $log->debug( "Using cached DNS response $cached->{addr} for $host" );
+		
+		return $cached->{addr};
+	}
+	
+	return;
 }
 
 1;

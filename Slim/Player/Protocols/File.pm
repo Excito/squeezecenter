@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::File;
 
-# $Id: File.pm 30616 2010-04-15 13:18:51Z agrundman $
+# $Id: File.pm 30854 2010-06-08 21:36:33Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -10,17 +10,20 @@ package Slim::Player::Protocols::File;
 use strict;
 use base qw(IO::File);
 
+use File::Spec::Functions qw(catdir);
 use IO::String;
 
 use Slim::Music::Info;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
+use Slim::Utils::Prefs;
 use Slim::Formats;
 use Slim::Player::Source;
 
 use constant MAXCHUNKSIZE => 32768;
 
 my $log = logger('player.source');
+my $prefs = preferences('server');
 
 sub new {
 	my $class = shift;
@@ -53,7 +56,7 @@ sub open {
 	my $track    = $song->currentTrack();
 	my $url      = $track->url;
 	my $client   = $args->{'client'};
-	my $seekdata = $args->{'song'}->seekdata();
+	my $seekdata = $song->seekdata();
 	
 	my $seekoffset = 0;
 
@@ -118,21 +121,24 @@ sub open {
 	my $format = Slim::Music::Info::contentType($track);
 	
 	my $seekoffset = $offset;
+	my $streamLength = $size;
 	
 	if (defined $seekdata) {
 		
 		if (   ! $seekdata->{sourceStreamOffset}
-			&& ! $seekdata->{playingStreamOffset}
+			&& ! $seekdata->{restartOffset}
 			&& $seekdata->{'timeOffset'}
 			&& canSeek($class, $client, $song) )
 		{
 			$seekdata->{sourceStreamOffset} = _timeToOffset($sock, $format, $song, $seekdata->{'timeOffset'});
 		}
 		
-		if ($seekdata->{sourceStreamOffset}) {							# used for seeking
+		if ($seekdata->{restartOffset}) {								# used for reconnect
+			$streamLength = $song->streamLength();
+			$seekoffset = $seekdata->{restartOffset};
+		} elsif ($seekdata->{sourceStreamOffset}) {						# used for seeking
 			$seekoffset = $seekdata->{sourceStreamOffset};
-		} elsif ($seekdata->{playingStreamOffset}) {					# used for reconnect
-			$seekoffset = $offset + $seekdata->{playingStreamOffset};
+			$streamLength -= $seekdata->{sourceStreamOffset} - $offset;
 		} else {
 			$seekoffset = $offset;										# normal case
 		}
@@ -145,7 +151,13 @@ sub open {
 
 	${*$sock}{'streamFormat'} = $args->{'transcoder'}->{'streamformat'};
 
-	if ( $seekoffset ) {
+	if ( $seekoffset
+	
+		# We do not need to worry about an initialAudioBlock when we are restarting
+		# as getSeekDataByPosition() will not have allowed a restart within the
+		# initialAudioBlock.
+		&& !($seekdata && $seekdata->{restartOffset}) )
+	{
 		my $streamClass = _streamClassForFormat($format);
 
 		if (!defined($song->initialAudioBlock()) && 
@@ -162,9 +174,11 @@ sub open {
 			if ($seekoffset <= $length) {
 				# Might as well just play from the start normally
 				$offset = $seekoffset = 0;
+				$streamLength = $size + $offset;
 			} else {
 				${*$sock}{'initialAudioBlockRemaining'} = $length;
 				${*$sock}{'initialAudioBlockRef'} = \($song->initialAudioBlock());
+				$streamLength += $length;
 			}
 			
 			# For MP4 files, we can't cache the audio block because it's different each time
@@ -188,13 +202,55 @@ sub open {
 	} else {
 		$client->songBytes(0);
 	}
+	
+	$song->streamLength($streamLength);
+	
+	if ( $format eq 'mp3' && $track->virtual ) {
+		eval {
+			# Return a gapless MP3 stream for cue sheet tracks
+			# XXX avoid calling the above stuff for these tracks, it's just wasted
+			require MP3::Cut::Gapless;
+		
+			my ($start_ms, $end_ms);
+		
+			if ( $url =~ /#([^-]+)-([^-]+)$/ ) {
+				$start_ms = sprintf "%d", $1 * 1000;
+				$end_ms   = sprintf "%d", $2 * 1000; # XXX last track should be undef
+			}
+		
+			if ( defined $seekdata && $seekdata->{timeOffset} ) {
+				# XXX error checks?
+				$start_ms += sprintf "%d", $seekdata->{timeOffset} * 1000;
+			}
+		
+			main::INFOLOG && $log->is_info && $log->info("Opening gapless MP3 stream from time $start_ms to $end_ms");
+		
+			${*$sock}{mp3cut} = MP3::Cut::Gapless->new(
+				file      => $filepath,
+				cache_dir => catdir( $prefs->get('librarycachedir'), 'mp3cut' ),
+				start_ms  => $start_ms,
+				end_ms    => $end_ms,
+			);
+		};
+		if ($@) {
+			$log->warn("Unable to play MP3 cue track in gapless mode: $@");
+			delete ${*$sock}{mp3cut};
+		}
+	}
 
 	return $sock;
 }
 
 sub sysread {
-    my $self = $_[0];
-    my $n    = $_[2];
+	my $self = $_[0];
+	my $n	 = $_[2];
+	
+	if ( ${*$self}{mp3cut} ) {
+		# Get audio data from MP3::Cut::Gapless object instead of directly from the file
+		$n = ${*$self}{mp3cut}->read( $_[1], $n );
+		${*$self}{position} += $n unless (!defined($n) || $n <= 0);
+		return $n;
+	}
 
 	if (my $length = ${*$self}{'initialAudioBlockRemaining'}) {
 		
@@ -319,9 +375,24 @@ sub getSeekData {
 }
 
 sub getSeekDataByPosition {
-	my (undef, undef, undef, $bytesReceived) = @_;
+	my (undef, undef, $song, $bytesReceived) = @_;
 	
-	return {playingStreamOffset => $bytesReceived};
+	my $streamLength = $song->streamLength();
+	
+	if ( !$streamLength
+		|| $song->initialAudioBlock() && $bytesReceived < $song->initialAudioBlock() )
+	{
+		return undef;
+	}
+
+	my $position = $song->totalbytes() - ($streamLength - $bytesReceived);
+	
+	if ($position <= 0) {
+		return undef;
+	}
+	
+	my $seekdata = $song->seekdata || {}; # We preserve the original seekdata so we know the time-offset, if any
+	return {%$seekdata, restartOffset => $position + $song->offset()};
 }
 
 sub canSeek {

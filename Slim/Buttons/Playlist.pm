@@ -1,6 +1,6 @@
 package Slim::Buttons::Playlist;
 
-# $Id: Playlist.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Playlist.pm 31424 2010-10-10 19:36:31Z adrian $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -436,13 +436,14 @@ sub lines {
 		my $song = Slim::Player::Playlist::song($client, browseplaylistindex($client) );
 		
 		my $title;
+		my $meta;
 		
 		# Get remote metadata for other tracks in the playlist if available
 		if ( $song->isRemoteURL ) {
 			my $handler = Slim::Player::ProtocolHandlers->handlerForURL($song->url);
 
 			if ( $handler && $handler->can('getMetadataFor') ) {
-				my $meta = $handler->getMetadataFor( $client, $song->url );
+				$meta = $handler->getMetadataFor( $client, $song->url );
 				
 				if ( $meta->{title} ) {
 					$title = Slim::Music::Info::getCurrentTitle( $client, $song->url, 0, $meta );
@@ -467,6 +468,15 @@ sub lines {
 					'line' => [ 
 					   Slim::Music::Info::displayText($client, $song, 'ALBUM'),
 					   Slim::Music::Info::displayText($client, $song, 'ARTIST'),
+					]
+				};
+
+			} elsif ($song && $meta) {
+
+				$parts->{'screen2'} = {
+					'line' => [ 
+					   Slim::Music::Info::displayText($client, $song, 'ALBUM', $meta),
+					   Slim::Music::Info::displayText($client, $song, 'ARTIST', $meta),
 					]
 				};
 

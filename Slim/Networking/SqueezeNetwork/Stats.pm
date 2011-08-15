@@ -1,6 +1,6 @@
 package Slim::Networking::SqueezeNetwork::Stats;
 
-# $Id: Stats.pm 31768 2011-01-18 20:23:17Z agrundman $
+# $Id: Stats.pm 31771 2011-01-18 20:24:15Z agrundman $
 
 # Report radio stats to SN if enabled.
 

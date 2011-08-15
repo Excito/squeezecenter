@@ -1,6 +1,6 @@
 package Slim::Plugin::InternetRadio::Plugin;
 
-# $Id: Plugin.pm 32164 2011-03-23 14:46:47Z agrundman $
+# $Id: Plugin.pm 32799 2011-07-21 12:44:26Z mherger $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -122,7 +122,7 @@ sub buildMenus {
 	}
 	
 	for my $item ( @{$items} ) {
-		if ( !main::SLIM_SERVICE ) {
+		if ( !main::SLIM_SERVICE && !Slim::Utils::OSDetect::isSqueezeOS() ) {
 			if ( $item->{icon} && $icondir ) {
 				# Download and cache icons so we can support resizing on them
 				$class->cacheIcon( $icondir, $item->{icon} );
@@ -151,7 +151,7 @@ sub generate {
 	my $feed    = $item->{URL};
 	my $weight  = $item->{weight};
 	my $type    = $item->{type};
-	my $icon    = main::SLIM_SERVICE ? $item->{icon} : $ICONS->{ $item->{icon} }; # local path to cached icon
+	my $icon    = $ICONS->{ $item->{icon} } || $item->{icon};
 	my $iconRE  = $item->{iconre} || 0;
 	
 	# SN needs to dynamically filter radio plugins per-user and append values such as RT username
@@ -246,7 +246,7 @@ sub feed {
 	}
 	else {
 		# RadioTime URLs require special handling
-		if ( $feed =~ /radiotime\.com/ ) {
+		if ( $feed =~ /(?:radiotime|tunein)\.com/ ) {
 			$code .= qq{
 sub feed {
 	my \$class = shift;
@@ -350,37 +350,44 @@ sub radiotimeFeed {
 		# Real Player is supported through the AlienBBC plugin
 		real    => 'rtsp',
 	);
-	
-	my %playerFormats = map { $_ => 1 } $client->formats;
 
-	# RadioTime's listing defaults to giving us mp3 and wma streams only,
-	# but we support a few more
-	my @formats = grep {
+	my @formats = keys %rtFormats;
+	my $id = '';
 	
-		# format played natively on player?
-		my $canPlay = $playerFormats{$rtFormats{$_}};
-			
-		if ( !$canPlay && main::TRANSCODING ) {
-
-			foreach my $supported (keys %playerFormats) {
+	if ($client) {
+		my %playerFormats = map { $_ => 1 } $client->formats;
+	
+		# RadioTime's listing defaults to giving us mp3 and wma streams only,
+		# but we support a few more
+		@formats = grep {
+		
+			# format played natively on player?
+			my $canPlay = $playerFormats{$rtFormats{$_}};
 				
-				if ( Slim::Player::TranscodingHelper::checkBin(sprintf('%s-%s-*-*', $rtFormats{$_}, $supported)) ) {
-					$canPlay = 1;
-					last;
+			if ( !$canPlay && main::TRANSCODING ) {
+	
+				foreach my $supported (keys %playerFormats) {
+					
+					if ( Slim::Player::TranscodingHelper::checkBin(sprintf('%s-%s-*-*', $rtFormats{$_}, $supported)) ) {
+						$canPlay = 1;
+						last;
+					}
+	
 				}
-
 			}
-		}
-
-		$canPlay;
-
-	} keys %rtFormats;
+	
+			$canPlay;
+	
+		} keys %rtFormats;
+		
+		$id = $client->uuid || $client->id;
+	}
 
 	$feed .= ( $feed =~ /\?/ ) ? '&' : '?';
 	$feed .= 'formats=' . join(',', @formats);
 	
 	# Bug 15568, pass obfuscated serial to RadioTime
-	$feed .= '&serial=' . Digest::MD5::md5_hex( $client->uuid || $client->id );
+	$feed .= '&serial=' . Digest::MD5::md5_hex($id);
 	
 	return $feed;
 }
@@ -392,7 +399,7 @@ sub _pluginDataFor {
 		return $class->SUPER::_pluginDataFor($key);
 	}
 	
-	if ( main::SLIM_SERVICE ) {
+	if ( main::SLIM_SERVICE || Slim::Utils::OSDetect::isSqueezeOS() ) {
 		return $class->icon;
 	}
 	
@@ -414,7 +421,7 @@ sub cantOpen {
 		return if $prefs->get('sn_disable_stats');
 	}
 	
-	if ( $error && $url =~ /radiotime\.com/ ) {
+	if ( $error && $url =~ /(?:radiotime|tunein)\.com/ ) {
 		my ($id) = $url =~ /id=([^&]+)/;
 		if ( $id ) {
 			my $reportUrl = 'http://opml.radiotime.com/Report.ashx?c=stream&partnerId=16'

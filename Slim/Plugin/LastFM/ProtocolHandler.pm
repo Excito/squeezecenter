@@ -1,6 +1,6 @@
 package Slim::Plugin::LastFM::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 31100 2010-07-23 08:25:38Z mherger $
+# $Id: ProtocolHandler.pm 31101 2010-07-23 08:26:26Z mherger $
 
 # Handler for lastfm:// URLs
 

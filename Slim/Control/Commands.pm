@@ -298,6 +298,10 @@ sub clientConnectCommand {
 
 				$_->sendFrame( serv => \$packed );
 				
+				# Bug 14400: make sure we do not later accidentally reattach a returning client
+				# to a sync-group that is no longer current.
+				$prefs->client($_)->remove('syncgroupid');
+				
 				# Give player time to disconnect
 				Slim::Utils::Timers::setTimer($_, time() + 3,
 					sub { shift->execute([ 'client', 'forget' ]); }
@@ -759,12 +763,8 @@ sub playlistClearCommand {
 
 	# get the parameters
 	my $client = $request->client();
-	my $mode   = Slim::Player::Playlist::playlistMode($client);
 
 	Slim::Player::Playlist::stopAndClear($client);
-	if ( $mode eq 'on' ) {
-		Slim::Player::Playlist::playlistMode($client, 'off');
-	}
 
 	# called by currentPlaylistUpdateTime below
 	# $client->currentPlaylistChangeTime(Time::HiRes::time());
@@ -917,6 +917,7 @@ sub playlistJumpCommand {
 		my $jiveIconStyle = shift || undef;
 		if ($client->isPlayer()) {
 			my $parts = $client->currentSongLines({ suppressDisplay => Slim::Buttons::Common::suppressStatus($client), jiveIconStyle => $jiveIconStyle });
+			$parts->{'jive'}->{'duration'} = 10000 if $parts && $parts->{'jive'}; # 10s: nice and long to avoid bouncing displays
 			$client->showBriefly($parts, { duration => 2 }) if $parts;
 			Slim::Buttons::Common::syncPeriodicUpdates($client, Time::HiRes::time() + 0.1);
 		}
@@ -1056,7 +1057,7 @@ sub playlistSaveCommand {
 	}
 	
 	# can't do much without playlistdir!
-	if (!$prefs->get('playlistdir')) {
+	if (!Slim::Utils::Misc::getPlaylistDir()) {
 		$request->setStatusBadConfig();
 		return;
 	}
@@ -1073,7 +1074,7 @@ sub playlistSaveCommand {
 	my $playlistObj = Slim::Schema->updateOrCreate({
 
 		'url' => Slim::Utils::Misc::fileURLFromPath(
-			catfile( $prefs->get('playlistdir'), Slim::Utils::Unicode::utf8encode_locale($title) . '.m3u')
+			catfile( Slim::Utils::Misc::getPlaylistDir(), Slim::Utils::Unicode::encode_locale($title) . '.m3u')
 		),
 		'playlist' => 1,
 		'attributes' => {
@@ -1106,12 +1107,6 @@ sub playlistSaveCommand {
 		$request->addResult('writeError', 1);
 	}
 	
-	# exit playlist mode if currently in playlist mode
-	my $mode = Slim::Player::Playlist::playlistMode($client);
-	if ( $mode eq 'on' ) {
-		Slim::Player::Playlist::playlistMode($client, 'off');
-	}
-
 	$request->addResult('__playlist_id', $playlistObj->id);
 
 	if ( ! $silent ) {
@@ -1125,21 +1120,6 @@ sub playlistSaveCommand {
 
 	$request->setStatusDone();
 }
-
-sub playlistModeCommand {
-
-	my $request   = shift;
-	my $client    = $request->client;
-	my $mode      = $request->getParam('_newvalue');
-
-	if ( defined($mode) ) {
-		Slim::Player::Playlist::playlistMode($client, $mode);
-	}
-
-	$request->setStatusDone();
-
-}
-
 
 sub playlistShuffleCommand {
 	my $request = shift;
@@ -1186,11 +1166,6 @@ sub playlistXalbumCommand {
 	my $artist   = $request->getParam('_artist');#p3
 	my $album    = $request->getParam('_album'); #p4
 	my $title    = $request->getParam('_title'); #p5
-
-	my $playlistMode = Slim::Player::Playlist::playlistMode($client);
-	if ( ($playlistMode eq 'on' || $playlistMode eq 'party') && $cmd eq 'loadalbum') {
-		$cmd = 'insertalbum';
-	}
 
 	# Pass to parseSearchTerms
 	my $find     = {};
@@ -1296,11 +1271,6 @@ sub playlistXitemCommand {
 	my $noplay       = $request->getParam('noplay') || 0; # optional tagged param, used for resuming playlist after preview
 	my $wipePlaylist = $request->getParam('wipePlaylist') || 0; #optional tagged param, used for removing playlist after resume
 
-	my $playlistMode = Slim::Player::Playlist::playlistMode($client);
-	if ( ($playlistMode eq 'on' || $playlistMode eq 'party') && $cmd eq 'load') {
-		$cmd = 'insert';
-	}
-
 	if (!defined $item) {
 		$request->setStatusBadParams();
 		return;
@@ -1354,11 +1324,12 @@ sub playlistXitemCommand {
 		Slim::Music::Info::setCurrentTitle( $url, $title );
 	}
 
-	# check whether url is potentially for a local file or db entry, if so pass to playlistXtracksCommand
-	# this avoids rescanning items already in the database and allows playlist and other favorites to be played
+	# check whether url is potentially for some sort of db entry, if so pass to playlistXtracksCommand
+	# But not for or local file:// URLs,  and this may mean 
+	# rescanning items already in the database but still allows playlist and other favorites to be played
 	
 	# XXX: hardcoding these protocols isn't the best way to do this. We should have a flag in ProtocolHandler to get this list
-	if ($path =~ /^file:\/\/|^db:|^itunesplaylist:|^musicipplaylist:/) {
+	if ($path =~ /^db:|^itunesplaylist:|^musicipplaylist:/) {
 
 		if (my @tracks = _playlistXtracksCommand_parseDbItem($client, $path)) {
 			$client->execute(['playlist', $cmd . 'tracks' , 'listRef', \@tracks, $fadeIn]);
@@ -1371,7 +1342,7 @@ sub playlistXitemCommand {
 	# this only seems to be useful for playlists?
 	if (!Slim::Music::Info::isRemoteURL($path) && !-e $path && !(Slim::Music::Info::isPlaylistURL($path))) {
 
-		my $easypath = catfile($prefs->get('playlistdir'), basename($url) . ".m3u");
+		my $easypath = catfile(Slim::Utils::Misc::getPlaylistDir(), basename($url) . ".m3u");
 
 		if (-e $easypath) {
 
@@ -1379,7 +1350,7 @@ sub playlistXitemCommand {
 
 		} else {
 
-			$easypath = catfile($prefs->get('playlistdir'), basename($url) . ".pls");
+			$easypath = catfile(Slim::Utils::Misc::getPlaylistDir(), basename($url) . ".pls");
 
 			if (-e $easypath) {
 				$path = $easypath;
@@ -1395,16 +1366,19 @@ sub playlistXitemCommand {
 
 	main::INFOLOG && $log->info("path: $path");
 	
-	# bug 14760 - just continue where we already were if what we are about to play is the
+	# bug 14760 - just continue where we were if what we are about to play is the
 	# same as the single thing we are already playing
 	if ( $cmd =~ /^(play|load)$/
 		&& Slim::Player::Playlist::count($client) == 1
 		&& $client->playingSong()	
-		&& $path eq $client->playingSong()->track()->url() )
+		&& $path eq $client->playingSong()->track()->url()
+		&& !$noplay )
 	{
-		if ( Slim::Player::Source::playmode($client) eq 'pause' ) {
+		# Bug 16154: use more-precise control measures
+		# so that we only leave it playing if fully in Playing state already.
+		if ( $client->isPaused() ) {
 			Slim::Player::Source::playmode($client, 'resume', undef, undef, $fadeIn);
-		} elsif ( Slim::Player::Source::playmode($client) ne 'play' ) {
+		} elsif ( !$client->isPlaying('really') ) {
 			Slim::Player::Source::playmode($client, 'play', undef, undef, $fadeIn);
 		}
 		
@@ -1506,12 +1480,6 @@ sub playlistXitemCommand {
 					'line' => [ @line ],
 					'jive' => { 'type' => 'popupplay', text => [ $msg ] },
 				});
-		}
-		# if music isn't playing, hitting the play button should start playing music
-		if ( ($playlistMode eq 'on' || $playlistMode eq 'party') && $cmd eq 'insert' ) {
-			if ( Slim::Player::Source::playmode($client) ne 'play' ) {
-				Slim::Player::Source::playmode($client, 'play', undef, undef, $fadeIn);
-			}
 		}
 
 	} else {
@@ -1618,16 +1586,9 @@ sub playlistXtracksCommand {
 	my $fadeIn      = $request->getParam('_fadein');#p4
 	my $jumpToIndex = $request->getParam('_index');#p5, by default undef - see bug 2085
 
-	my $playlistMode = Slim::Player::Playlist::playlistMode($client);
-
 	if (!defined $what) {
 		$request->setStatusBadParams();
 		return;
-	}
-
-	# when playlistmode is on/party, replace 'playlistcontrol load' with 'playlistcontrol insert'
-	if ( ($playlistMode eq 'on' || $playlistMode eq 'party') && $cmd eq 'loadtracks' ) {
-		$cmd    = 'inserttracks';
 	}
 
 	my $load   = ($cmd eq 'loadtracks' || $cmd eq 'playtracks');
@@ -1667,11 +1628,6 @@ sub playlistXtracksCommand {
 
 	if ($insert) {
 		_insert_done($client, $size);
-		if ( ($playlistMode eq 'on' || $playlistMode eq 'party') ) {
-			if ( Slim::Player::Source::playmode($client) ne 'play' ) {
-				Slim::Player::Source::playmode($client, 'play');
-			}
-		}
 		$request->addResult(index => (Slim::Player::Source::streamingSongIndex($client)+1));
 	}
 
@@ -1699,8 +1655,21 @@ sub playlistXtracksCommand {
 			# update CURTRACK when the song changes.
 			Slim::Control::Request::subscribe(\&Slim::Player::Playlist::newSongPlaylistCallback, [['playlist'], ['newsong']]);
 		}
+		# bug 14662: Playing a specific track while track shuffle is enabled will play another track
+		elsif (defined $jumpToIndex && Slim::Player::Playlist::shuffle($client)) {
+			my $shuffleList = Slim::Player::Playlist::shuffleList($client);
+			for (my $i = 0; $i < scalar @$shuffleList; $i++) {
+				if ($shuffleList->[$i] == $jumpToIndex) {
+					$jumpToIndex = $i;
+					last;
+				}
+			}
+		}
 		
 		$client->execute(['playlist', 'jump', $jumpToIndex, $fadeIn]);
+		
+		# Reshuffle (again) to get playing song or album at start of list
+		Slim::Player::Playlist::reshuffle($client) if $load && defined $jumpToIndex && Slim::Player::Playlist::shuffle($client);
 		
 		$client->currentPlaylistModified(0);
 	}
@@ -1742,7 +1711,7 @@ sub playlistZapCommand {
 
 	my $playlistObj = Slim::Schema->updateOrCreate({
 		'url'        => Slim::Utils::Misc::fileURLFromPath(
-			catfile( $prefs->get('playlistdir'), $zapped . '.m3u')
+			catfile( Slim::Utils::Misc::getPlaylistDir(), $zapped . '.m3u')
 		),
 		'playlist'   => 1,
 
@@ -1779,17 +1748,8 @@ sub playlistcontrolCommand {
 	# get the parameters
 	my $client              = $request->client();
 	my $cmd                 = $request->getParam('cmd');
+	my $jumpIndex           = $request->getParam('play_index');
 
-	my $trackID             = $request->getParam('track_id');
-	my $albumID             = $request->getParam('album_id');
-	my $artistID            = $request->getParam('artist_id');
-	my $genreID             = $request->getParam('genre_id');
-	my $yearID              = $request->getParam('year_id');
-
-	my $goCmd               = $request->getParam('goCmd');
-	my $goMenu              = $request->getParam('goMenu');
-	my $playlistMode        = Slim::Player::Playlist::playlistMode($client);
-	
 	if (Slim::Music::Import->stillScanning()) {
 		$request->addResult('rescan', "1");
 	}
@@ -1797,21 +1757,6 @@ sub playlistcontrolCommand {
 	if ($request->paramUndefinedOrNotOneOf($cmd, ['load', 'insert', 'add', 'delete'])) {
 		$request->setStatusBadParams();
 		return;
-	}
-
-	# when playlistmode is on, 'playlistcontrol insert' turns off playlist mode
-	if ( $playlistMode eq 'on' && $cmd eq 'insert' ) {
-		Slim::Player::Playlist::playlistMode($client, 'off');
-		return;
-	}
-	
-	# when playlistmode is on/party, replace 'playlistcontrol load' with 'playlistcontrol insert'
-	if ( ($playlistMode eq 'on' || $playlistMode eq 'party') && $cmd eq 'load' ) {
-		$cmd    = 'insert';
-	}
-	# when playlist mode is off, 'playlistcontrol add' turns on playlistmode
-	if ( $playlistMode eq 'off' && $cmd eq 'add' ) {
-		Slim::Player::Playlist::playlistMode($client, 'on');
 	}
 
 	my $load   = ($cmd eq 'load');
@@ -1838,32 +1783,60 @@ sub playlistcontrolCommand {
 			return;
 		}
 
-		if ( $add || $load || $insert ) {
+		if ( $add || $insert ) {
 			my $token;
 			if ($add) {
 				$token = 'JIVE_POPUP_ADDING_TO_PLAYLIST';
 			} elsif ($insert) {
 				$token = 'JIVE_POPUP_ADDING_TO_PLAY_NEXT';
-			} else {
-				$token = undef;
 			}
-			if ( defined($token) ) {
-				my $string = $client->string($token, $folder->title);
-				$client->showBriefly({ 
-					'jive' => { 
-						'type'    => 'popupplay',
-						'text'    => [ $string ],
-					}
-				});
-			}
+			my $string = $client->string($token, $folder->title);
+			$client->showBriefly({ 
+				'jive' => { 
+					'type'    => 'popupplay',
+					'text'    => [ $string ],
+				}
+			});
 		} 
 
-		Slim::Control::Request::executeRequest(
-			$client, ['playlist', $cmd, $folder->url()]
-		);
+		if ( $load ) {
+	
+			my $wasShuffled = Slim::Player::Playlist::shuffle($client);
+			Slim::Player::Playlist::shuffle($client, 0);
+
+			my ($topLevelObj, $items, $count) = Slim::Utils::Misc::findAndScanDirectoryTree( {
+				id => $folderId,
+			} );
+
+			main::INFOLOG && $log->info("Playing all in folder, starting with $jumpIndex");
+
+			# filter out folders
+			@{$items} = grep { Slim::Music::Info::isSong($_) }
+			# make sure we get a valid path
+			map { ref $_ ? $_ : Slim::Utils::Misc::fixPath($_, $topLevelObj->path) }
+			@$items;
+
+			main::INFOLOG && $log->info("Load folder playlist, now starting at index: $jumpIndex");
+
+			$client->execute(['playlist', 'clear']);
+			$client->execute(['playlist', 'addtracks', 'listref', $items]);
+			$client->execute(['playlist', 'jump', $jumpIndex]);
+
+			if ($wasShuffled) {
+				$client->execute(['playlist', 'shuffle', 1]);
+			}
+		} else {
+			Slim::Control::Request::executeRequest(
+				$client, ['playlist', $cmd, $folder->url()]
+			);
+		}
+
 		$request->addResult('count', 1);
 		$request->setStatusDone();
 		return;
+
+
+
 	}
 
 	# if loading, first stop & clear everything
@@ -1891,10 +1864,7 @@ sub playlistcontrolCommand {
 		}
 	}
 
-	if (!$playlist_id && $request->getParam('playlist_id')) {
-
-		$playlist_id = $request->getParam('playlist_id');
-	}
+	$playlist_id ||= $request->getParam('playlist_id');
 
 	if ($playlist_id) {
 
@@ -1924,7 +1894,7 @@ sub playlistcontrolCommand {
 			$cmd .= "tracks";
 
 			Slim::Control::Request::executeRequest(
-				$client, ['playlist', $cmd, 'playlist.id=' . $playlist_id]
+				$client, ['playlist', $cmd, 'playlist.id=' . $playlist_id, undef, undef, $jumpIndex]
 			);
 
 			$request->addResult( 'count', $playlist->tracks->count() );
@@ -1952,6 +1922,7 @@ sub playlistcontrolCommand {
 		# sort them back!
 		@tracks = sort { $track_ids_order{$a->id()} <=> $track_ids_order{$b->id()} } @rawtracks;
 
+		$artwork = $tracks[0]->album->artwork || 0 if scalar @tracks == 1;
 
 	} else {
 
@@ -1973,7 +1944,7 @@ sub playlistcontrolCommand {
 			$what->{'album.id'} = $album_id;
 			my $album = Slim::Schema->find('Album', $album_id);
 			@info    = ( $album->title, $album->contributors->first->name );
-			$artwork = $album->artwork +0;
+			$artwork = $album->artwork || 0;
 		}
 
 		if (defined(my $year = $request->getParam('year'))) {
@@ -2014,7 +1985,7 @@ sub playlistcontrolCommand {
 						'type'    => 'mixed',
 						'style'   => 'add',
 						'text'    => [ $string, $info[0] ],
-						'icon-id' => defined $artwork ? $artwork : '/html/music/cover.png',
+						'icon-id' => defined $artwork ? $artwork : '/html/images/cover.png',
 					}
 				});
 			}
@@ -2024,15 +1995,8 @@ sub playlistcontrolCommand {
 		$cmd .= "tracks";
 
 		Slim::Control::Request::executeRequest(
-			$client, ['playlist', $cmd, 'listRef', \@tracks]
+			$client, ['playlist', $cmd, 'listRef', \@tracks, undef, $jumpIndex]
 		);
-	}
-
-	# if music isn't playing, hitting the play button should start playing music
-	if ( ($playlistMode eq 'on' || $playlistMode eq 'party') && $insert ) {
-		if ( Slim::Player::Source::playmode($client) ne 'play' ) {
-			Slim::Player::Source::playmode($client, 'play');
-		}
 	}
 
 	$request->addResult('count', scalar(@tracks));
@@ -2164,7 +2128,7 @@ sub playlistsEditCommand {
 			if ($title) {
 				$playlistTrack->title($title);
 				$playlistTrack->titlesort(Slim::Utils::Text::ignoreCaseArticles($title));
-				$playlistTrack->titlesearch(Slim::Utils::Text::ignoreCaseArticles($title));
+				$playlistTrack->titlesearch(Slim::Utils::Text::ignoreCaseArticles($title, 1));
 			}
 
 			$playlistTrack->update;
@@ -2275,7 +2239,7 @@ sub playlistsNewCommand {
 	}
 	
 	# can't do much without playlistdir!
-	if (!$prefs->get('playlistdir')) {
+	if (!Slim::Utils::Misc::getPlaylistDir()) {
 		$request->setStatusBadConfig();
 		return;
 	}
@@ -2288,7 +2252,7 @@ sub playlistsNewCommand {
 
 	# create the playlist URL
 	my $newUrl   = Slim::Utils::Misc::fileURLFromPath(
-		catfile($prefs->get('playlistdir'), Slim::Utils::Unicode::utf8encode_locale($title) . '.m3u')
+		catfile(Slim::Utils::Misc::getPlaylistDir(), Slim::Utils::Unicode::encode_locale($title) . '.m3u')
 	);
 
 	my $existingPlaylist = Slim::Schema->objectForUrl({
@@ -2360,7 +2324,7 @@ sub playlistsRenameCommand {
 	# now perform the operation
 	
 	my $newUrl   = Slim::Utils::Misc::fileURLFromPath(
-		catfile($prefs->get('playlistdir'), Slim::Utils::Unicode::utf8encode_locale($newName) . '.m3u')
+		catfile(Slim::Utils::Misc::getPlaylistDir(), Slim::Utils::Unicode::encode_locale($newName) . '.m3u')
 	);
 
 	my $existingPlaylist = Slim::Schema->objectForUrl({
@@ -2389,7 +2353,7 @@ sub playlistsRenameCommand {
 		$playlistObj->set_column('url', $newUrl);
 		$playlistObj->set_column('title', $newName);
 		$playlistObj->set_column('titlesort', Slim::Utils::Text::ignoreCaseArticles($newName));
-		$playlistObj->set_column('titlesearch', Slim::Utils::Text::ignoreCaseArticles($newName));
+		$playlistObj->set_column('titlesearch', Slim::Utils::Text::ignoreCaseArticles($newName, 1));
 		$playlistObj->update;
 
 		if (!defined Slim::Formats::Playlists::M3U->write( 
@@ -2441,7 +2405,7 @@ sub powerCommand {
 			$eachclient->power($newpower, 1) if $prefs->client($eachclient)->get('syncPower');
 			
 			# send an update for Jive player power menu
-			Slim::Control::Jive::playerPower($client);
+			Slim::Control::Jive::playerPower($eachclient);
 			
 		}
 	}
@@ -2526,18 +2490,27 @@ sub rescanCommand {
 	
 	# if we're scanning allready, don't do it twice
 	if (!Slim::Music::Import->stillScanning()) {
+		
+		if ( $prefs->get('autorescan') ) {
+			Slim::Utils::AutoRescan->shutdown;
+		}
+		
+		my $dir = Slim::Utils::Misc::getAudioDir();
 
 		my %args = (
-			'rescan'  => 1,
-			'cleanup' => 1,
+			types    => 'list|audio',
+			scanName => 'directory',
+			progress => 1,
 		);
 
 		if ($playlistsOnly) {
-
-			$args{'playlists'} = 1;
+			$dir = Slim::Utils::Misc::getPlaylistDir();
+			$args{types} = 'list';
 		}
 
-		Slim::Music::Import->launchScan(\%args);
+		Slim::Utils::Progress->clear();
+		
+		Slim::Utils::Scanner::Local->rescan( $dir, \%args );
 	}
 
 	$request->setStatusDone();
@@ -2628,6 +2601,7 @@ sub showCommand {
 	my $brightness = $request->getParam('brightness');
 	my $font       = $request->getParam('font');
 	my $centered   = $request->getParam('centered');
+	my $screen     = $request->getParam('screen');
 	
 	if (!defined $line1 && !defined $line2) {
 		$request->setStatusBadParams();
@@ -2661,6 +2635,10 @@ sub showCommand {
 			'graphic-280x16' => 'medium',
 			'text'           => 2,
 		};
+	}
+
+	if (defined $screen && $screen == 2) {
+		$hash = { 'screen2' => $hash };
 	}
 
 	# get out of the screensaver if one is active
@@ -2886,10 +2864,33 @@ sub wipecacheCommand {
 
 			$client->execute([qw(playlist clear)]);
 		}
+		
+		if ( $prefs->get('autorescan') ) {
+			require Slim::Utils::AutoRescan;
+			Slim::Utils::AutoRescan->shutdown;
+		}
 
-		Slim::Music::Import->launchScan({
-			'wipe' => 1,
-		});
+		Slim::Utils::Progress->clear();
+		
+		if ( Slim::Utils::OSDetect::isSqueezeOS() ) {
+			# Wipe/rescan in-process on SqueezeOS
+			my $dir = Slim::Utils::Misc::getAudioDir();
+			
+			my %args = (
+				types    => 'list|audio',
+				scanName => 'directory',
+				progress => 1,
+				wipe     => 1,
+			);
+			
+			Slim::Utils::Scanner::Local->rescan( $dir, \%args );
+		}
+		else {
+			# Launch external scanner on normal systems
+			Slim::Music::Import->launchScan( {
+				wipe => 1,
+			} );
+		}
 	}
 
 	$request->setStatusDone();
@@ -2952,6 +2953,17 @@ sub ratingCommand {
 		$request->addResult( '_rating', defined $rating ? $rating : 0 );
 	}
 
+	$request->setStatusDone();
+}
+
+sub pragmaCommand {
+	my $request = shift;
+	
+	my $pragma = join( ' ', grep { $_ ne 'pragma' } $request->renderAsArray );
+	
+	# XXX need to pass pragma to artwork cache even if using MySQL
+	Slim::Utils::OSDetect->getOS()->sqlHelperClass()->pragma($pragma);
+	
 	$request->setStatusDone();
 }
 
@@ -3063,12 +3075,14 @@ sub _playlistXtracksCommand_parseSearchTerms {
 	# Bug: 3629 - sort by album, then disc, tracknum, titlesort
 	my $sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass();
 	
+	my $collate = $sqlHelperClass->collate();
+	
 	my $albumSort 
-		= $sqlHelperClass->append0("album.titlesort") 
+		= $sqlHelperClass->append0("album.titlesort") . " $collate"
 		. ', me.disc, me.tracknum, '
-		. $sqlHelperClass->append0("me.titlesort");
+		. $sqlHelperClass->append0("me.titlesort") . " $collate";
 		
-	my $trackSort = "me.disc, me.tracknum, " . $sqlHelperClass->append0("me.titlesort");
+	my $trackSort = "me.disc, me.tracknum, " . $sqlHelperClass->append0("me.titlesort") . " $collate";
 	
 	if ( main::SLIM_SERVICE || !Slim::Schema::hasLibrary()) {
 		return ();
@@ -3096,9 +3110,6 @@ sub _playlistXtracksCommand_parseSearchTerms {
 
 				$terms->{$key} = $value;
 
-			} elsif ($term =~ /^(fieldInfo)=(\w+)$/) {
-
-				$terms->{$1} = $2;
 			}
 		}
 	}
@@ -3112,27 +3123,27 @@ sub _playlistXtracksCommand_parseSearchTerms {
 
 		# Bug: 4063 - don't enforce contributor.role when coming from
 		# the web UI's search.
-		if ($key eq 'contributor.role') {
+		elsif ($key eq 'contributor.role') {
 			next;
 		}
 
 		# Bug: 3582 - reconstitute from 0 for album.compilation.
-		if ($key eq 'album.compilation' && $value == 0) {
+		elsif ($key eq 'album.compilation' && $value == 0) {
 
 			$find{$key} = [ { 'is' => undef }, { '=' => 0 } ];
 		}
 
 		# Do some mapping from the player browse mode. This is
 		# already done in the web ui.
-		if ($key =~ /^(playlist|age|album|contributor|genre|year)$/) {
+		elsif ($key =~ /^(playlist|age|album|contributor|genre|year)$/) {
 			$key = "$1.id";
 		}
 
 		# New Music browsing is working on the
-		# tracks.timestamp column, but shows years
-		if ($key =~ /^age\.id$/) {
-
-			$key = 'album.id';
+		# tracks.timestamp column, but shows years.
+		# Use the album-id in the track instead of joining with the album table.
+		if ($key eq 'album.id' || $key eq 'age.id') {
+			$key = 'track.album';
 		}
 
 		# Setup the join mapping
@@ -3184,17 +3195,13 @@ sub _playlistXtracksCommand_parseSearchTerms {
 
 			} else {
 
-				$find{$key} = Slim::Utils::Text::ignoreCaseArticles($value);
+				$find{$key} = Slim::Utils::Text::ignoreCaseArticles($value, 1);
 			}
 		}
 	}
 
 	# 
-	if (my $fieldKey = $find{'fieldInfo'}) {
-
-		return Slim::Schema->rs($fieldKey)->browse({ 'audio' => 1 });
-
-	} elsif ($find{'playlist.id'} && !$find{'me.id'}) {
+	if ($find{'playlist.id'} && !$find{'me.id'}) {
 
 		# Treat playlists specially - they are containers.
 		my $playlist = Slim::Schema->find('Playlist', $find{'playlist.id'});
@@ -3212,7 +3219,6 @@ sub _playlistXtracksCommand_parseSearchTerms {
 
 		# on search, only grab audio items.
 		$find{'audio'} = 1;
-		$find{'remote'} = 0;
 
 		# Bug 2271 - allow VA albums.
 		if (defined $find{'album.compilation'} && $find{'album.compilation'} == 1) {
@@ -3220,7 +3226,7 @@ sub _playlistXtracksCommand_parseSearchTerms {
 			delete $find{'contributor.id'};
 		}
 
-		if ($find{'album.id'} && $find{'contributor.id'} && 
+		if ($find{'me.album'} && $find{'contributor.id'} && 
 			$find{'contributor.id'} == Slim::Schema->variousArtistsObject->id) {
 
 			delete $find{'contributor.id'};
@@ -3233,7 +3239,7 @@ sub _playlistXtracksCommand_parseSearchTerms {
 
 		# If we have an album and a year - remove the year, since
 		# there is no explict relationship between Track and Year.
-		if ($find{'album.id'} && $find{'year.id'}) {
+		if ($find{'me.album'} && $find{'year.id'}) {
 
 			delete $find{'year.id'};
 			delete $joinMap{'year'};
@@ -3243,10 +3249,15 @@ sub _playlistXtracksCommand_parseSearchTerms {
 			$find{'album.year'} = delete $find{'year.id'};
 			delete $joinMap{'year'};
 		}
-
-		# Bug: 3629 - if we're sorting by album - be sure to include it in the join table.
+		
 		if ($sort && $sort eq $albumSort) {
-			$joinMap{'album'} = 'album';
+			if ($find{'me.album'}) {
+				# Don't need album-sort if we have a specific album-id
+				$sort = undef;
+			} else {
+				# Bug: 3629 - if we're sorting by album - be sure to include it in the join table.
+				$joinMap{'album'} = 'album';
+			}
 		}
 
 		# limit & offset may have been populated above.
@@ -3339,7 +3350,7 @@ sub _playlistXtracksCommand_parseDbItem {
 				my $key   = URI::Escape::uri_unescape($2);
 				my $value = URI::Escape::uri_unescape($3);
 
-				if (!utf8::decode($value)) { $log->warn("The following value is not UTF-8 encoded: $value"); }
+				if (!utf8::is_utf8($value) && !utf8::decode($value)) { $log->warn("The following value is not UTF-8 encoded: $value"); }
 
 				$class = ucfirst($1);
 				$obj   = Slim::Schema->single( $class, { $key => $value } );

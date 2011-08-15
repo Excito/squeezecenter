@@ -2,7 +2,7 @@ package Slim::Plugin::Favorites::OpmlFavorites;
 
 # An opml based favorites handler
 
-# $Id: OpmlFavorites.pm 28189 2009-08-14 19:33:36Z andy $
+# $Id: OpmlFavorites.pm 32528 2011-06-18 11:56:43Z adrian $
 
 use strict;
 
@@ -46,7 +46,7 @@ sub new {
 			$favs->_urlindex;
 		}
 		
-	}, [['rescan', 'done']]);
+	}, [['rescan'], ['done']]);
 
 	return $favs;
 }
@@ -56,7 +56,7 @@ sub migrate {
 
 	my $file = $class->filename();
 	if (! -f $file) {
-		foreach ($prefsServer->get('playlistdir'), $prefsServer->get('cachedir')) {
+		foreach (Slim::Utils::Misc::getPlaylistDir(), $prefsServer->get('cachedir')) {
 			my $oldfile = $class->filename($_);
 			if (-f $oldfile) {
 				require File::Copy;
@@ -178,11 +178,11 @@ sub _loadOldFavorites {
 sub xmlbrowser {
 	my $class = shift;
 
-	$class->SUPER::xmlbrowser;
+	my $hash = $class->SUPER::xmlbrowser;
 
-	$class->{'xmlhash'}->{'favorites'} = 1;
+	$hash->{'favorites'} = 1;
 
-	return $class->{'xmlhash'};
+	return $hash;
 }
 
 sub all {

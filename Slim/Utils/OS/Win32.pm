@@ -94,6 +94,19 @@ sub initPrefs {
 	$prefs->{wizardDone} = 1;
 }
 
+sub postInitPrefs {
+	my ($class, $prefs) = @_;
+
+	return if !$class->{osDetails}->{isWHS};
+
+	# bug 15818: on WHS we don't want iTunes to be started by default (Support request)
+	require Slim::Utils::Prefs;
+	my $pluginState = Slim::Utils::Prefs::preferences('plugin.state');
+	if (!defined $pluginState->get('iTunes')) {
+		$pluginState->set('iTunes', 'disabled');
+	}
+}
+
 sub dirsFor {
 	my ($class, $dir) = @_;
 	
@@ -263,11 +276,25 @@ sub getFileName {
 		$path = $fileObj->{Name};
 	}
 
+	else {
+		# bug 16683 - experimental fix
+		# Decode pathnames that do not have '~' as they may have locale-encoded chracaters in them
+		$path = Slim::Utils::Unicode::utf8decode_locale($path);
+	}
+
 	return $path;	
 }
 
 sub scanner {
 	return -x "$Bin/scanner.exe" ? "$Bin/scanner.exe" : $_[0]->SUPER::scanner();
+}
+
+sub gdresize {
+	return -x "$Bin/gdresize.exe" ? "$Bin/gdresize.exe" : $_[0]->SUPER::gdresize();
+}
+
+sub gdresized {
+	return -x "$Bin/gdresized.exe" ? "$Bin/gdresized.exe" : $_[0]->SUPER::gdresized();
 }
 
 sub localeDetails {

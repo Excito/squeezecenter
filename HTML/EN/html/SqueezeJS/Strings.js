@@ -32,6 +32,10 @@ SqueezeJS.Strings['volume'] += '[% "COLON" | string %]';
 [% PROCESS jsString id='YES' jsId='' %]
 [% PROCESS jsString id='NO' jsId='' %]
 
+[% PROCESS jsString id='ALBUM' jsId='' %]
+[% PROCESS jsString id='ARTIST' jsId='' %]
+[% PROCESS jsString id='YEAR' jsId='' %]
+
 [% PROCESS jsString id='CLOSE' jsId='' %]
 [% PROCESS jsString id='CANCEL' jsId='' %]
 [% PROCESS jsString id='CHOOSE_PLAYER' jsId='' %]
@@ -47,6 +51,8 @@ SqueezeJS.Strings['volume'] += '[% "COLON" | string %]';
 [% PROCESS jsString id='SETUP_SELECT_FOLDER' jsId='choose_folder' %]
 [% PROCESS jsString id='SETUP_SELECT_FILE' jsId='choose_file' %]
 
-Ext.MessageBox.buttonText.yes = '[% "YES" | string %]';
-Ext.MessageBox.buttonText.no = '[% "NO" | string %]';
-Ext.MessageBox.buttonText.cancel = '[% "CANCEL" | string %]';
+if (Ext.MessageBox) {
+	Ext.MessageBox.buttonText.yes = '[% "YES" | string %]';
+	Ext.MessageBox.buttonText.no = '[% "NO" | string %]';
+	Ext.MessageBox.buttonText.cancel = '[% "CANCEL" | string %]';
+}

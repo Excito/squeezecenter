@@ -5,7 +5,7 @@ package Slim::Display::Squeezebox2;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Squeezebox2.pm 31603 2010-12-07 21:50:20Z adrian $
+# $Id: Squeezebox2.pm 31602 2010-12-07 21:47:12Z adrian $
 
 =head1 NAME
 

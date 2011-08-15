@@ -1,6 +1,6 @@
 package Slim::Networking::Async::Socket::HTTPS;
 
-# $Id: HTTPS.pm 26931 2009-06-07 03:53:36Z michael $
+# $Id: HTTPS.pm 30446 2010-03-31 12:11:29Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -8,7 +8,6 @@ package Slim::Networking::Async::Socket::HTTPS;
 # version 2.
 
 use strict;
-use warnings;
 
 BEGIN {
 	# Force Net::HTTPS to use IO::Socket::SSL

@@ -1,6 +1,6 @@
 package Slim::Networking::SqueezeNetwork::Players;
 
-# $Id: Players.pm 30556 2010-04-12 16:18:34Z mherger $
+# $Id: Players.pm 32564 2011-06-27 19:25:58Z adrian $
 
 # Keep track of players that are connected to SN
 
@@ -121,6 +121,15 @@ sub _players_done {
 	# Make a list of all apps for the web UI
 	my $allApps = {};
 	
+	# Add 3rd party plugins which have requested to be on the apps menu
+	if (my $nonSNApps = Slim::Plugin::Base->nonSNApps) {
+		for my $plugin (@$nonSNApps) {
+			if ($plugin->can('tag')) {
+				$allApps->{ "nonsn_" . $plugin->tag } = { plugin => $plugin };
+			}
+		}
+	}
+
 	# SN can provide string translations for new menu items
 	if ( $res->{strings} ) {
 		main::DEBUGLOG && $log->is_debug && $log->debug( 'Adding SN-supplied strings: ' . Data::Dump::dump( $res->{strings} ) );

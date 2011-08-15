@@ -1,6 +1,6 @@
 package Slim::Utils::Misc;
 
-# $Id: Misc.pm 31155 2010-08-03 20:39:47Z agrundman $
+# $Id: Misc.pm 32594 2011-07-01 07:59:37Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -198,6 +198,8 @@ sub pathFromMacAlias {
 	Given a file:// style url, return the filepath to the caller
 
 	If the option $noCache argument is set, the result is  not cached
+	
+	Returns the pathname as a (possibly-encoded) byte-string, not a Unicode (decoded) string
 
 =cut
 
@@ -252,9 +254,9 @@ sub pathFromFileURL {
 
 	# only allow absolute file URLs and don't allow .. in files...
 	if ($path !~ /[\/\\]\.\.[\/\\]/) {
-		# Bug 10199 - need to ensure that the perl-internal UTF8 flag is set if necessary
-		# (this should really be done by URI::file)
-		$file = fixPathCase( $uri->file );
+		$file = $uri->file;
+
+		$file = fixPathCase($file);
 	}
 
 	if (Slim::Utils::Log->isInitialized) {
@@ -266,11 +268,8 @@ sub pathFromFileURL {
 		}
 	}
 
-	if (!$noCache && scalar keys %fileToPathCache > 32) {
-		%fileToPathCache = ();
-	}
-
 	if (!$noCache) {
+		%fileToPathCache = () if scalar keys %fileToPathCache > 32;
 		$fileToPathCache{$url} = $file;
 	}
 
@@ -294,15 +293,31 @@ sub fileURLFromPath {
 	
 	$path = fixPathCase($path);
 	
-	# Encode to UTF-8 before URI-escaping, if needed
+	# All paths should be in raw bytes, warn if it appears to be UTF-8
+	# XXX remove this later, before release
 	if ( utf8::is_utf8($path) ) {
-		utf8::encode($path);
+		my $test = $path;
+		utf8::decode($test);
+		utf8::encode($test);
+		if ( $test ne $path ) {
+			logWarning("fileURLFromPath got decoded UTF-8 path: " . Data::Dump::dump($path));
+			bt();
+		}
+	}
+	
+	# Bug 15511
+	# URI::file->new() will strip trailing space from path. Use a trailing / to defeat this if necessary.
+	my $addedSlash;
+	if ($path =~ /[\s"]$/) {
+		$path .= '/';
+		$addedSlash = 1;
 	}
 
 	my $uri = URI::file->new($path);
 	$uri->host('');
 
 	my $file = $uri->as_string;
+	$file =~ s%/$%% if $addedSlash;
 
 	if (scalar keys %pathToFileCache > 32) {
 		%pathToFileCache = ();
@@ -461,8 +476,10 @@ sub hasXSCwd {
 
 # there's not really a better way to do this..
 sub fixPath {
-	my $file = shift;
-	my $base = shift;
+	# Only using encode_locale() here as a safety measure because
+	# it should be a no-op.
+	my $file = Slim::Utils::Unicode::encode_locale(shift);
+	my $base = Slim::Utils::Unicode::encode_locale(shift);
 
 	if (!defined($file)) {
 		return;
@@ -501,8 +518,8 @@ sub fixPath {
 
 	# the only kind of absolute file we like is one in 
 	# the music directory or the playlist directory...
-	my $audiodir = $prefs->get('audiodir');
-	my $savedplaylistdir = $prefs->get('playlistdir');
+	my $audiodir = Slim::Utils::Misc::getAudioDir();
+	my $savedplaylistdir = Slim::Utils::Misc::getPlaylistDir();
 
 	if ($audiodir && $file =~ /^\Q$audiodir\E/) {
 
@@ -600,6 +617,51 @@ sub stripRel {
 	return $file;
 }
 
+=head2 getLibraryName()
+
+	Return the library's name, or the host name if none is defined
+
+=cut
+
+sub getLibraryName {
+	my $hostname = $prefs->get('libraryname') || '';
+	
+	if (!$hostname || $hostname =~ /^(?:''|"")$/) {
+		$hostname = Slim::Utils::Network::hostName();
+
+		# may return several lines of hostnames, just take the first.	
+		$hostname =~ s/\n.*//;
+	
+		# may return a dotted name, just take the first part
+		$hostname =~ s/\..*//;
+	}
+		
+	# Bug 13217, replace Unicode quote with ASCII version (commonly used in Mac server name)
+	$hostname =~ s/\x{2019}/'/g;
+
+	return $hostname;
+}
+
+=head2 getAudioDir()
+
+	Get the byte-string (native) version of the audiodir
+
+=cut
+
+sub getAudioDir {
+	return Slim::Utils::Unicode::encode_locale($prefs->get('audiodir'));
+}
+
+=head2 getPlaylistDir()
+
+	Get the byte-string (native) version of the playlistdir
+
+=cut
+
+sub getPlaylistDir {
+	return Slim::Utils::Unicode::encode_locale($prefs->get('playlistdir'));
+}
+
 =head2 inAudioFolder( $)
 
 	Check if argument is an item contained in the music folder tree
@@ -607,7 +669,7 @@ sub stripRel {
 =cut
 
 sub inAudioFolder {
-	return _checkInFolder(shift, 'audiodir');
+	return _checkInFolder(shift, getAudioDir());
 }
 
 =head2 inPlaylistFolder( $)
@@ -617,18 +679,16 @@ sub inAudioFolder {
 =cut
 
 sub inPlaylistFolder {
-	return _checkInFolder(shift, 'playlistdir');
+	return _checkInFolder(shift, getPlaylistDir());
 }
 
 sub _checkInFolder {
 	my $path = shift || return;
-	my $pref = shift;
+	my $checkdir = shift;
 
 	# Fully qualify the path - and strip out any url prefix.
 	$path = fixPath($path) || return 0;
 	$path = pathFromFileURL($path) || return 0;
-
-	my $checkdir = $prefs->get($pref);
 
 	if ($checkdir && $path =~ /^\Q$checkdir\E/) {
 		return 1;
@@ -680,7 +740,7 @@ sub fileFilter {
 	# Ignore special named files and directories
 	# __ is a match against our old __history and __mac playlists.
 	return 0 if $item =~ /^__\S+\.m3u$/o;
-	return 0 if ($item =~ /^\./o && !main::ISWINDOWS);
+	return 0 if ($item =~ /^\.[^\.]+/o && !main::ISWINDOWS);
 
 	if ((my $ignore = $prefs->get('ignoreDirRE') || '') ne '') {
 		return 0 if $item =~ /$ignore/;
@@ -733,7 +793,7 @@ sub fileFilter {
 	return 1;
 }
 
-=head2 folderFilter( $dirname )
+=head2 folderFilter( $dirname, $hasStat, $validRE )
 
 	Verify whether we want to include a folder in our search.
 
@@ -744,8 +804,15 @@ sub folderFilter {
 	my $folder = pop @path;
 	
 	my $hasStat = shift || 0;
-
-	return fileFilter(catdir(@path), $folder, undef, $hasStat);
+	my $validRE = shift;
+	my $file = catdir(@path);
+	
+	# Bug 15209, Hack for UNC bug where catdir turns \\foo into \foo
+	if ( main::ISWINDOWS && $path[0] eq '' && $path[1] eq '' && $file !~ /^\\{2}/ ) {
+		$file = '\\' . $file;
+	}
+	
+	return fileFilter($file, $folder, $validRE, $hasStat);
 }
 
 
@@ -779,8 +846,10 @@ sub readDirectory {
 	my @diritems = ();
 	my $log      = logger('os.files');
 
+	my $native_dirname = Slim::Utils::Unicode::encode_locale($dirname);
+	
 	if (main::ISWINDOWS) {
-		my ($volume) = splitpath($dirname);
+		my ($volume) = splitpath($native_dirname);
 
 		if ($volume && isWinDrive($volume) && !Slim::Utils::OS::Win32->isDriveReady($volume)) {
 			
@@ -790,7 +859,7 @@ sub readDirectory {
 		}
 	}
 
-	opendir(DIR, $dirname) || do {
+	opendir(DIR, $native_dirname) || do {
 
 		main::DEBUGLOG && $log->debug("opendir on [$dirname] failed: $!");
 
@@ -805,7 +874,18 @@ sub readDirectory {
 			main::idleStreams();
 		}
 
-		next unless fileFilter($dirname, $item, $validRE);
+        # readdir returns only bytes, so try and decode the
+        # filename to UTF-8 here or the later calls to -d/-f may fail,
+        # causing directories and files to be skipped.
+		# utf8::decode($item);
+		#
+		# This was the wrong fix. The entries returned by this method
+		# should be in native byte-strings. It is likely that the previous problem
+		# was caused by the incoming $dirname having the uft8 flag set,
+		# so that concatenating the dirname and an entry would result in a UTF-8
+		# string that was incorrectly auto-decoded.
+
+		next unless fileFilter($native_dirname, $item, $validRE);
 
 		push @diritems, $item;
 	}
@@ -853,7 +933,7 @@ sub findAndScanDirectoryTree {
 		
 		# make sure we have a valid URL...
 		if (!defined $url) {
-			$url = $prefs->get('audiodir');
+			$url = Slim::Utils::Misc::getAudioDir();
 		}
 
 		if (!Slim::Music::Info::isURL($url)) {
@@ -910,20 +990,11 @@ sub findAndScanDirectoryTree {
 		$topLevelObj->update;
 
 		# Do a quick directory scan.
-		Slim::Utils::Scanner->scanDirectory({
-			'url'       => $path,
-			'recursive' => 0,
-		});
-
-		# Bug: 4812 - notify those interested that the database has changed.
-		Slim::Control::Request::notifyFromArray(undef, [qw(rescan done)]);
-
-		# Bug: 3841 - check for new artwork
-		# But don't search at the root level.
-		if ($path ne $prefs->get('audiodir')) {
-
-			Slim::Music::Artwork->findArtwork($topLevelObj);
-		}
+		# XXX this should really be async but callers would need updated, lots of work
+		Slim::Utils::Scanner::Local->rescan( $path, {
+			no_async  => 1,
+			recursive => 0,
+		} );
 	}
 
 	# Now read the raw directory and return it. This should always be really fast.
@@ -1062,10 +1133,10 @@ sub settingsDiagString {
 	);
 	
 	if ( my $sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass ) {
-		my $sqlVersion = $sqlHelperClass->sqlVersionLong( Slim::Schema->storage->dbh );
+		my $sqlVersion = $sqlHelperClass->sqlVersionLong( Slim::Schema->dbh );
 		push @diagString, sprintf("%s%s %s",
 	
-			Slim::Utils::Strings::string('MYSQL_VERSION'),
+			Slim::Utils::Strings::string('DATABASE_VERSION'),
 			Slim::Utils::Strings::string('COLON'),
 			$sqlVersion,
 		);

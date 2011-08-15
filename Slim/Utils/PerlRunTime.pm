@@ -1,6 +1,6 @@
 package Slim::Utils::PerlRunTime;
 
-# $Id: PerlRunTime.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: PerlRunTime.pm 32247 2011-04-08 06:11:04Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -104,14 +104,18 @@ Use L<Devel::Peek> find the original name of a non-anonymous $coderef.
 =cut
 
 sub realNameForCodeRef {
-	my $coderef = shift;
+	if (main::INFOLOG) {
+		my $coderef = shift;
+		
+		require Devel::Peek;
 	
-	require Devel::Peek;
-
-	my $gv   = Devel::Peek::CvGV($coderef);
-	my $name = join('::', *$gv{'PACKAGE'}, *$gv{'NAME'}) || 'ANON';
-
-	return $name;
+		my $gv   = Devel::Peek::CvGV($coderef);
+		my $name = join('::', *$gv{'PACKAGE'}, *$gv{'NAME'}) || 'ANON';
+	
+		return $name;
+	} else {
+		return 'method-name-unavailable';
+	}
 }
 
 =head1 SEE ALSO

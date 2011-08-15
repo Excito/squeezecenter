@@ -5,7 +5,7 @@ package Slim::Display::Text;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Text.pm 31590 2010-12-05 19:40:54Z adrian $
+# $Id: Text.pm 31847 2011-01-27 11:38:29Z ayoung $
 
 =head1 NAME
 
@@ -235,7 +235,7 @@ sub render {
 			$sc->{line}[$l] = $screen->{line}[$l];
 			next if ($double && $l == 0);
 			if (!$double) {
-				if (Slim::Utils::Unicode::encodingFromString($screen->{line}[$l]) eq 'raw') {
+				if (Slim::Utils::Unicode::encodingFromString($screen->{line}[$l], 'ignore-utf8-flag') eq 'raw') {
 					# SliMP3 / Pre-G can't handle wide characters outside the latin1 range - turn off the utf8 flag.
 					$sc->{linetext}[$l] = Slim::Utils::Unicode::utf8off($screen->{line}[$l]);
 				} else {
