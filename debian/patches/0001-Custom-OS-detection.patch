@@ -1,6 +1,6 @@
 From: =?UTF-8?q?Carl=20F=C3=BCrstenberg?= <carl@excito.com>
 Date: Mon, 21 Mar 2011 13:30:00 +0100
-Subject: [PATCH] Custom OS detection
+Subject: Custom OS detection
 
 Adding custom OS detection for the Bubba platform
 
