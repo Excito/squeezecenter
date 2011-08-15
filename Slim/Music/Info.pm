@@ -1,6 +1,6 @@
 package Slim::Music::Info;
 
-# $Id: Info.pm 30737 2010-05-12 18:00:12Z adrian $
+# $Id: Info.pm 32504 2011-06-07 12:16:25Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -23,6 +23,7 @@ use File::Path;
 use File::Basename;
 use File::Spec::Functions qw(catdir splitdir);
 use Path::Class;
+use POSIX qw(setlocale LC_CTYPE LC_COLLATE);
 use Scalar::Util qw(blessed);
 use Tie::Cache::LRU;
 
@@ -63,7 +64,9 @@ our %currentTitleCallbacks = ();
 tie our %isFile, 'Tie::Cache::LRU', 16;
 
 # No need to do this over and over again either.
-tie our %urlToTypeCache, 'Tie::Cache::LRU', 16;
+# Don't use Tie::Cache::LRU as it is a bit too expensive in the scanner
+our %urlToTypeCache;
+use constant URLTYPECACHESIZE => 16;
 
 my $log = logger('database.info');
 
@@ -255,6 +258,7 @@ sub setContentType {
 	}
 
 	# Update the cache set by typeFrompath as well.
+	%urlToTypeCache = () if scalar keys %urlToTypeCache > URLTYPECACHESIZE;
 	$urlToTypeCache{$url} = $type;
 	
 	main::INFOLOG && $log->info("Content-Type for $url is cached as $type");
@@ -391,6 +395,10 @@ my %cbr = map { $_ => 1 } qw(32 40 48 56 64 80 96 112 128 160 192 224 256 320);
 sub setRemoteMetadata {
 	my ( $url, $meta ) = @_;
 	
+	# Bug 15833: only update metadata for remote tracks.
+	# Local tracks should have everything correct from the scan.
+	return if !isRemoteURL($url);
+	
 	my $attr = {};
 	
 	if ( $meta->{title} ) {
@@ -422,6 +430,7 @@ sub setRemoteMetadata {
 		}
 
 		# Update the cache set by typeFrompath as well.
+		%urlToTypeCache = () if scalar keys %urlToTypeCache > URLTYPECACHESIZE;
 		$urlToTypeCache{$url} = $type;
 		
 		$attr->{CT} = $type;
@@ -579,35 +588,24 @@ sub getStreamDelay {
 sub setDelayedTitle {
 	my ( $client, $url, $newTitle, $outputDelayOnly ) = @_;
 	
-	my $log = logger('player.streaming.direct') || logger('player.streaming.remote');
+	return if !$client || !$newTitle || !$url;
 	
 	my $metaTitle = $client->metaTitle || '';
 	
-	if ( $newTitle && ( $metaTitle ne $newTitle ) ) {
+	if ( $metaTitle ne $newTitle ) {
 		
-		# Some mp3 stations can have 10-15 seconds in the buffer.
-		# This will delay metadata updates according to how much is in
-		# the buffer, so title updates are more in sync with the music
-		my $delay = getStreamDelay($client, $outputDelayOnly);
+		main::INFOLOG && $log->info("New metadata title ($newTitle)");
 		
 		# No delay on the initial metadata
 		if ( !$metaTitle ) {
-			$delay = 0;
+			setCurrentTitle( $url, $newTitle, $client );
+		} else {
+			setDelayedCallback( 
+					$client,
+					sub {setCurrentTitle( $url, $newTitle, $client );}, 
+					$outputDelayOnly,
+				);
 		}
-		
-		main::INFOLOG && $log->info("Delaying metadata title set by $delay secs ($newTitle)");
-		
-		$client->metaTitle( $newTitle );
-		
-		Slim::Utils::Timers::setTimer(
-			$client,
-			Time::HiRes::time() + $delay,
-			sub {
-				my $client = shift || return;
-				
-				setCurrentTitle( $url, $newTitle, $client );
-			},
-		);
 	}
 	
 	return $metaTitle;
@@ -618,7 +616,6 @@ sub setDelayedCallback {
 	
 	my $delay = getStreamDelay($client, $outputDelayOnly);
 	
-	my $log = logger('player.streaming.direct') || logger('player.streaming.remote');
 	main::INFOLOG && $log->is_info && $log->info("Delaying callback by $delay secs");
 	
 	Slim::Utils::Timers::setTimer(
@@ -674,6 +671,7 @@ sub standardTitle {
 	my $client    = shift;
 	my $pathOrObj = shift; # item whose information will be formatted
 	my $meta      = shift; # optional remote metadata to format
+	my $format    = shift; # caller may specify format 
 	
 	# Short-circuit if we have metadata
 	if ( $meta ) {
@@ -695,7 +693,6 @@ sub standardTitle {
 	}
 
 	my $fullpath = blessed($track) && $track->can('url') ? $track->url : $track;
-	my $format   = undef;
 
 	if (isPlaylistURL($fullpath) || isList($track)) {
 
@@ -703,7 +700,7 @@ sub standardTitle {
 
 	} else {
 
-		$format = standardTitleFormat($client) || 'TITLE';
+		$format ||= standardTitleFormat($client) || 'TITLE';
 
 	}
 
@@ -851,13 +848,15 @@ sub guessTags {
 			my $i = 0;
 
 			foreach my $match (@matches) {
+				# $match is from a raw filename and needs to be utf8-decoded
+				$match = Slim::Utils::Unicode::utf8decode_locale($match);
 
 				main::INFOLOG && $log->info("$tags[$i] => $match");
 
 				$match =~ tr/_/ / if (defined $match);
 
 				$match = int($match) if $tags[$i] =~ /TRACKNUM|DISC{1,2}/;
-				$taghash->{$tags[$i++]} = Slim::Utils::Unicode::utf8decode_locale($match);
+				$taghash->{$tags[$i++]} = $match;
 			}
 
 			return;
@@ -923,8 +922,16 @@ sub sortFilename {
 		)
 	} @_;
 
+	# Bug 14906: need to use native character-encoding collation sequence
+	my $oldCollate = setlocale(LC_COLLATE);
+	setlocale(LC_COLLATE, setlocale(LC_CTYPE));
+
 	# return the input array sliced by the sorted array
-	return @_[sort {$nocase[$a] cmp $nocase[$b]} 0..$#_];
+	my @ret = @_[sort {$nocase[$a] cmp $nocase[$b]} 0..$#_];
+	
+	setlocale(LC_COLLATE, $oldCollate);
+	
+	return @ret;
 }
 
 sub isFragment {
@@ -972,6 +979,17 @@ sub addDiscNumberToAlbumTitle {
 	return $title;
 }
 
+# Cache this preference, which may be undef
+my ($_splitList, $_gotSplitList);
+		
+$prefs->setChange( 
+	sub {
+		$_gotSplitList = 1;
+		$_splitList = $_[1];
+	},
+	'splitList'
+);
+
 sub splitTag {
 	my $tag = shift;
 
@@ -987,12 +1005,16 @@ sub splitTag {
 	}
 
 	my @splitTags = ();
-	my $splitList = $prefs->get('splitList');
-
+	
+	if (!$_gotSplitList) {
+		$_splitList = $prefs->get('splitList');
+		$_gotSplitList = 1;
+	}
+	
 	# only bother if there are some characters in the pref
-	if ($splitList) {
+	if ($_splitList) {
 
-		for my $splitOn (split(/\s+/, $splitList),'\x00') {
+		for my $splitOn (split(/\s+/, $_splitList),'\x00') {
 
 			my @temp = ();
 
@@ -1100,9 +1122,17 @@ sub isPlaylistURL {
 	# seen as a playlist which forces only the title to be displayed.
 	return if $url =~ /^rhap.+wma$/;
 
-	if ($url =~ /^([a-zA-Z0-9\-]+):/ && Slim::Player::ProtocolHandlers->isValidHandler($1) && !isFileURL($url)) {
+	if ($url =~ /^([a-zA-Z0-9\-]+):/) {
 
-		return 1;
+		my $handler = Slim::Player::ProtocolHandlers->handlerForProtocol($1);
+		# check handler is a real handler first by matching :: 
+		if ($handler && $handler =~ /::/ && $handler->can('isPlaylistURL')) {
+			return $handler->isPlaylistURL($url);
+		}
+
+		if (Slim::Player::ProtocolHandlers->isValidHandler($1) && !isFileURL($url)) {
+			return 1;
+		}
 	}
 
 	return 0;
@@ -1271,7 +1301,7 @@ sub isContainer {
 
 # Return a list of valid extensions for a particular type as listed in types.conf
 sub validTypeExtensions {
-	my $findTypes  = shift || qr/(?:list|audio)/;
+	my $findTypes  = shift || 'list|audio';
 
 	my @extensions = ();
 	my $disabled   = disabledExtensions($findTypes);
@@ -1302,7 +1332,7 @@ sub validTypeExtensions {
 	}
 
 	# Always look for cue sheets when looking for audio.
-	if ($findTypes eq 'audio' && !$disabled->{'cue'}) {
+	if ('audio' =~ /$findTypes/ && !$disabled->{'cue'}) {
 		push @extensions, 'cue';
 	}
 	
@@ -1365,7 +1395,7 @@ sub typeFromSuffix {
 	my $path = shift;
 	my $defaultType = shift || 'unk';
 	
-	if (defined $path && $path =~ /\.([^.]+)$/) {
+	if (defined $path && $path =~ m%\.([^./]+)$%) {
 		return $suffixes{lc($1)};
 	}
 
@@ -1373,26 +1403,27 @@ sub typeFromSuffix {
 }
 
 sub typeFromPath {
-	my $fullpath = shift;
+	my $fullpath = shift;		# either a file path or a URL (even for files)
 	my $defaultType = shift || 'unk';
 
 	# Remove the anchor if we're checking the suffix.
 	my ($type, $anchorlessPath, $filepath);
 
+	# Process raw path
+	if (isFileURL($fullpath)) {
+		$filepath = Slim::Utils::Misc::pathFromFileURL($fullpath);
+	} else {
+		$filepath = $fullpath;
+	}
+
 	if ($fullpath && $fullpath !~ /\x00/) {
 
 		# Return quickly if we have it in the cache.
-		if (defined $urlToTypeCache{$fullpath}) {
-
-			$type = $urlToTypeCache{$fullpath};
-			
+		if (defined ($type = $urlToTypeCache{$filepath})) {
 			return $type if $type ne 'unk';
-
 		}
 		elsif ($fullpath =~ /^([a-z]+:)/ && defined($suffixes{$1})) {
-
 			$type = $suffixes{$1};
-
 		} 
 		elsif ( $fullpath =~ /^(?:radioio|live365)/ ) {
 			# Force mp3 for protocol handlers
@@ -1411,14 +1442,7 @@ sub typeFromPath {
 		}
 	}
 
-	# Process raw path, sanity check for folders
-	if (isFileURL($fullpath)) {
-		$filepath = Slim::Utils::Misc::pathFromFileURL($fullpath);
-
-	} else {
-		$filepath = $fullpath;
-	}
-
+	# sanity check for folders
 	if ($filepath && -d $filepath) {
 		$type = 'dir';
 	}
@@ -1474,8 +1498,8 @@ sub typeFromPath {
 
 	# Don't cache remote URL types, as they may change.
 	if (!isRemoteURL($fullpath)) {
-
-		$urlToTypeCache{$fullpath} = $type;
+		%urlToTypeCache = () if scalar keys %urlToTypeCache > URLTYPECACHESIZE;
+		$urlToTypeCache{$filepath} = $type;
 	}
 
 	main::DEBUGLOG && $log->debug("$type file type for $fullpath");

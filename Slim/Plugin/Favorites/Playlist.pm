@@ -1,6 +1,6 @@
 package Slim::Plugin::Favorites::Playlist;
 
-# $Id: Playlist.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Playlist.pm 31564 2010-12-01 09:12:52Z ayoung $
 
 # Class to allow importing of playlist formats understood by Squeezebox Server into opml files
 
@@ -26,7 +26,7 @@ sub read {
 
 	} elsif (dirname($name) eq '.') {
 
-		$name = catdir($prefsServer->get('playlistdir'), $name);
+		$name = catdir(Slim::Utils::Misc::getPlaylistDir(), $name);
 	}
 
 	my $type = Slim::Music::Info::contentType($name);

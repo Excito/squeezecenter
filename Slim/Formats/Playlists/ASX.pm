@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists::ASX;
 
-# $Id: ASX.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: ASX.pm 30446 2010-03-31 12:11:29Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -50,10 +50,10 @@ sub read {
 		
 		# Make sure playlist is UTF-8
 		my $encoding = Slim::Utils::Unicode::encodingFromString( $content );
-		main::DEBUGLOG && $log->debug( "Encoding of ASX playlist: $encoding" );
+		main::DEBUGLOG && $log->is_debug && $log->debug( "Encoding of ASX playlist: $encoding" );
 		
 		if ( $encoding ne 'utf8' ) {		
-			$content = Slim::Utils::Unicode::utf8decode_guess( $content );
+			$content = Slim::Utils::Unicode::utf8decode_guess( $content, $encoding );
 		}
 		
 		my $parsed = eval {

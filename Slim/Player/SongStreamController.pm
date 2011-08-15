@@ -1,6 +1,6 @@
 package Slim::Player::SongStreamController;
 
-# $Id: SongStreamController.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: SongStreamController.pm 30446 2010-03-31 12:11:29Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -9,7 +9,6 @@ package Slim::Player::SongStreamController;
 
 use bytes;
 use strict;
-use warnings;
 
 use Slim::Utils::Log;
 

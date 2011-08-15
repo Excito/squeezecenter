@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists;
 
-# $Id: Playlists.pm 29496 2009-11-27 12:37:53Z ayoung $
+# $Id: Playlists.pm 31253 2010-08-24 06:39:55Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 #
@@ -71,7 +71,7 @@ sub parseList {
 
 			$fh = FileHandle->new($path);
 
-			$closeFH = 1;
+			$closeFH = 1 if $fh;
 		}
 	}
 
@@ -86,18 +86,7 @@ sub parseList {
 
 			logError("While running \$playlistClass->read(): [$@]");
 		}
-		
-		# We could have passed the limit to each of the read functions
-		# to avoid instantiating the unwanted Track objects. Not sure if
-		# that is necessary.
-		my $limit = $prefs->get('maxPlaylistLength');
-		if ($limit && scalar @results >= $limit) {
-			$log->warn("Playlist $url truncated at $limit entries");
-			splice @results, $limit;
-		}
-
-		
-		
+				
 	}
 	else {
 		# Try to guess what kind of playlist it is		

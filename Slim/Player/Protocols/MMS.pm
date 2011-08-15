@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::MMS;
 
-# $Id: MMS.pm 30790 2010-05-19 11:49:58Z agrundman $
+# $Id: MMS.pm 32442 2011-05-20 05:05:17Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -107,10 +107,8 @@ sub canDirectStream {
 		}
 	}
 
-	if ( main::SLIM_SERVICE ) {
-		# Strip noscan info from URL
-		$url =~ s/#slim:.+$//;
-	}
+	# Strip noscan info from URL
+	$url =~ s/#slim:.+$//;
 
 	return $url;
 }
@@ -278,11 +276,13 @@ sub handlesStreamHeaders {
 	
 	my $controller = $client->controller()->songStreamController();
 	
-	# let the normal direct-streamng code in Slim::Player::Squeezebox2 handle things
-	return if $controller->isDirect();
+	# let the normal direct-streaming code in Slim::Player::Squeezebox2 handle things
+	return 0 if $controller->isDirect();
 	
 	# tell player to continue and send us metadata
 	$client->sendContCommand(0, 0, metadataGuids($client));
+	
+	return 1;
 }
 
 sub parseDirectHeaders {

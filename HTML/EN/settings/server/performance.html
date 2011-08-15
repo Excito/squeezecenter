@@ -1,11 +1,11 @@
 [% PROCESS settings/header.html %]
-
+	
 	[% WRAPPER setting title="SETUP_DBHIGHMEM" desc="SETUP_DBHIGHMEM_DESC" %]
 		<select class="stdedit" name="pref_dbhighmem" id="dbhighmem">
 
 			<option [% IF NOT prefs.pref_dbhighmem %]selected [% END %]value="0">[% 'SETUP_DBHIGHMEM_NORMAL' | getstring %]</option>
 			<option [% IF prefs.pref_dbhighmem %]selected [% END %]value="1">[% 'SETUP_DBHIGHMEM_HIGH' | getstring %]</option>
-
+	
 		</select>
 	[% END %]
 
@@ -14,15 +14,6 @@
 
 			<option [% IF NOT prefs.pref_disableStatistics %]selected [% END %]value="0">[% 'SETUP_ENABLE_STATISTICS' | getstring %]</option>
 			<option [% IF prefs.pref_disableStatistics %]selected [% END %]value="1">[% 'SETUP_DISABLE_STATISTICS' | getstring %]</option>
-		
-		</select>
-	[% END %]
-
-	[% WRAPPER setting title="SETUP_RESAMPLEARTWORK" desc="SETUP_RESAMPLEARTWORK_DESC" %]
-		<select class="stdedit" name="pref_resampleArtwork" id="resampleArtwork">
-
-			<option [% IF NOT prefs.pref_resampleArtwork %]selected [% END %]value="0">[% 'SETUP_USE_RESIZE' | getstring %]</option>
-			<option [% IF prefs.pref_resampleArtwork %]selected [% END %]value="1">[% 'SETUP_USE_RESAMPLE' | getstring %]</option>
 		
 		</select>
 	[% END %]
@@ -59,6 +50,25 @@
 			[%- END -%]
 	
 			</select>
+		[% END %]
+	[% END %]
+
+	[% IF prefs.exists('pref_autorescan') %]
+		[% WRAPPER setting title="SETUP_AUTO_RESCAN" desc="SETUP_AUTO_RESCAN_DESC" %]
+			<select class="stdedit" name="pref_autorescan" id="autorescan">
+				<option [% IF prefs.pref_autorescan == 1 %]selected="selected" [% END %]value="1">
+					[% 'SETUP_AUTO_RESCAN_ENABLE' | string %]
+				</option>
+				<option [% IF !prefs.pref_autorescan %]selected="selected" [% END %]value="0">
+					[% 'SETUP_AUTO_RESCAN_DISABLE' | string %]
+				</option>
+			</select>
+		[% END %]
+	[% END %]
+	
+	[% IF prefs.exists('pref_autorescan_stat_interval') %]
+		[% WRAPPER setting title="SETUP_AUTO_RESCAN_STAT_INTERVAL" desc="SETUP_AUTO_RESCAN_STAT_INTERVAL_DESC" %]
+			<input type=text class="stdedit" name="pref_autorescan_stat_interval" id="autorescan_stat_interval" value="[% prefs.pref_autorescan_stat_interval %]" size="15">
 		[% END %]
 	[% END %]
 

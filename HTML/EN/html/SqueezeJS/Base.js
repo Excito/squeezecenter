@@ -1,5 +1,5 @@
 Ext.BLANK_IMAGE_URL = '/html/images/spacer.gif';
-	
+
 // hack to fake IE8 into IE7 mode - let's consider them the same
 Ext.isIE7 = Ext.isIE7 || Ext.isIE8;
 
@@ -8,7 +8,7 @@ var SqueezeJS = {
 	string : function(s){ return this.Strings[s]; },
 	
 	contributorRoles : new Array('artist', 'composer', 'conductor', 'band', 'albumartist', 'trackartist'),
-	coverFileSuffix : Ext.isIE && !Ext.isIE7 ? 'gif' : 'png',
+	coverFileSuffix : Ext.isIE6 ? 'gif' : 'png',
 
 	Controller : null
 };
@@ -44,13 +44,17 @@ function _init() {
 		init : function(o){
 			Ext.apply(this, o);
 
+			Ext.applyIf(this, {
+				'_server': ''
+			})
+			
 			this._initPlayerStatus();
 
 			this.player = -1;
 			this.events = this.events || {};
 			this.addEvents({
 				'playerselected'   : true,
-				'playerlistupdate' : true,
+				'serverstatus'     : true,
 				'playlistchange'   : true,
 				'buttonupdate'     : true,
 				'playerstatechange': true,
@@ -146,7 +150,7 @@ function _init() {
 							
 							response = Ext.util.JSON.decode(response.responseText);
 							if (response && response.result) {
-								this.fireEvent('playerlistupdate', response.result);
+								this.fireEvent('serverstatus', response.result);
 
 								if (response.result.rescan || this.playerStatus.rescan) {
 									this.playerStatus.rescan = response.result.rescan;
@@ -169,7 +173,7 @@ function _init() {
 				name : 'playtimeticker',
 				timeout : 950,
 				fn : function(self){
-					if (this.playerStatus.duration > 0 
+					if (this.playerStatus.mode == 'play' && this.playerStatus.duration > 0 
 						&& this.playerStatus.playtime >= this.playerStatus.duration-1
 						&& this.playerStatus.playtime <= this.playerStatus.duration + 2)
 						this.getStatus();
@@ -224,6 +228,7 @@ function _init() {
 				current_title: null,
 				title: null,
 				track: null,
+				playlist_tracks: 0,
 				index: null,
 				duration: null,
 				playtime: 0,
@@ -274,7 +279,7 @@ function _init() {
 				this.showBriefly(config.showBriefly);
 	
 			Ext.Ajax.request({
-				url: config.url || '/jsonrpc.js',
+				url: this.getBaseUrl() + (config.url || '/jsonrpc.js'),
 				method: config.method ? config.method : 'POST',
 				params: config.url ? null : Ext.util.JSON.encode({
 					id: 1,
@@ -299,6 +304,14 @@ function _init() {
 			}
 		},
 	
+		togglePause : function(dontUpdate) {
+			if (this.isPaused()) {
+				this.playerControl(['play'], dontUpdate);
+			} else {
+				this.playerControl(['pause'], dontUpdate);
+			}
+		},
+
 		// custom playerRequest which requires a controller update
 		// ussually used in player controls
 		playerControl : function(action, dontUpdate){
@@ -340,7 +353,7 @@ function _init() {
 		getStatus : function(){
 			if (this.player) {
 				this.playerRequest({
-					params: [ "status", "-", 1, "tags:gABbehldiqtyrSuoKLN" ],
+					params: [ "status", "-", 1, "tags:cgABbehldiqtyrSuoKLN" ],
 					failure: this._updateStatus,
 					success: this._updateStatus,
 					scope: this
@@ -359,12 +372,9 @@ function _init() {
 				return;
 
 			response = response.result;
+			
+			var playlistchange = this._needUpdate(response) && Ext.get('playList');
 
-			this.fireEvent('playerstatechange', response);
-	
-			if (this._needUpdate(response) && Ext.get('playList'))
-				this.fireEvent('playlistchange', response);
-	
 			this.playerStatus = {
 				// if power is undefined, set it to on for http clients
 				power:     (response.power == null) || response.power,
@@ -373,16 +383,22 @@ function _init() {
 				current_title: response.current_title,
 				title:     response.playlist_tracks > 0 ? response.playlist_loop[0].title : '',
 				track:     response.playlist_tracks > 0 ? response.playlist_loop[0].url : '',
+				playlist_tracks: response.playlist_tracks,
 				index:     response.playlist_cur_index,
 				duration:  parseInt(response.duration) || 0,
 				canSeek:   response.can_seek ? true : false,
 				playtime:  parseInt(response.time),
 				timestamp: response.playlist_timestamp
 			};
-	
+
 			if ((response.power != null) && !response.power) {
 				this.playerStatus.power = 0;
 			}
+
+			this.fireEvent('playerstatechange', response);
+			if (playlistchange)
+				this.fireEvent('playlistchange', response);
+	
 		},
 	
 		_needUpdate : function(result) {
@@ -459,8 +475,12 @@ function _init() {
 				if ((playerobj.playerid != this.player && encodeURIComponent(playerobj.playerid) != this.player) 
 					|| this.player == -1) {
 					
+					var oldPlayer = this.player != -1 ? {
+						playerid: this.player
+					} : null;
+					
 					this._initPlayerStatus();
-					this.fireEvent('playerselected', playerobj);
+					this.fireEvent('playerselected', playerobj, oldPlayer);
 				}
 			}
 			else {
@@ -475,20 +495,69 @@ function _init() {
 				response = response.result;
 
 			activeplayer = activeplayer || SqueezeJS.getCookie('Squeezebox-player');
-			if (response && response.players_loop) {
-				for (var x=0; x < response.players_loop.length; x++) {
-					if (response.players_loop[x].playerid == activeplayer || encodeURIComponent(response.players_loop[x].playerid) == activeplayer)
-						return response.players_loop[x];
+			return this.parseCurrentPlayerInfo(response, activeplayer);
+		},
+		
+		parseCurrentPlayerInfo: function(result, activeplayer) {
+			if (result && result.players_loop) {
+				var players_loop = result.players_loop;
+				for (var x=0; x < players_loop.length; x++) {
+					if (players_loop[x].playerid == activeplayer || encodeURIComponent(players_loop[x].playerid) == activeplayer)
+						return players_loop[x];
 				}
 			}		
 		},
 
-		getPlayer : function(){
-			if (SqueezeJS.Controller.player == null)
+		getPlayer : function() {
+			if (SqueezeJS.Controller.player == null || SqueezeJS.Controller.player == -1)
 				return;
 			
-			SqueezeJS.Controller.player = SqueezeJS.Controller.player.replace(/%3A/gi, ':');
+			SqueezeJS.Controller.player = String(SqueezeJS.Controller.player).replace(/%3A/gi, ':');
 			return SqueezeJS.Controller.player;
+		},
+
+		isPaused : function() {
+			if (this.player && this.playerStatus.mode == 'pause') {
+				return true;
+			} 
+			return false;
+		},
+
+		isPlaying : function() {
+			if (this.player && this.playerStatus.mode == 'play') {
+				return true;
+			} 
+			return false;
+		},
+
+		isStopped : function() {
+			if (this.player && this.playerStatus.mode == 'stop') {
+				return true;
+			} 
+			return false;
+		},
+
+		hasPlaylistTracks: function() {
+			if (!this.player || !this.playerStatus)
+				return;
+				
+			return parseInt(this.playerStatus.playlist_tracks) > 0 ? true : false;
+		},
+
+		getBaseUrl: function() {
+			return this._server || '';
+		},
+		
+		setBaseUrl: function(server) {
+			if (typeof server == 'object' && server.ip && server.port) {
+				this._server = 'http://' + server.ip + ':' + server.port;
+			}
+			else if (typeof server == 'string') {
+				this._server = server;
+			}
+			else {
+				this._server = '';
+			}
 		}
 	});
 }
@@ -538,9 +607,9 @@ SqueezeJS.SonginfoParser = {
 		},
 		linked : {
 			title : new Ext.Template('<a href="' + webroot +'{link}?player={player}&amp;item={id}" target="browser">{title}</a>'),
-			album : new Ext.Template('<a href="' + webroot + 'browsedb.html?hierarchy=album,track&amp;level=1&amp;album.id={id}&amp;player={player}" target="browser">{album}</a>'),
-			contributor : new Ext.Template('<a href="' + webroot + 'browsedb.html?hierarchy=contributor,album,track&amp;contributor.id={id}&amp;level=1&amp;player={player}" target="browser">{contributor}</a>'),
-			year : new Ext.Template('<a href="' + webroot + 'browsedb.html?hierarchy=year,album,track&amp;level=1&amp;year.id={year}&amp;player={player}" target="browser">{year}</a>'),
+			album : new Ext.Template('<a href="' + webroot + 'clixmlbrowser/clicmd=browselibrary+items&amp;mode=tracks&amp;linktitle={title}&amp;album_id={id}&amp;player={player}/" target="browser">{album}</a>'),
+			contributor : new Ext.Template('<a href="' + webroot + 'clixmlbrowser/clicmd=browselibrary+items&amp;mode=albums&amp;linktitle={title}&amp;artist_id={id}&amp;player={player}/" target="browser">{contributor}</a>'),
+			year : new Ext.Template('<a href="' + webroot + 'clixmlbrowser/clicmd=browselibrary+items&amp;mode=albums&amp;linktitle={title}&amp;year={year}&amp;player={player}/" target="browser">{year}</a>'),
 			coverart : new Ext.Template('<a href="' + webroot + '{link}?player={player}&amp;item={id}" target="browser"><img src="{src}" {width} {height}></a>')
 		}
 	},
@@ -593,6 +662,7 @@ SqueezeJS.SonginfoParser = {
 		return this.tpl[((noLink || id == null) ? 'raw' : 'linked')].album.apply({
 			id: id,
 			album: album,
+			title: encodeURIComponent(SqueezeJS.string("album") + ' (' + album + ')'),
 			player: SqueezeJS.getPlayer()
 		});
 	},
@@ -619,6 +689,7 @@ SqueezeJS.SonginfoParser = {
 							contributorList += this.tpl[((ids[i] && !noLink) ? 'linked' : 'raw')].contributor.apply({ 
 								id: (ids[i] || null),
 								contributor: contributors[i],
+								title: encodeURIComponent(SqueezeJS.string("artist") + ' (' + contributors[i] + ')'),
 								player: SqueezeJS.getPlayer()
 							});
 						}
@@ -638,6 +709,7 @@ SqueezeJS.SonginfoParser = {
 
 		return this.tpl[(noLink || !year ? 'raw' : 'linked')].year.apply({
 			year: year,
+			title: encodeURIComponent(SqueezeJS.string("year") + ' (' + year + ')'),
 			player: SqueezeJS.getPlayer()
 		});
 	},
@@ -686,17 +758,30 @@ SqueezeJS.SonginfoParser = {
 		if (result.playlist_tracks > 0) {
 			if (result.playlist_loop[0].artwork_url) {
 				coverart = result.playlist_loop[0].artwork_url;
+
+				// SqueezeJS.externalImageProxy must be a template accepting url and size values
+				if (coverart && width && SqueezeJS.externalImageProxy && coverart.search(/^http:/) != -1) {
+					coverart = SqueezeJS.externalImageProxy.apply({
+						url: encodeURIComponent(coverart),
+						size: width
+					});
+				}
+
+				// some internal logos come without resizing parameters - add them here if size is defined
+				else if (coverart && width && coverart.search(/^http:/) == -1) {
+					coverart = coverart.replace(/(icon)(\.\w+)$/, "$1_" + width + 'x' + width + "_p$2");
+				}
 			}
 			else {
-				coverart = this.defaultCoverart(result.playlist_loop[0].id, width);
+				coverart = this.defaultCoverart(result.playlist_loop[0].coverid || result.playlist_loop[0].id, width);
 			}
 		}
 
 		return coverart;
 	},
 	
-	defaultCoverart : function(id, width) {
-		return '/music/' + (id || 0) + '/cover' + (width ? '_' + width + 'x' + width + '_p.' : '.') + SqueezeJS.coverFileSuffix;
+	defaultCoverart : function(coverid, width) {
+		return SqueezeJS.Controller.getBaseUrl() + '/music/' + (coverid || 0) + '/cover' + (width ? '_' + width + 'x' + width + '_p.' : '.') + SqueezeJS.coverFileSuffix;
 	}
 };
 
@@ -745,63 +830,113 @@ SqueezeJS.Utils = {
 	toggleFavorite : function(el, url, title) {
 		var el = Ext.get(el);
 		if (el) {
-			SqueezeJS.UI.setProgressCursor(250);
+			if (SqueezeJS.UI)
+				SqueezeJS.UI.setProgressCursor(250);
+				
 			el.getUpdateManager().showLoadIndicator = false;
 			el.load({
 				url: 'plugins/Favorites/favcontrol.html?url=' + url + '&title=' + title + '&player=' + player,
 				method: 'GET'
 			});
 		}
+	},
+	
+	parseURI: function(uri) {
+		var	parsed = uri.match(/^(?:(?![^:@]+:[^:@\/]*@)([^:\/?#.]+):)?(?:\/\/)?((?:(([^:@]*)(?::([^:@]*))?)?@)?([^:\/?#]*)(?::(\d*))?)(((\/(?:[^?#](?![^?#\/]*\.[^?#\/.]+(?:[?#]|$)))*\/?)?([^?#\/]*))(?:\?([^#]*))?(?:#(.*))?)/);
+		var keys   = [
+			"source",
+			"protocol", 
+			"authority", 
+			"userInfo", 
+			"user", 
+			"password", 
+			"host", 
+			"port", 
+			"relative", 
+			"path", 
+			"directory", 
+			"file", 
+			"query", 
+			"anchor"
+		];
+		var parts = {};
+		
+		for (var i = keys.length; i--;) {
+			parts[keys[i]] = parsed[i] || '';
+		}
+
+		parts.queryKey = {};
+
+		parts.query.replace(/(?:^|&)([^&=]*)=?([^&]*)/g, function ($0, $1, $2) {
+			if ($1) parts.queryKey[$1] = $2;
+		});
+
+		return parts;
 	}
 };
 
 // our own cookie manager doesn't prepend 'ys-' to any cookie
-SqueezeJS.CookieManager = new Ext.state.CookieProvider({
-	expires : new Date(new Date().getTime() + 1000*60*60*24*365),
-
-	readCookies : function(){
-		var cookies = {};
-		var c = document.cookie + ";";
-		var re = /\s?(.*?)=(.*?);/g;
-		var matches;
-		while((matches = re.exec(c)) != null){
-			var name = matches[1];
-			var value = matches[2];
-			if(name){
-				cookies[name] = value;
+if (Ext.state.CookieProvider) {
+	SqueezeJS.CookieManager = new Ext.state.CookieProvider({
+		expires : new Date(new Date().getTime() + 1000*60*60*24*365),
+	
+		readCookies : function(){
+			var cookies = {};
+			var c = document.cookie + ";";
+			var re = /\s?(.*?)=(.*?);/g;
+			var matches;
+			while((matches = re.exec(c)) != null){
+				var name = matches[1];
+				var value = matches[2];
+				if(name){
+					cookies[name] = value;
+				}
 			}
-		}
-		return cookies;
-	},
-
-	setCookie : function(name, value){
-		document.cookie = name + "=" + value +
-		((this.expires == null) ? "" : ("; expires=" + this.expires.toGMTString())) +
-		((this.path == null) ? "" : ("; path=" + this.path)) +
-		((this.domain == null) ? "" : ("; domain=" + this.domain)) +
-		((this.secure == true) ? "; secure" : "");
-	},
-
-	clearCookie : function(name){
-		document.cookie = name + "=null; expires=Thu, 01-Jan-70 00:00:01 GMT" +
+			return cookies;
+		},
+	
+		setCookie : function(name, value){
+			document.cookie = name + "=" + value +
+			((this.expires == null) ? "" : ("; expires=" + this.expires.toGMTString())) +
 			((this.path == null) ? "" : ("; path=" + this.path)) +
 			((this.domain == null) ? "" : ("; domain=" + this.domain)) +
 			((this.secure == true) ? "; secure" : "");
+		},
+	
+		clearCookie : function(name){
+			document.cookie = name + "=null; expires=Thu, 01-Jan-70 00:00:01 GMT" +
+				((this.path == null) ? "" : ("; path=" + this.path)) +
+				((this.domain == null) ? "" : ("; domain=" + this.domain)) +
+				((this.secure == true) ? "; secure" : "");
+		}
+	});
+}
+
+SqueezeJS.cookieExpiry = new Date(new Date().getTime() + 1000*60*60*24*365);
+
+SqueezeJS.setCookie = function(name, value, expiry) {
+	Ext.util.Cookies.set(name, value, expiry != null ? expiry : SqueezeJS.cookieExpiry);
+};
+
+SqueezeJS.getCookie = function(name) {
+	return Ext.util.Cookies.get(name);
+};
+
+SqueezeJS.clearCookie = function(name) {
+	this.setCookie(name, null);
+	return Ext.util.Cookies.clear(name);
+};
+
+SqueezeJS.cookiesEnabled = function(){
+	Ext.util.Cookies.set('_SqueezeJS-cookietest', true);
+	
+	if (Ext.util.Cookies.get('_SqueezeJS-cookietest')) {
+		Ext.util.Cookies.clear('_SqueezeJS-cookietest');
+		return true;
 	}
-});
-
-SqueezeJS.setCookie = function(name, value) {
-	SqueezeJS.CookieManager.set(name, value);
+	
+	return false;
 };
-
-SqueezeJS.getCookie = function(name, failover) {
-	return SqueezeJS.CookieManager.get(name, failover);
-};
-
-SqueezeJS.clearCookie = function(name, failover) {
-	return SqueezeJS.CookieManager.clear(name);
-};
-
 
 
 // XXX some legacy stuff - should eventually go away
@@ -816,7 +951,10 @@ function ajaxUpdate(url, params, callback) {
 		if (um)
 			um.loadScripts = true;
 
-		el.load(url, params + '&ajaxUpdate=1&player=' + player, callback || SqueezeJS.UI.ScrollPanel.init);
+		if (!callback && SqueezeJS.UI)
+			callback = SqueezeJS.UI.ScrollPanel.init;
+			
+		el.load(url, params + '&ajaxUpdate=1&player=' + player, callback);
 	}
 }
 
@@ -859,7 +997,8 @@ function resize(src, width) {
 		width = Math.min(150, parseInt(width));
 	}
 
-	if (src.width > width || !src.width)
+	if (src.height > width)
+		src.height = width;
+	else if (src.width > width || !src.width)
 		src.width = width;
-
 }

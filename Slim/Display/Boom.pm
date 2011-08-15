@@ -5,7 +5,7 @@ package Slim::Display::Boom;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Boom.pm 31659 2010-12-20 20:13:36Z agrundman $
+# $Id: Boom.pm 31672 2010-12-22 20:37:48Z agrundman $
 
 =head1 NAME
 

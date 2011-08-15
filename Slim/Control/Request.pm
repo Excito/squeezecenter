@@ -52,6 +52,7 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
  N    rescan          <|playlists|?>
  N    rescanprogress  <tagged parameters>
  N    wipecache
+ N    pragma          <pragma>
  
  N    albums          <startindex>                <numitems>                  <tagged parameters>
  N    artists         <startindex>                <numitems>                  <tagged parameters>
@@ -564,7 +565,7 @@ sub init {
 	addDispatch(['playlist',       'jump',           '_index',     '_fadein', '_noplay', '_seekdata'], [1, 0, 0, \&Slim::Control::Commands::playlistJumpCommand]);
 	addDispatch(['playlist',       'load',           '_item'],                                         [1, 0, 0, \&Slim::Control::Commands::playlistXitemCommand]);
 	addDispatch(['playlist',       'loadalbum',      '_genre',     '_artist',     '_album', '_title'], [1, 0, 0, \&Slim::Control::Commands::playlistXalbumCommand]);
-	addDispatch(['playlist',       'loadtracks',     '_what',      '_listref'],                        [1, 0, 0, \&Slim::Control::Commands::playlistXtracksCommand]);
+	addDispatch(['playlist',       'loadtracks',     '_what',      '_listref',    '_fadein', '_index'],[1, 0, 0, \&Slim::Control::Commands::playlistXtracksCommand]);
 	addDispatch(['playlist',       'modified',       '?'],                                             [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
 	addDispatch(['playlist',       'move',           '_fromindex', '_toindex'],                        [1, 0, 0, \&Slim::Control::Commands::playlistMoveCommand]);
 	addDispatch(['playlist',       'name',           '?'],                                             [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
@@ -585,7 +586,6 @@ sub init {
 	addDispatch(['playlist',       'tracks',         '?'],                                             [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
 	addDispatch(['playlist',       'url',            '?'],                                             [1, 1, 0, \&Slim::Control::Queries::playlistXQuery]);
 	addDispatch(['playlist',       'zap',            '_index'],                                        [1, 0, 0, \&Slim::Control::Commands::playlistZapCommand]);
-	addDispatch(['playlistmode',    'set',           '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::playlistModeCommand]);
 	addDispatch(['playlistcontrol'],                                                                   [1, 0, 1, \&Slim::Control::Commands::playlistcontrolCommand]);
 	addDispatch(['playlists',      '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::playlistsQuery]);
 	addDispatch(['playlists',      'edit'],                                                            [0, 0, 1, \&Slim::Control::Commands::playlistsEditCommand]);
@@ -595,6 +595,7 @@ sub init {
 	addDispatch(['playlists',      'tracks',         '_index',     '_quantity'],                       [0, 1, 1, \&Slim::Control::Queries::playlistsTracksQuery]);
 	addDispatch(['power',          '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::powerQuery]);
 	addDispatch(['power',          '_newvalue',      '_noplay'],                                       [1, 0, 1, \&Slim::Control::Commands::powerCommand]);
+	addDispatch(['pragma',         '_pragma'],                                                         [0, 0, 0, \&Slim::Control::Commands::pragmaCommand]);
 	addDispatch(['pref',           '_prefname',      '?'],                                             [0, 1, 0, \&Slim::Control::Queries::prefQuery]);
 	addDispatch(['pref',           'validate',       '_prefname',  '_newvalue'],                       [0, 1, 0, \&Slim::Control::Queries::prefValidateQuery]);
 	addDispatch(['pref',           '_prefname',      '_newvalue'],                                     [0, 0, 1, \&Slim::Control::Commands::prefCommand]);
@@ -1584,38 +1585,23 @@ sub addResultLoop {
 	my $key = shift;
 	my $val = shift;
 
-	if ($loop =~ /^@(.*)/) {
-		$loop = $1 . "_loop";
-		$log->warn("Loop starting with \@: $1 -- deprecated; please use $1_loop");
-	}
-	if ($loop !~ /.*_loop$/) {
-		$loop = $loop . '_loop';
-	}
+	my $array = $self->{_results}->{$loop} ||= [];
 	
-	if (!defined ${$self->{'_results'}}{$loop}) {
-		${$self->{'_results'}}{$loop} = [];
-	}
-	
-	if (!defined ${$self->{'_results'}}{$loop}->[$loopidx]) {
+	if ( !defined $array->[$loopidx] ) {
 		my %paramHash;
-		tie %paramHash, 'Tie::IxHash' if $self->{'_useixhash'};
+		tie %paramHash, 'Tie::IxHash' if $self->{_useixhash};
 		
-		${$self->{'_results'}}{$loop}->[$loopidx] = \%paramHash;
+		$array->[$loopidx] = \%paramHash;
 	}
 	
-	${${$self->{'_results'}}{$loop}->[$loopidx]}{$key} = $val;
+	$array->[$loopidx]->{$key} = $val;
 }
 
 # same as addResultLoop but checks first the value is defined.
+# optimized for speed
 sub addResultLoopIfValueDefined {
-	my $self = shift;
-	my $loop = shift;
-	my $loopidx = shift;
-	my $key = shift;
-	my $val = shift;
-
-	if (defined $val) {
-		$self->addResultLoop($loop, $loopidx, $key, $val);
+	if ( defined $_[4] ) {
+		goto &addResultLoop;
 	}
 }
 
@@ -1624,14 +1610,6 @@ sub setResultLoopHash {
 	my $loop = shift;
 	my $loopidx = shift;
 	my $hashRef = shift;
-	
-	if ($loop =~ /^@(.*)/) {
-		$loop = $1 . "_loop";
-		$log->warn("Loop starting with \@: $1 -- deprecated; please use $1_loop");
-	}
-	if ($loop !~ /.*_loop$/) {
-		$loop = $loop . '_loop';
-	}
 	
 	if (!defined ${$self->{'_results'}}{$loop}) {
 		${$self->{'_results'}}{$loop} = [];
@@ -1645,14 +1623,6 @@ sub sliceResultLoop {
 	my $loop     = shift;
 	my $start    = shift;
 	my $quantity = shift || 0;
-	
-	if ($loop =~ /^@(.*)/) {
-		$loop = $1 . "_loop";
-		$log->warn("Loop starting with \@: $1 -- deprecated; please use $1_loop");
-	}
-	if ($loop !~ /.*_loop$/) {
-		$loop = $loop . '_loop';
-	}
 	
 	if (defined ${$self->{'_results'}}{$loop}) {
 		
@@ -1689,14 +1659,6 @@ sub sortResultLoop {
 	my $self     = shift;
 	my $loop     = shift;
 	my $field    = shift;
-	
-	if ($loop =~ /^@(.*)/) {
-		$loop = $1 . "_loop";
-		$log->warn("Loop starting with \@: $1 -- deprecated; please use $1_loop");
-	}
-	if ($loop !~ /.*_loop$/) {
-		$loop = $loop . '_loop';
-	}
 	
 	if (defined ${$self->{'_results'}}{$loop}) {
 		my @data;
@@ -1738,14 +1700,6 @@ sub getResultLoopCount {
 	my $self = shift;
 	my $loop = shift;
 	
-	if ($loop =~ /^@(.*)/) {
-		$loop = $1 . "_loop";
-		$log->warn("Loop starting with \@: $1 -- deprecated; please use $1_loop");
-	}
-	if ($loop !~ /.*_loop$/) {
-		$loop = $loop . '_loop';
-	}
-	
 	if (defined ${$self->{'_results'}}{$loop}) {
 		return scalar(@{${$self->{'_results'}}{$loop}});
 	}
@@ -1757,14 +1711,6 @@ sub getResultLoop {
 	my $loopidx = shift;
 	my $key = shift || return undef;
 
-	if ($loop =~ /^@(.*)/) {
-		$loop = $1 . "_loop";
-		$log->warn("Loop starting with \@: $1 -- deprecated; please use $1_loop");
-	}
-	if ($loop !~ /.*_loop$/) {
-		$loop = $loop . '_loop';
-	}
-	
 	if (defined ${$self->{'_results'}}{$loop} && 
 		defined ${$self->{'_results'}}{$loop}->[$loopidx]) {
 		
@@ -1865,6 +1811,7 @@ sub normalize {
 	my $end   = 0;
 	my $valid = 0;
 	
+	$numofitems = $count if !defined $numofitems && defined $from;
 	if ($numofitems && $count) {
 
 		my $lastidx = $count - 1;
@@ -1931,8 +1878,9 @@ sub execute {
 		eval { &{$funcPtr}($self) };
 
 		if ($@) {
+			my $error = "$@";
 			my $funcName = Slim::Utils::PerlRunTime::realNameForCodeRef($funcPtr);
-			logError("While trying to run function coderef [$funcName]: [$@]");
+			logError("While trying to run function coderef [$funcName]: [$error]");
 			$self->setStatusBadDispatch();
 			$self->dump('Request');
 			
@@ -2276,18 +2224,7 @@ Handle encoding for external commands.
 sub fixEncoding {
 	my $self = shift || return;
 	
-	my $encoding = ${$self->{'_params'}}{'charset'} || return;
-
-	while (my ($key, $val) = each %{$self->{'_params'}}) {
-
-		if (!ref($val)) {
-
-			# wrap decode in eval, as an incorrect encoding type could hang CLI
-			eval { ${$self->{'_params'}}{$key} = Slim::Utils::Unicode::decode($encoding, $val) };
-			
-			$@ && $log->is_warn && $log->warn($@);
-		}
-	}
+	map {utf8::decode($_) unless ref $_ || utf8::is_utf8($_)} values %{$self->{'_params'}};
 }
 
 ################################################################################
@@ -2321,7 +2258,6 @@ sub executeLegacy {
 # returns the request as an array
 sub renderAsArray {
 	my $self = shift;
-	my $encoding = shift;
 
 	if (!$self->{'_useixhash'}) {
 		logBacktrace("request should set useIxHashes in Slim::Control::Request->new()");
@@ -2344,8 +2280,6 @@ sub renderAsArray {
 		# no output
 		next if ($key =~ /^__/);
 
-		$val = Slim::Utils::Unicode::from_to($val, Slim::Utils::Unicode::encodingFromString($val), $encoding) if $encoding;
-
 		if ($key =~ /^_/) {
 			push @returnArray, $val;
 		} else {
@@ -2367,8 +2301,6 @@ sub renderAsArray {
 
 				while (my ($key2, $val2) = each %{$hash}) {
 
-					$val2 = Slim::Utils::Unicode::from_to($val2, Slim::Utils::Unicode::encodingFromString($val2), $encoding) if $encoding;
-
 					if ($key2 =~ /^__/) {
 						# no output
 					} elsif ($key2 =~ /^_/) {
@@ -2384,10 +2316,6 @@ sub renderAsArray {
 		# array unrolled
 		if (ref $val eq 'ARRAY') {
 			$val = join (',', @{$val})
-		}
-		
-		if ($encoding && ref $val eq 'SCALAR') {
-			$val = Slim::Utils::Unicode::from_to($val, Slim::Utils::Unicode::encodingFromString($val), $encoding);
 		}
 		
 		if ($key =~ /^_/) {
@@ -2460,7 +2388,7 @@ sub dump {
 				if (ref($hash) eq 'HASH') {
 					
 					while (my ($key2, $val2) = each %{$hash}) {
-						main::INFOLOG && $log->info("   Result:   $i. [$key2] = [$val2]");
+						main::INFOLOG && $log->info("   Result:   $i. [$key2] = [", (ref $val2 ? Data::Dump::dump($val2) : $val2), "]");
 					}
 						
 				}
@@ -2473,7 +2401,7 @@ sub dump {
 			}
 
 		} else {
-			main::INFOLOG && $log->info("   Result: [$key] = [$val]");
+			main::INFOLOG && $log->info("   Result: [$key] = [", (ref $val ? Data::Dump::dump($val) : $val), "]");
 		}
  	}
 }

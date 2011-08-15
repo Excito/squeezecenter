@@ -1,6 +1,6 @@
 package Slim::Display::Display;
 
-# $Id: Display.pm 31910 2011-02-15 19:51:07Z agrundman $
+# $Id: Display.pm 31913 2011-02-15 19:52:30Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

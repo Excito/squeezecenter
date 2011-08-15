@@ -11,7 +11,6 @@ package Slim::Player::Squeezebox;
 # GNU General Public License for more details.
 
 use strict;
-use warnings;
 
 use base qw(Slim::Player::Player);
 
@@ -299,6 +298,7 @@ sub needsUpgrade {
 	my $to;
 	my $default;
 
+	local $_;
 	while (<$versionFile>) {
 
 		chomp;
@@ -563,11 +563,14 @@ sub opened {
 #	u8_t transition_type;	// [1]	'0' = none, '1' = crossfade, '2' = fade in, '3' = fade out, '4' fade in & fade out
 #	u8_t flags;	// [1]	0x80 - loop infinitely
 #               //      0x40 - stream without restarting decoder
-#               //  0x20 - Rtmp (SqueezePlay only)
-#               //  0x10 - SqueezePlay direct protocol handler - pass direct to SqueezePlay
-#				//	0x01 - polarity inversion left
-#				//	0x02 - polarity inversion right
-#	u8_t output_threshold;	// [1]	Amount of output buffer data before playback starts in tenths of second.
+#               //      0x20 - Rtmp (SqueezePlay only)
+#               //      0x10 - SqueezePlay direct protocol handler - pass direct to SqueezePlay
+#               //      0x08 - output only right channel as mono
+#               //      0x04 - output only left channel as mono
+#               //      0x02 - polarity inversion right
+#               //      0x01 - polarity inversion left
+#				
+#	u8_t output_threshold`;	// [1]	Amount of output buffer data before playback starts in tenths of second.
 #	u8_t reserved;		// [1]	reserved
 #	u32_t replay_gain;	// [4]	replay gain in 16.16 fixed point, 0 means none
 #	u16_t server_port;	// [2]	server's port
@@ -702,6 +705,11 @@ sub stream_s {
 		$pcmendian       = '?';
 		$outputThreshold = 10;
 		
+		# Increase outputThreshold for WMA Lossless as it has a higher startup cost
+		if ( $format eq 'wmal' ) {
+			$outputThreshold = 50;
+		}
+		
 	} elsif ($format eq 'ogg') {
 
 		$formatbyte      = 'o';
@@ -751,6 +759,15 @@ sub stream_s {
 		$pcmendian       = '?';
 		$pcmchannels     = '?';
 		$outputThreshold = 1;
+
+	} elsif ($format eq 'test') {
+
+		$formatbyte      = 'n';
+		$pcmsamplesize   = '?';
+		$pcmsamplerate   = '?';
+		$pcmendian       = '?';
+		$pcmchannels     = '?';
+		$outputThreshold = 0;
 		
 	} else {
 
@@ -811,12 +828,20 @@ sub stream_s {
 			$server = $pserver;
 			$port   = $pport;
 		}
-				
-		my ($name, $liases, $addrtype, $length, @addrs) = gethostbyname($server);
-		if ($port && $addrs[0]) {
-			$server_port = $port;
-			$server_ip = unpack('N',$addrs[0]);
+		
+		# Get IP from async DNS cache if available
+		if ( my $addr = Slim::Networking::Async::DNS->cached($server) ) {
+			$server_ip = Slim::Utils::Network::intip($addr);
 		}
+		else {
+			my $tv = AnyEvent->time;
+			my (undef, undef, undef, undef, @addrs) = gethostbyname($server);
+			$log->warn( sprintf "Made synchronous DNS request for $server (%.2f ms)", AnyEvent->time - $tv );
+			if ( $addrs[0] ) {
+				$server_ip = unpack 'N', $addrs[0];
+			}
+		}
+		$server_port = $port;
 
 		$request_string = $handler->requestString($client, $url, undef, $params->{'seekdata'});  
 		$autostart += 2; # will be 2 for direct streaming with no autostart, or 3 for direct with autostart
@@ -874,17 +899,11 @@ sub stream_s {
 		return 0;
 	}
 
-	if ( main::INFOLOG && $log->is_info ) {
-		$log->info(sprintf(
-			"Starting decoder with format: %s autostart: %s threshold: %s samplesize: %s samplerate: %s endian: %s channels: %s",
-			$formatbyte, $autostart, $bufferThreshold, $pcmsamplesize, $pcmsamplerate, $pcmendian, $pcmchannels,
-		));
-	}
-
 	my $flags = 0;
 	$flags |= 0x40 if $params->{reconnect};
 	$flags |= 0x80 if $params->{loop};
 	$flags |= 0x03 & ($prefs->client($client)->get('polarityInversion') || 0);
+	$flags |= (($prefs->client($client)->get('outputChannels') || 0) & 0x03) << 2;
 
 	if ($handler->can('slimprotoFlags')) {
 		$flags |= $handler->slimprotoFlags($client, $url, $isDirect);
@@ -960,6 +979,13 @@ sub stream_s {
 	
 	if ($transitionDuration > $client->maxTransitionDuration()) {
 		$transitionDuration = $client->maxTransitionDuration();
+	}
+	
+	if ( main::INFOLOG && $log->is_info ) {
+		$log->info(sprintf(
+			"Starting decoder with format: %s flags: 0x%x autostart: %s buffer threshold: %s output threshold: %s samplesize: %s samplerate: %s endian: %s channels: %s",
+			$formatbyte, $flags, $autostart, $bufferThreshold, $outputThreshold, $pcmsamplesize, $pcmsamplerate, $pcmendian, $pcmchannels,
+		));
 	}
 	
 	my $frame = pack 'aaaaaaaCCCaCCCNnN', (

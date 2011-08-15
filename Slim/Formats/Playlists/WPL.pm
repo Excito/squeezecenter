@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists::WPL;
 
-# $Id: WPL.pm 28546 2009-09-17 07:45:15Z michael $
+# $Id: WPL.pm 31564 2010-12-01 09:12:52Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 #
@@ -61,7 +61,7 @@ sub read {
 				$entry = Win32::GetANSIPathName($entry);	
 			}
 			else {
-				$entry = Slim::Utils::Unicode::utf8encode_locale($entry);	
+				$entry = Slim::Utils::Unicode::encode_locale($entry);	
 			}
 
 			$entry = Slim::Utils::Misc::fixPath($entry, $baseDir);

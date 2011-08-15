@@ -5,7 +5,7 @@ package Slim::Display::Graphics;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Graphics.pm 31589 2010-12-05 18:50:51Z adrian $
+# $Id: Graphics.pm 31593 2010-12-06 16:03:38Z agrundman $
 
 =head1 NAME
 

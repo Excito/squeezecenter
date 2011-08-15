@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Performance;
 
-# $Id: Performance.pm 31367 2010-09-21 14:48:19Z agrundman $
+# $Id: Performance.pm 32239 2011-04-07 14:26:58Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -23,11 +23,27 @@ sub page {
 }
 
 sub prefs {
- 	return ($prefs, qw(dbhighmem disableStatistics serverPriority scannerPriority resampleArtwork precacheArtwork maxPlaylistLength) );
+	my @prefs = ( $prefs, qw(dbhighmem disableStatistics serverPriority scannerPriority 
+ 				precacheArtwork maxPlaylistLength) );
+ 	push @prefs, qw(autorescan autorescan_stat_interval) unless main::ISWINDOWS;
+ 	return @prefs;
 }
 
 sub handler {
 	my ($class, $client, $paramRef, $pageSetup) = @_;
+		
+	if ( $paramRef->{'saveSettings'} ) {
+		my $curAuto = $prefs->get('autorescan');
+		if ( $curAuto != $paramRef->{pref_autorescan} ) {
+			require Slim::Utils::AutoRescan;
+			if ( $paramRef->{pref_autorescan} == 1 ) {
+				Slim::Utils::AutoRescan->init;
+			}
+			else {
+				Slim::Utils::AutoRescan->shutdown;
+			}
+		}
+	}
 	
 	# Restart message if dbhighmem is changed
 	my $curmem = $prefs->get('dbhighmem') || 0;

@@ -65,20 +65,12 @@ Browse = {
 				}
 			}
 
-			new Ext.SplitButton({
+			new SqueezeJS.UI.SplitButton({
 				renderTo: 'viewSelect',
 				icon: webroot + 'html/images/albumlist' + viewMode  + '.gif',
 				cls: 'x-btn-icon',
 				menu: menu,
-				handler: function(ev){
-					if(this.menu && !this.menu.isVisible()){
-						this.menu.show(this.el, this.menuAlign);
-					}
-					this.fireEvent('arrowclick', this, ev);
-				},
-				tooltip: SqueezeJS.string('display_options'),
-				arrowTooltip: SqueezeJS.string('display_options'),
-				tooltipType: 'title'
+				arrowTooltip: SqueezeJS.string('display_options')
 			});
 		}
 	},
@@ -126,12 +118,14 @@ Browse = {
 		location.search = params;
 	},
 
-	initPlaylistEditing: function(id){
+	initPlaylistEditing: function(id, start){
 		new SqueezeJS.UI.Sortable({
 			el: 'browsedbList',
 			selector: '#browsedbList div.draggableSong',
 			highlighter: Highlighter,
 			onDropCmd: function(sourcePos, targetPos) {
+				sourcePos = sourcePos + start;
+				targetPos = targetPos + start;
 				SqueezeJS.Controller.request({
 					params: [ '', [
 						'playlists',
@@ -166,6 +160,10 @@ Browse.XMLBrowser = {
 		this._playAddLink('addall', query, index, sess);
 	},
 	
+	insertLink: function(query, index, sess) {
+		this._playAddLink('insert', query, index, sess);
+	},
+	
 	_playAddLink: function(action, query, index, sess, showBriefly) {
 		this._doRequest(this.template.apply({
 				action: action,
@@ -174,7 +172,7 @@ Browse.XMLBrowser = {
 				index: index,
 				sess: sess
 			}), 
-			false,
+			true,
 			showBriefly
 		);
 	},

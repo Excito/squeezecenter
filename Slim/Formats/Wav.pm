@@ -1,6 +1,6 @@
 package Slim::Formats::Wav;
 
-# $Id: Wav.pm 29014 2009-10-26 20:19:20Z andy $
+# $Id: Wav.pm 32360 2011-04-26 21:26:05Z adrian $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -62,7 +62,6 @@ sub getInitialAudioBlock {
 	my ($class, $fh, $track) = @_;
 	
 	# bug 10026: do not provide header when streaming as PCM
-	print(${*$fh}{'streamFormat'}, "\n");
 	if (${*$fh}{'streamFormat'} eq 'pcm') {
 		return '';
 	}

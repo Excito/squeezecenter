@@ -1,6 +1,6 @@
 package Slim::Schema::Album;
 
-# $Id: Album.pm 28539 2009-09-16 13:02:39Z michael $
+# $Id: Album.pm 32504 2011-06-07 12:16:25Z agrundman $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -44,7 +44,7 @@ my $log = logger('database.info');
 	$class->has_many('contributorAlbums' => 'Slim::Schema::ContributorAlbum' => 'album');
 
 	if ($] > 5.007) {
-		$class->utf8_columns(qw/title titlesort titlesearch/);
+		$class->utf8_columns(qw/title titlesort/);
 	}
 
 	$class->resultset_class('Slim::Schema::ResultSet::Album');
@@ -56,7 +56,7 @@ my $log = logger('database.info');
 sub url {
 	my $self = shift;
 
-	return sprintf('db:album.titlesearch=%s', URI::Escape::uri_escape_utf8($self->titlesearch));
+	return sprintf('db:album.title=%s', URI::Escape::uri_escape_utf8($self->title));
 }
 
 sub name { 
@@ -250,18 +250,53 @@ sub contributorid {
 	return $self->get_column('contributor');
 }
 
-# Rescan this album, this simply means to make sure at least 1 track
+sub findhash {
+	my ( $class, $id ) = @_;
+	
+	my $sth = Slim::Schema->dbh->prepare_cached( qq{
+		SELECT * FROM albums WHERE id = ?
+	} );
+	
+	$sth->execute($id);
+	my $hash = $sth->fetchrow_hashref;
+	$sth->finish;
+	
+	return $hash || {};
+}
+
+# Rescan list of albums, this simply means to make sure at least 1 track
 # from this album still exists in the database.  If not, delete the album.
-# XXX: should also look for changes to things like album gain.
-# XXX native DBI
 sub rescan {
+	my ( $class, @ids ) = @_;
+	
+	my $slog = logger('scan.scanner');
+	
+	my $dbh = Slim::Schema->dbh;
+	
+	for my $id ( @ids ) {	
+		my $sth = $dbh->prepare_cached( qq{
+			SELECT COUNT(*) FROM tracks WHERE album = ?
+		} );
+		$sth->execute($id);
+		my ($count) = $sth->fetchrow_array;
+		$sth->finish;
+	
+		if ( !$count ) {
+			main::DEBUGLOG && $slog->is_debug && $slog->debug("Removing unused album: $id");	
+			$dbh->do( "DELETE FROM albums WHERE id = ?", undef, $id );
+		}
+	}
+}
+
+sub duration {
 	my $self = shift;
 	
-	my $count = Slim::Schema->rs('Track')->search( album => $self->id )->count;
-	
-	if ( !$count ) {
-		$self->delete;
+	my $secs = 0;
+	foreach ($self->tracks) {
+		return if !defined $_->secs;
+		$secs += $_->secs;
 	}
+	return sprintf('%s:%02s', int($secs / 60), $secs % 60);
 }
 
 1;

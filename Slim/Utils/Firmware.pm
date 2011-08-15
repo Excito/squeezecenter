@@ -5,7 +5,7 @@ package Slim::Utils::Firmware;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Firmware.pm 31741 2011-01-13 21:04:15Z agrundman $
+# $Id: Firmware.pm 31744 2011-01-13 21:05:40Z agrundman $
 
 =head1 NAME
 
@@ -33,7 +33,6 @@ use Digest::SHA1;
 use File::Basename;
 use File::Slurp qw(read_file);
 use File::Spec::Functions qw(:ALL);
-use LWP::UserAgent;
 
 use Slim::Networking::SqueezeNetwork;
 use Slim::Networking::SimpleAsyncHTTP;
@@ -107,7 +106,7 @@ sub init_firmware_download {
 	my $model = shift;
 
 	return if $model eq 'squeezeplay'; # there is no firmware for the desktop version of squeezeplay!
-
+	
 	my $version_file   = catdir( $updatesDir, "$model.version" );
 
 	my $custom_version = catdir( $updatesDir, "custom.$model.version" );
@@ -162,31 +161,48 @@ sub init_version_done {
 	# sdi@padbuild #24 Sat Sep 8 01:26:46 PDT 2007
 	my ($ver, $rev) = $version =~ m/^([^ ]+)\sr(\d+)/;
 
-	my $fw_file = catdir( $updatesDir, "${model}_${ver}_r${rev}.bin" );
+	# on SqueezeOS we don't download firmware files
+	# we'll let the player download them from squeezenetwork directly
+	if ( Slim::Utils::OSDetect->getOS()->directFirmwareDownload() ) {
 
-	if ( !-e $fw_file ) {		
-		main::INFOLOG && $log->info("Downloading $model firmware to: $fw_file");
-	
-		downloadAsync( $fw_file, {cb => \&init_fw_done, pt => [$fw_file, $model]} );
-	}
-	else {
-		main::INFOLOG && $log->info("$model firmware is up to date: $fw_file");
 		$firmwares->{$model} = {
 			version  => $ver,
 			revision => $rev,
-			file     => $fw_file,
+			file     => 1		# dummy value or upgrade won't be published
 		};
 
 		Slim::Control::Request->new(undef, ['fwdownloaded', $model])->notify('firmwareupgrade');
+	}
+	
+	else {
 		
-		Slim::Web::Pages->addRawDownload("^firmware/${model}.*\.bin", $fw_file, 'binary');
+		my $fw_file = catdir( $updatesDir, "${model}_${ver}_r${rev}.bin" );
+
+		if ( !-e $fw_file ) {		
+			main::INFOLOG && $log->info("Downloading $model firmware to: $fw_file");
+		
+			downloadAsync( $fw_file, {cb => \&init_fw_done, pt => [$fw_file, $model]} );
+		}
+		else {
+			main::INFOLOG && $log->info("$model firmware is up to date: $fw_file");
+			$firmwares->{$model} = {
+				version  => $ver,
+				revision => $rev,
+				file     => $fw_file,
+			};
+	
+			Slim::Control::Request->new(undef, ['fwdownloaded', $model])->notify('firmwareupgrade');
+			
+			Slim::Web::Pages->addRawDownload("^firmware/${model}.*\.bin", $fw_file, 'binary');
+		}
+
 	}
 	
 	# Check again for an updated $model.version in 12 hours
-	main::DEBUGLOG && $log->debug("Scheduling next $model.version check in 12 hours");
+	main::DEBUGLOG && $log->debug("Scheduling next $model.version check in " . ($prefs->get('checkVersionInterval') / 3600) . " hours");
 	Slim::Utils::Timers::setTimer(
 		undef,
-		time() + 43200,
+		time() + $prefs->get('checkVersionInterval'),
 		sub {
 			init_firmware_download($model);
 		},
@@ -275,9 +291,17 @@ sub url {
 		# don't trigger download more than once
 		$firmwares->{$model} = {};
 		init_firmware_download($model);
-		return;
+		return unless ($firmwares->{$model}->{file});	# Will be available immediately if custom f/w 
 	}
-	
+
+	# when running on SqueezeOS, return the direct link from SqueezeNetwork
+	if ( Slim::Utils::OSDetect->getOS()->directFirmwareDownload() ) {
+		return BASE() . '/' . $::VERSION . '/' . $model
+			. '_' . $firmwares->{$model}->{version} 
+			. '_r' . $firmwares->{$model}->{revision} 
+			. '.bin';
+	}
+
 	return unless $firmwares->{$model}->{file};
 	
 	return 'http://'
@@ -337,6 +361,7 @@ $file must be an absolute path.
 sub download {
 	my ( $url, $file ) = @_;
 	
+	require LWP::UserAgent;
 	my $ua = LWP::UserAgent->new(
 		env_proxy => 1,
 	);

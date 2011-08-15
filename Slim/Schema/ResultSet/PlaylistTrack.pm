@@ -1,15 +1,8 @@
 package Slim::Schema::ResultSet::PlaylistTrack;
 
-# $Id: PlaylistTrack.pm 7655 2006-05-25 20:03:40Z dsully $
+# $Id: PlaylistTrack.pm 32504 2011-06-07 12:16:25Z agrundman $
 
 use strict;
 use base qw(Slim::Schema::ResultSet::Track);
-
-sub alphaPageBar   { 0 }
-sub ignoreArticles { 0 }
-
-sub browseBodyTemplate {
-	return 'browse_playlist.html';
-}
 
 1;

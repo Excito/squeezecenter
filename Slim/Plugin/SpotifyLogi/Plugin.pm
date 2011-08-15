@@ -1,6 +1,6 @@
 package Slim::Plugin::SpotifyLogi::Plugin;
 
-# $Id: Plugin.pm 31713 2011-01-10 12:47:42Z agrundman $
+# $Id: Plugin.pm 31715 2011-01-10 13:14:29Z agrundman $
 
 use strict;
 use base 'Slim::Plugin::OPMLBased';

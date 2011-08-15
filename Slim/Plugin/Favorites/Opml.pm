@@ -2,7 +2,7 @@ package Slim::Plugin::Favorites::Opml;
 
 # Base class for editing opml files - front end to XMLin and XMLout
 
-# $Id: Opml.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Opml.pm 32528 2011-06-18 11:56:43Z adrian $
 
 use strict;
 
@@ -99,9 +99,6 @@ sub save {
 	my $cache = Slim::Utils::Cache->new();
 	$cache->remove( $class->fileurl . '_parsedXML' );
 
-	# remove cached hash for xmlbrowser
-	$class->{'xmlhash'} = undef;
-
     my $dir = $filename ? dirname($filename) : undef;
 
 	if (-w $dir) {
@@ -161,9 +158,9 @@ sub filename {
 
 		$name = Slim::Utils::Misc::pathFromFileURL($name);
 
-	} elsif ( !Slim::Music::Info::isURL($name) && dirname($name) eq '.' && $prefsServer->get("playlistdir") ) {
+	} elsif ( !Slim::Music::Info::isURL($name) && dirname($name) eq '.' && Slim::Utils::Misc::getPlaylistDir() ) {
 
-		$name = catdir($prefsServer->get("playlistdir"), $name);
+		$name = catdir(Slim::Utils::Misc::getPlaylistDir(), $name);
 	}
 
 	return $class->{'filename'} = $name;
@@ -244,13 +241,8 @@ sub entry {
 sub xmlbrowser {
 	my $class = shift;
 
-	# xmlbrowser inserts subfeeds into this hash so these need to be invalidated after the cache time
-	if ($class->{'xmlhash'} && time() - $class->{'xmlhashcreated'} < $Slim::Formats::XML::XML_CACHE_TIME) {
-
-		return $class->{'xmlhash'};
-	}
-
-	$class->{'xmlhash'} = Slim::Formats::XML::parseOPML ( {
+	# Always create a new hash for xmlbrowser as it now modifies the hash
+	return Slim::Formats::XML::parseOPML ( {
 		'head' => {
 			'title' => $class->title,
 		},
@@ -258,13 +250,6 @@ sub xmlbrowser {
 			'outline' => Storable::dclone($class->toplevel),
 		}
 	} );
-
-	# set url to NONE to avoid xmlbrowser re-caching the hash needlessly
-	$class->{'xmlhash'}->{'url'} = 'NONE';
-
-	$class->{'xmlhashcreated'} = time();
-
-	return $class->{'xmlhash'};
 }
 
 1;

@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists::CUE;
 
-# $Id: CUE.pm 30626 2010-04-15 19:33:33Z agrundman $
+# $Id: CUE.pm 30854 2010-06-08 21:36:33Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 #
@@ -13,14 +13,17 @@ use base qw(Slim::Formats::Playlists::Base);
 
 use Audio::Scan;
 use File::Slurp;
+use File::Spec::Functions qw(catdir);
 use Scalar::Util qw(blessed);
 
 use Slim::Music::Info;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
+use Slim::Utils::Prefs;
 use Slim::Utils::Unicode;
 
 my $log = logger('formats.playlists');
+my $prefs = preferences('server');
 
 # This now just processes the cuesheet into tags. The calling process is
 # responsible for adding the tracks into the datastore.
@@ -141,6 +144,11 @@ sub parse {
 		} elsif (defined $currtrack and $line =~ /^\s*REM\s+END\s+(\d+):(\d+):(\d+)/i) {
 
 			$tracks->{$currtrack}->{'END'} = ($1 * 60) + $2 + ($3 / 75);
+		
+		} elsif (defined $currtrack and $line =~ /^\s*REM\s+END\s+(.+)/i) {
+			# Bug 11950, pass absolute end time in seconds (FLAC), since some loss of accuracy would
+			# occur if passing in MM:SS:FF format			
+			$tracks->{$currtrack}->{'END'} = $1;
 
 		} elsif (defined $currtrack and defined $filename) {
 			# Each track in a cue sheet can have a different
@@ -187,17 +195,7 @@ sub parse {
 
 		my $tags = Slim::Formats->readTags($filename);
 
-		# Make sure the format is the same as END above.
-		$lastpos = sprintf("%02d:%02d:%02d",
-			int(int($tags->{'SECS'})/60),
-			int($tags->{'SECS'} % 60),
-			(($tags->{'SECS'} - int($tags->{'SECS'})) * 75)
-		);
-
-		if ($lastpos =~ /^(\d+):(\d+):(\d+)/) {
-
-			$lastpos = ($1 * 60) + $2 + ($3 / 75);
-		}
+		$lastpos = $tags->{SECS};
 
 		# Also - check the original file for any information that may
 		# not be in the cue sheet. Bug 2668
@@ -365,9 +363,9 @@ sub read {
 				$track->{uc $attribute} = $data{$attribute};
 			}
 		}
-
-		# Remove the old track from the DB - this will remove spurious artists, etc.
-		Slim::Schema->search('Track', { 'url' => $track->{'FILENAME'} })->delete_all;
+		
+		# Mark track as virtual
+		$track->{VIRTUAL} = 1;
 
 		$class->processAnchor($track);
 
@@ -414,53 +412,86 @@ sub processAnchor {
 
 		return 0;
 	}
-
-	my $byterate   = $attributesHash->{'SIZE'} / $attributesHash->{'SECS'};
-	my $header     = $attributesHash->{'AUDIO_OFFSET'} || 0;
-	my $startbytes = int($byterate * $start);
-	my $endbytes   = int($byterate * $end);
-			
-	$startbytes -= $startbytes % $attributesHash->{'BLOCK_ALIGNMENT'} if $attributesHash->{'BLOCK_ALIGNMENT'};
-	$endbytes   -= $endbytes % $attributesHash->{'BLOCK_ALIGNMENT'} if $attributesHash->{'BLOCK_ALIGNMENT'};
 	
-	# Bug 8877, if this is an MP3 file, we need to split on a frame boundary
-	# XXX: This may be broken for other formats too, i.e. Ogg
-	# XXX: Needs lots more work, I plan to use the technique pcutmp3 uses
-	# to add silence frame(s) and rewrite LAME tags to achieve proper splitting
-	# http://www.hydrogenaudio.org/forums/index.php?showtopic=35654
-	# http://jaybeee.themixingbowl.org/other/pcutmp3.jar
-	if ( $attributesHash->{'CONTENT_TYPE'} eq 'mp3' ) {
+	my ($startbytes, $endbytes);
+	
+	my $header = $attributesHash->{'OFFSET'} || 0;
+	
+	# Bug 8877, use findFrameBoundaries to find the accurate split points if the format supports it
+	my $ct = $attributesHash->{'CONTENT_TYPE'};
+	my $formatclass = Slim::Formats->classForFormat($ct);
+	
+	if ( $formatclass->can('findFrameBoundaries') ) {		
 		my $path = Slim::Utils::Misc::pathFromFileURL( $attributesHash->{'FILENAME'} );
 		open my $fh, '<', $path;
 		
-		if ( $startbytes > 0 ) {
-			$startbytes = Slim::Formats::MP3->findFrameBoundaries( $fh, $header + $startbytes );	
-			$attributesHash->{'AUDIO_OFFSET'} = $startbytes;
+		if ( $start > 0 ) {
+			$startbytes = $formatclass->findFrameBoundaries( $fh, undef, $start );	
+			$attributesHash->{'OFFSET'} = $startbytes;
 		}
 		else {
-			$attributesHash->{'AUDIO_OFFSET'} = $header;
+			$attributesHash->{'OFFSET'} = $header;
 			
-			# We need to skip past the LAME header so the first chunk
-			# doesn't get truncated by the firmware thinking it needs to remove encoder padding
-			seek $fh, 0, 0;
-			my $s = Audio::Scan->scan_fh( mp3 => $fh, 0x01 );
-			if ( $s->{info}->{lame_encoder_version} ) {
-				my $next = Slim::Formats::MP3->findFrameBoundaries( $fh, $header + 1 );
-				$attributesHash->{'AUDIO_OFFSET'} += $next;
+			if ( $ct eq 'mp3' ) {
+				# MP3 only - We need to skip past the LAME header so the first chunk
+				# doesn't get truncated by the firmware thinking it needs to remove encoder padding
+				# XXX: MP3 needs lots more work in order to make it gapless, I plan to use the technique pcutmp3 uses
+				# to add silence frame(s) and rewrite LAME tags to achieve proper splitting
+				# http://www.hydrogenaudio.org/forums/index.php?showtopic=35654
+				# http://jaybeee.themixingbowl.org/other/pcutmp3.jar
+				seek $fh, 0, 0;
+				my $s = Audio::Scan->scan_fh( mp3 => $fh, 0x01 );
+				if ( $s->{info}->{lame_encoder_version} ) {
+					my $next = Slim::Formats::MP3->findFrameBoundaries( $fh, $header + 1 );
+					$attributesHash->{'OFFSET'} += $next;
+				}
+				
+				eval {
+					# Pre-scan the file with MP3::Cut::Gapless to create frame data cache file
+					# that will be used during playback
+					require MP3::Cut::Gapless;
+				
+					main::INFOLOG && $log->is_info && $log->info("Pre-caching MP3 gapless split data for $path");
+				
+					MP3::Cut::Gapless->new(
+						file      => $path,
+						cache_dir => catdir( $prefs->get('librarycachedir'), 'mp3cut' ),
+					);
+				};
+				if ($@) {
+					$log->warn("Unable to scan $path for gapless split data: $@");
+				}
 			}
 		}
 		
-		my $newend = Slim::Formats::MP3->findFrameBoundaries( $fh, $header + $endbytes );
-		if ( $newend ) {
-			$endbytes = $newend;
+		if ( $attributesHash->{SECS} == $attributesHash->{END} ) {
+			# Bug 11950, The last track should always extend to the end of the file
+			$endbytes = $attributesHash->{SIZE};
+		}
+		else {		
+			seek $fh, 0, 0;
+		
+			my $newend = $formatclass->findFrameBoundaries( $fh, undef, $end );
+			if ( $newend ) {
+				$endbytes = $newend;
+			}
 		}
 		
-		$attributesHash->{'SIZE'} = $endbytes - $attributesHash->{'AUDIO_OFFSET'};
+		$attributesHash->{'SIZE'} = $endbytes - $attributesHash->{'OFFSET'};
 		
 		close $fh;
 	}
 	else {
-		$attributesHash->{'AUDIO_OFFSET'} = $header + $startbytes;
+		# Just take a guess as to the offset position
+		my $byterate = $attributesHash->{'SIZE'} / $attributesHash->{'SECS'};
+		
+		$startbytes = int($byterate * $start);
+		$endbytes   = int($byterate * $end);
+
+		$startbytes -= $startbytes % $attributesHash->{'BLOCK_ALIGNMENT'} if $attributesHash->{'BLOCK_ALIGNMENT'};
+		$endbytes   -= $endbytes % $attributesHash->{'BLOCK_ALIGNMENT'} if $attributesHash->{'BLOCK_ALIGNMENT'};
+		
+		$attributesHash->{'OFFSET'} = $header + $startbytes;
 		$attributesHash->{'SIZE'} = $endbytes - $startbytes;
 	}
 	
@@ -472,8 +503,8 @@ sub processAnchor {
 	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug( sprintf(
 			"New virtual track ($start-$end): start: %d, end: %d, size: %d, length: %d",
-			$attributesHash->{'AUDIO_OFFSET'},
-			$attributesHash->{'SIZE'} + $attributesHash->{'AUDIO_OFFSET'},
+			$attributesHash->{'OFFSET'},
+			$attributesHash->{'SIZE'} + $attributesHash->{'OFFSET'},
 			$attributesHash->{'SIZE'},
 			$attributesHash->{'SECS'},
 		) );

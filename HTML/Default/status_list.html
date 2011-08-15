@@ -6,7 +6,7 @@
 			<a href="[% webroot _ info_link %]?item=[% item.itemobj.id %]&amp;player=[% playerURI %]" target="browser" class="browseItemLink">[% item.title | html %]</a>
 			[% IF item.includeAlbum && item.itemobj.album && item.itemobj.album.title != item.noAlbum && item.itemobj.album.title != "" %]
 				[% "FROM" | string %]
-				<a href="[% webroot %]browsedb.html?hierarchy=album,track&amp;level=1&amp;album.id=[% item.itemobj.album.id %]&amp;player=[% playerURI %]" target="browser" class="browseItemLink">[% item.itemobj.album.title | html %]</a>
+				<a href="[% webroot %]clixmlbrowser/clicmd=browselibrary+items&amp;mode=tracks&amp;linktitle=[% 'ALBUM' | string %]%20([% item.itemobj.album.title | uri %])&amp;album_id=[% item.itemobj.album.id %]&amp;player=[% playerURI %]/" target="browser" class="browseItemLink">[% item.itemobj.album.title | html %]</a>
 			[% END %]
 			[% IF item.includeArtist && item.artist && item.artist != item.noArtist; PROCESS artistsAsHTML.html itemobj = item.itemobj; END %]
 			[%# current_title is for radio streams %]
@@ -16,16 +16,16 @@
 			[% END %]
 		[% ELSE %]
 			<span class="playlistCover">
-				[% IF item.itemobj.album.id %]<a href="[% webroot %]browsedb.html?hierarchy=album,track&amp;level=1&amp;album.id=[% item.itemobj.album.id %]&amp;player=[% playerURI %]" target="browser">[% END %]
+				[% IF item.itemobj.album.id %]<a href="[% webroot %]clixmlbrowser/clicmd=browselibrary+items&amp;mode=tracks&amp;linktitle=[% 'ALBUM' | string %]%20([% item.itemobj.album.title | uri %])&amp;album_id=[% item.itemobj.album.id %]&amp;player=[% playerURI %]/" target="browser">[% END %]
 				[% IF item.plugin_meta.cover || item.plugin_meta.icon %]
 					[%# Display plugin cover or icon %]
 					[% IF item.plugin_meta.cover %]
-					<img src="[% item.plugin_meta.cover %]" width="50" height="50">
+					<img src="[% item.plugin_meta.cover | resizeimage(50, 50) %]" width="50" height="50">
 					[% ELSIF item.plugin_meta.icon %]
-					<img src="[% item.plugin_meta.icon %]_50x50_[% resizeParam %].[% IF browserType == 'IE' %]gif[% ELSE %]png[% END %]">
+					<img src="[% item.plugin_meta.icon | resizeimage(50, 50, resizeParam) %]">
 					[% END %]
 				[% ELSE %]
-					<img src="/music/[% item.itemobj.id %]/cover_50x50_[% resizeParam %][% IF browserType == 'IE' %].gif[% END %]">
+					<img src="[% ("/music/" _ item.itemobj.coverid _ "/cover") | resizeimage(50, 50) %]">
 				[% END %]
 				[% IF item.itemobj.album.id %]</a>[% END %]
 			</span>
@@ -40,7 +40,7 @@
 			[% END %]
 			[% IF item.includeAlbum && item.itemobj.album && item.itemobj.album.title != item.noAlbum && item.itemobj.album.title != "" %]
 				<div class="playlistSongDetail">
-					<a href="[% webroot %]browsedb.html?hierarchy=album,track&amp;level=1&amp;album.id=[% item.itemobj.album.id %]&amp;player=[% playerURI %]" target="browser" class="browseItemLink"><span>[% item.itemobj.album.title | html %]</span></a>
+					<a href="[% webroot %]clixmlbrowser/clicmd=browselibrary+items&amp;mode=tracks&amp;linktitle=[% 'ALBUM' | string %]%20([% item.itemobj.album.title | uri %])&amp;album_id=[% item.itemobj.album.id %]&amp;player=[% playerURI %]/" target="browser" class="browseItemLink"><span>[% item.itemobj.album.title | html %]</span></a>
 				</div>
 			[% END %]
 			<div class="playlistSongDetail">

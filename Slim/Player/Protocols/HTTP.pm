@@ -1,6 +1,6 @@
 package Slim::Player::Protocols::HTTP;
 
-# $Id: HTTP.pm 30844 2010-06-04 11:34:22Z agrundman $
+# $Id: HTTP.pm 32442 2011-05-20 05:05:17Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
@@ -115,9 +115,6 @@ sub readMetaData {
 		main::INFOLOG && $log->info("Metadata: $metadata");
 
 		${*$self}{'title'} = __PACKAGE__->parseMetadata($client, $self->url, $metadata);
-
-		# new song, so reset counters
-		$client->songBytes(0);
 	}
 }
 
@@ -158,7 +155,7 @@ sub parseMetadata {
 		# Bug 15896, a stream had CRLF in the metadata
 		$metadata =~ s/\s*[\r\n]+\s*/; /g;
 
-		my $newTitle = Slim::Utils::Unicode::utf8decode_guess($1, 'iso-8859-1');
+		my $newTitle = Slim::Utils::Unicode::utf8decode_guess($1);
 
 		# capitalize titles that are all lowercase
 		# XXX: Why do we do this?  Shouldn't we let metadata display as-is?
@@ -186,7 +183,7 @@ sub parseMetadata {
 			Slim::Music::Info::setCurrentTitle($url, $newTitle, $client);
 			
 			if ($artworkUrl) {
-				my $cache = Slim::Utils::Cache->new( 'Artwork', 1, 1 );
+				my $cache = Slim::Utils::Cache->new();
 				$cache->set( "remote_image_$url", $artworkUrl, 3600 );
 				
 				if ( my $song = $client->playingSong() ) {
@@ -280,10 +277,8 @@ sub canDirectStream {
 		}
 	}
 	
-	if ( main::SLIM_SERVICE ) {
-		# Strip noscan info from URL
-		$url =~ s/#slim:.+$//;
-	}
+	# Strip noscan info from URL
+	$url =~ s/#slim:.+$//;
 
 	return $url;
 }
@@ -345,7 +340,7 @@ sub parseDirectHeaders {
 
 		if ($header =~ /^(?:ic[ey]-name|x-audiocast-name):\s*(.+)/i) {
 			
-			$title = Slim::Utils::Unicode::utf8decode_guess($1, 'iso-8859-1');
+			$title = Slim::Utils::Unicode::utf8decode_guess($1);
 		}
 		
 		elsif ($header =~ /^(?:icy-br|x-audiocast-bitrate):\s*(.+)/i) {
@@ -385,21 +380,34 @@ sub parseDirectHeaders {
 		$length = $rangeLength;
 	}
 	
-	# However we got here, we want to know that we did not start at the beginning, if possible
-	if ($startOffset && $length) {
+	my $song = ${*self}{'song'} if blessed $self;
+	
+	if (!$song && $client->controller()->songStreamController()) {
+		$song = $client->controller()->songStreamController()->song();
+	}
+	
+	if ($song && $length) {
+		my $seekdata = $song->seekdata();
 		
-		# Assume saved duration is more accurate that by calculating from length and bitrate
-		my $duration = Slim::Music::Info::getDuration($url);
-		$duration ||= $length * 8 / $bitrate if $bitrate;
+		if ($startOffset && $seekdata && $seekdata->{restartOffset}
+			&& $seekdata->{sourceStreamOffset} && $startOffset > $seekdata->{sourceStreamOffset})
+		{
+			$startOffset = $seekdata->{sourceStreamOffset};
+		}
+
+		my $streamLength = $length;
+		$streamLength -= $startOffset if $startOffset;
+		$song->streamLength($streamLength);
 		
-		if ($duration) {
-			my $song = ${*self}{'song'} if blessed $self;
+		# However we got here, we want to know that we did not start at the beginning, if possible
+		if ($startOffset) {
 			
-			if (!$song && $client->controller()->songStreamController()) {
-				$song = $client->controller()->songStreamController()->song();
-			}
 			
-			if ($song) {
+			# Assume saved duration is more accurate that by calculating from length and bitrate
+			my $duration = Slim::Music::Info::getDuration($url);
+			$duration ||= $length * 8 / $bitrate if $bitrate;
+			
+			if ($duration) {
 				main::INFOLOG && $directlog->info("Setting startOffest based on Content-Range to ", $duration * ($startOffset/$length));
 				$song->startOffset($duration * ($startOffset/$length));
 			}
@@ -576,15 +584,19 @@ sub requestString {
 		$request .= $CRLF . "Authorization: Basic " . MIME::Base64::encode_base64($user . ":" . $password,'');
 	}
 	
+	$client->songBytes(0) if $client;
+
 	# If seeking, add Range header
 	if ($client && $seekdata) {
-		$request .= $CRLF . 'Range: bytes=' . int( $seekdata->{sourceStreamOffset} ) . '-';
+		$request .= $CRLF . 'Range: bytes=' . int( $seekdata->{sourceStreamOffset} +  $seekdata->{restartOffset}) . '-';
 		
 		if (defined $seekdata->{timeOffset}) {
 			# Fix progress bar
 			$client->playingSong()->startOffset($seekdata->{timeOffset});
 			$client->master()->remoteStreamStartTime( Time::HiRes::time() - $seekdata->{timeOffset} );
 		}
+
+		$client->songBytes(int( $seekdata->{sourceStreamOffset} ));
 	}
 
 	# Send additional information if we're POSTing
@@ -696,7 +708,7 @@ sub getMetadataFor {
 	my $playlistURL = $url;
 	
 	# Check for radio URLs with cached covers
-	my $cache = Slim::Utils::Cache->new( 'Artwork', 1, 1 );
+	my $cache = Slim::Utils::Cache->new();
 	my $cover;
 	
 	if ( main::SLIM_SERVICE ) {
@@ -730,6 +742,7 @@ sub getMetadataFor {
 	return {} unless $track;
 	
 	if ( $track->cover ) {
+		# XXX should remote tracks use coverid?
 		$cover = '/music/' . $track->id . '/cover.jpg';
 	}
 	
@@ -861,7 +874,9 @@ sub getSeekData {
 sub getSeekDataByPosition {
 	my ($class, $client, $song, $bytesReceived) = @_;
 	
-	return {sourceStreamOffset => $bytesReceived};
+	my $seekdata = $song->seekdata() || {};
+	
+	return {%$seekdata, restartOffset => $bytesReceived};
 }
 
 # reinit is used on SN to maintain seamless playback when bumped to another instance

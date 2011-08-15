@@ -1,6 +1,6 @@
 package Slim::Plugin::Facebook::Plugin;
 
-# $Id: Plugin.pm 28550 2009-09-17 15:42:43Z andy $
+# $Id: Plugin.pm 31272 2010-08-30 04:55:03Z mherger $
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -54,6 +54,8 @@ sub initJive {
 	my ( $class, %args ) = @_;
 	
 	my $menu = $class->SUPER::initJive( %args );
+	
+	return if !$menu;
 	
 	$menu->[0]->{screensavers} = [
 		{

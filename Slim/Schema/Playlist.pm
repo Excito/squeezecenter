@@ -1,6 +1,6 @@
 package Slim::Schema::Playlist;
 
-# $Id: Playlist.pm 29870 2010-01-21 19:17:22Z andy $
+# $Id: Playlist.pm 31253 2010-08-24 06:39:55Z ayoung $
 
 use strict;
 use base 'Slim::Schema::Track';
@@ -29,10 +29,6 @@ sub tracks {
 	
 	my %attributes = (order_by => 'me.position');
 	
-	if (my $maxPlaylistLength = $prefs->get('maxPlaylistLength')) {
-		$attributes{'rows'} = $maxPlaylistLength;
-	}
-
 	return $self->playlist_tracks(undef, \%attributes);
 }
 
@@ -50,7 +46,7 @@ sub setTracks {
 	
 	# Bug 12091: Only use a txn_do() if autocommit is on
 	eval {
-		if (Slim::Schema->storage->dbh->{'AutoCommit'}) {
+		if (Slim::Schema->dbh->{'AutoCommit'}) {
 			Slim::Schema->txn_do($work);
 		} else {
 			&$work;
@@ -76,7 +72,7 @@ sub appendTracks {
 		# Bug 13185, I don't think we can do this with DBIC due to inflate_result
 		my $max = 0;
 		
-		my $dbh = Slim::Schema->storage->dbh;
+		my $dbh = Slim::Schema->dbh;
 		my $sth = $dbh->prepare_cached( qq{
 			SELECT MAX(position) FROM playlist_track WHERE playlist = ? LIMIT 1
 		} );
@@ -91,7 +87,7 @@ sub appendTracks {
 	
 	# Bug 12091: Only use a txn_do() if autocommit is on
 	eval {
-		if (Slim::Schema->storage->dbh->{'AutoCommit'}) {
+		if (Slim::Schema->dbh->{'AutoCommit'}) {
 			Slim::Schema->txn_do($work);
 		} else {
 			&$work;

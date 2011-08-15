@@ -1,6 +1,6 @@
 package Slim::Plugin::SpotifyLogi::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 31713 2011-01-10 12:47:42Z agrundman $
+# $Id: ProtocolHandler.pm 31715 2011-01-10 13:14:29Z agrundman $
 
 use strict;
 use base qw(Slim::Player::Protocols::SqueezePlayDirect);

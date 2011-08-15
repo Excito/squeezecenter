@@ -1,6 +1,6 @@
 package Slim::Schema::RemotePlaylist;
 
-# $Id: RemotePlaylist.pm 30561 2010-04-13 07:09:20Z ayoung $
+# $Id: RemotePlaylist.pm 30564 2010-04-13 11:38:27Z agrundman $
 
 # This is an emulation of the Slim::Schema::Playlist API for remote tracks
 

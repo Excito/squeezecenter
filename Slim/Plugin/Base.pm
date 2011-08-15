@@ -1,6 +1,6 @@
 package Slim::Plugin::Base;
 
-# $Id: Base.pm 30277 2010-02-26 20:33:38Z agrundman $
+# $Id: Base.pm 32504 2011-06-07 12:16:25Z agrundman $
 
 # Base class for plugins. Implement some basics.
 
@@ -14,6 +14,8 @@ if ( !main::SCANNER ) {
 use constant PLUGINMENU => 'PLUGINS';
 
 my $WEIGHTS = {};
+
+my $nonSNApps;
 
 sub initPlugin {
 	my $class = shift;
@@ -80,6 +82,12 @@ sub initPlugin {
 
 		Slim::Hardware::IR::addModeDefaultMapping($mode, $class->defaultMap);
 	}
+
+	# add 3rd party plugins which wish to be in the apps menu to nonSNApps list
+	if ($class->can('menu') && $class->menu eq 'apps' && $class =~ /^Plugins::/) {
+		$nonSNApps ||= [];
+		push @$nonSNApps, $class;
+	}
 }
 
 sub getDisplayName {
@@ -131,6 +139,10 @@ sub getFunctions {
 }
 
 sub getWeights { $WEIGHTS }
+
+sub nonSNApps {
+	return !main::SLIM_SERVICE && $nonSNApps
+}
 
 1;
 

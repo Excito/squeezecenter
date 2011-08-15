@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs;
 
-# $Id: Prefs.pm 31586 2010-12-05 18:39:56Z agrundman $
+# $Id: Prefs.pm 32611 2011-07-04 09:23:01Z mherger $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -161,6 +161,8 @@ sub init {
 		'language'              => \&defaultLanguage,
 		'audiodir'              => \&defaultAudioDir,
 		'playlistdir'           => \&defaultPlaylistDir,
+		'autorescan'            => 0,
+		'autorescan_stat_interval' => 10,
 		# Server Settings - Behaviour
 		'displaytexttimeout'    => 1,
 		'checkVersion'          => 1,
@@ -170,9 +172,9 @@ sub init {
 		'noGenreFilter'         => 0,
 		'searchSubString'       => 0,
 		'ignoredarticles'       => "The El La Los Las Le Les",
-		'splitList'             => '',
+		'splitList'             => ';',
 		'browseagelimit'        => 100,
-		'groupdiscs'            => 0,
+		'groupdiscs'            => 1,
 		'persistPlaylists'      => 1,
 		'playtrackalbum'        => 1,
 		'reshuffleOnRepeat'     => 0,
@@ -180,7 +182,7 @@ sub init {
 		'composerInArtists'     => 0,
 		'conductorInArtists'    => 0,
 		'bandInArtists'         => 0,
-		'variousArtistAutoIdentification' => 0,
+		'variousArtistAutoIdentification' => 1,
 		'useBandAsAlbumArtist'  => 0,
 		'useTPE2AsAlbumArtist'  => 0,
 		'variousArtistsString'  => undef,
@@ -201,7 +203,6 @@ sub init {
 		'disableStatistics'     => 0,
 		'serverPriority'        => '',
 		'scannerPriority'       => 0,
-		'resampleArtwork'       => 1,
 		'precacheArtwork'       => 1,
 		'maxPlaylistLength'     => 500,
 		# Server Settings - Security
@@ -233,7 +234,6 @@ sub init {
 									'TRACKNUM. ARTIST - TITLE',
 									'TRACKNUM. TITLE (ARTIST)',
 									'TRACKNUM. TITLE - ARTIST - ALBUM',
-									'FILE.EXT',
 									'TRACKNUM. TITLE from ALBUM by ARTIST',
 									'TITLE (ARTIST)',
 									'ARTIST - TITLE'
@@ -339,6 +339,15 @@ sub init {
 		
 		$prefs->migrate( 4, sub {
 			$prefs->set('librarycachedir', $prefs->get('cachedir'));
+			1;
+		} );
+
+		# on Windows we don't provide a means to disable the autoprefs value any longer
+		# disable automatic scanning automatically, in case user had been using an earlier beta where it was enabled
+		$prefs->migrate( 8, sub {
+			if (main::ISWINDOWS && $prefs->get('autorescan')) {
+				$prefs->set( autorescan => 0 );
+			}
 			1;
 		} );
 	}
@@ -685,6 +694,9 @@ sub init {
 
 	# initialise any new prefs
 	$prefs->init(\%defaults);
+	
+	# perform OS-specific post-init steps
+	Slim::Utils::OSDetect::getOS->postInitPrefs($prefs);
 
 	# set validation functions
 	$prefs->setValidate( 'num',   qw(displaytexttimeout browseagelimit remotestreamtimeout screensavertimeout 
@@ -763,7 +775,9 @@ sub init {
 		$prefs->setChange( sub { Slim::Utils::Strings::setLanguage($_[1]) }, 'language' );
 	}
 	
-	$prefs->setChange( \&Slim::Utils::Update::checkVersion, 'checkVersion' );
+	if ( !Slim::Utils::OSDetect::isSqueezeOS() ) {
+		$prefs->setChange( \&Slim::Utils::Update::checkVersion, 'checkVersion' );
+	}
 
 	$prefs->setChange( 
 		sub { Slim::Control::Request::executeRequest(undef, ['wipecache']) },
@@ -777,20 +791,18 @@ sub init {
 		Slim::Control::Request::executeRequest(undef, ['wipecache'])
 	}, 'ignoredarticles');
 
-	$prefs->setChange( sub {
-		Slim::Buttons::BrowseTree->init;
-		require Slim::Music::MusicFolderScan;
-		Slim::Music::MusicFolderScan->init;
-		Slim::Control::Request::executeRequest(undef, ['wipecache']);
-	}, 'audiodir');
+	if ( !main::SCANNER ) {
+		$prefs->setChange( sub {
+			require Slim::Music::MusicFolderScan;
+			Slim::Music::MusicFolderScan->init;
+			Slim::Control::Request::executeRequest(undef, ['wipecache']);
+		}, 'audiodir');
+	}
 
 	$prefs->setChange( sub {
 		require Slim::Music::PlaylistFolderScan;
 		Slim::Music::PlaylistFolderScan->init;
 		Slim::Control::Request::executeRequest(undef, ['rescan', 'playlists']);
-		for my $client (Slim::Player::Client::clients()) {
-			Slim::Buttons::Home::updateMenu($client);
-		}
 	}, 'playlistdir');
 
 	$prefs->setChange( sub {
@@ -820,6 +832,11 @@ sub init {
 		my $client = $_[2] || return;
 		Slim::Player::Transporter::updateEffectsLoop($client);
 	}, 'fxloopClock');
+	
+	$prefs->setChange( sub {
+		my $client = $_[2] || return;
+		Slim::Player::Transporter::updateRolloff($client);
+	}, 'rolloffSlow');
 
 	$prefs->setChange( sub {
 		my $client = $_[2] || return;
@@ -875,7 +892,6 @@ sub init {
 	# Rebuild Jive cache if VA setting is changed
 	$prefs->setChange( sub {
 		Slim::Control::Queries::wipeCaches();
-		Slim::Control::Jive::buildCaches();
 	}, 'variousArtistAutoIdentification', 'composerInArtists', 'conductorInArtists', 'bandInArtists');
 
 	# Reset IR state if preference change

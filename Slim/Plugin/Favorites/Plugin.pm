@@ -1,6 +1,6 @@
 package Slim::Plugin::Favorites::Plugin;
 
-# $Id: Plugin.pm 30718 2010-04-29 19:29:26Z agrundman $
+# $Id: Plugin.pm 32528 2011-06-18 11:56:43Z adrian $
 
 # A Favorites implementation which stores favorites as opml files and allows
 # the favorites list to be edited from the web interface
@@ -37,6 +37,8 @@ if ( main::WEBUI ) {
 }
 
 use Slim::Plugin::Favorites::Playlist;
+
+use constant MENU_WEIGHT => 55;
 
 my $log = logger('favorites');
 
@@ -100,6 +102,8 @@ sub initPlugin {
 
 
 sub modeName { 'FAVORITES' };
+
+sub weight { MENU_WEIGHT }
 
 sub setMode {
 	my $class = shift;
@@ -716,9 +720,6 @@ sub cliBrowse {
 	}
 	else {
 		$feed = Slim::Plugin::Favorites::OpmlFavorites->new($client)->xmlbrowser;
-		
-		# Bug 8768, don't let XMLBrowser modify our data
-		$feed = Storable::dclone($feed);
 	}
 
 	Slim::Control::XMLBrowser::cliQuery('favorites', $feed, $request);
@@ -774,6 +775,7 @@ sub cliAdd {
 	my $icon   = $request->getParam('icon');
 	my $index  = $request->getParam('item_id');
 	my $type   = $request->getParam('type');
+	my $parser = $request->getParam('parser');
 	my $hotkey = $request->getParam('hotkey');
 	
 	if ( main::SLIM_SERVICE ) {
@@ -830,6 +832,7 @@ sub cliAdd {
 				'type' => $type || 'audio',
 				'icon' => $icon || $favs->icon($url),
 			};
+			$entry->{'parser'} = $parser if $parser;
 			
 			$request->addResult('count', 1);
 
@@ -914,8 +917,12 @@ sub cliDelete {
 		my $favs = Slim::Plugin::Favorites::OpmlFavorites->new($client);
 
 		if (!defined $index || !defined $favs->entry($index)) {
-			$request->setStatusBadParams();
-			return;
+			if ($url) {
+				$favs->deleteUrl($url);
+			} else {
+				$request->setStatusBadParams();
+				return;
+			}
 		}
 
 		$favs->deleteIndex($index);
@@ -1032,7 +1039,7 @@ sub _objectInfoHandler {
 					cmd    => [ 'jivefavorites', 'add' ],
 					params => {
 						title   => $title,
-                                                url     => $obj->url,
+						url     => $obj->url,
 						isContextMenu => 1,
 					},
 				},
@@ -1064,7 +1071,7 @@ sub _objectInfoHandler {
 					cmd    => [ 'jivefavorites', 'delete' ],
 					params => {
 						title   => $title,
-                                                url     => $obj->url,
+						url     => $obj->url,
 						item_id => $index,
 						isContextMenu => 1,
 					},
@@ -1092,13 +1099,13 @@ sub _objectInfoHandler {
 }
 
 sub objectInfoAddFavorite {
-	my ( $client, $callback, $obj ) = @_;
+	my ( $client, $callback, undef, $obj ) = @_;
 	
 	my $favorites = Slim::Utils::Favorites->new($client);
 	
 	my $favIndex = $favorites->add(
 		$obj,
-		$obj->title || $obj->url,
+		$obj->name || $obj->url,
 		undef,
 		undef,
 		undef,
@@ -1112,11 +1119,11 @@ sub objectInfoAddFavorite {
 		favorites   => 0,
 	};
 	
-	$callback->( $menu );
+	$callback->( [$menu] );
 }
 
 sub objectInfoRemoveFavorite {
-	my ( $client, $callback, $obj ) = @_;
+	my ( $client, $callback, $params, $obj ) = @_;
 	
 	my $menu = [
 		{
@@ -1125,13 +1132,13 @@ sub objectInfoRemoveFavorite {
 			url  => sub {
 				my $callback = $_[1];
 				
-				$callback->( {
+				$callback->( [{
 					type        => 'text',
 					name        => cstring($client, 'PLUGIN_FAVORITES_CANCELLING'),
 					showBriefly => 1,
 					popback     => 2,
 					favorites   => 0,
-				} );
+				}] );
 			},
 		},
 		{
@@ -1154,7 +1161,7 @@ sub objectInfoRemoveFavorite {
 					favorites   => 0,
 				};
 				
-				$callback->( $menu2 );
+				$callback->( [$menu2] );
 			},
 		},
 	];

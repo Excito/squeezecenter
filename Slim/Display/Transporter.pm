@@ -5,7 +5,7 @@ package Slim::Display::Transporter;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Transporter.pm 26931 2009-06-07 03:53:36Z michael $
+# $Id: Transporter.pm 31482 2010-10-30 11:53:18Z adrian $
 
 =head1 NAME
 
@@ -319,8 +319,6 @@ sub showVisualizer {
 sub showExtendedText {
 	my $display = shift;
 	my $client = $display->client;
-
-	return 0 if (!$client->power());
 
 	my $visu = $prefs->client($client)->get('visualModes')->[ $prefs->client($client)->get('visualMode') ] || 0;
 	

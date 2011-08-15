@@ -1,6 +1,6 @@
 package Slim::Player::TranscodingHelper;
 
-# $Id: TranscodingHelper.pm 29223 2009-11-10 14:02:22Z andy $
+# $Id: TranscodingHelper.pm 31552 2010-11-24 17:54:20Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -20,7 +20,6 @@ use Slim::Utils::Log;
 use Slim::Utils::Misc;
 use Slim::Utils::OSDetect;
 use Slim::Utils::Prefs;
-use Slim::Utils::Unicode;
 
 {
 	if (main::ISWINDOWS) {
@@ -270,23 +269,36 @@ sub checkBin {
 }
 
 sub getConvertCommand2 {
-	my ($song, $type, $streamModes, $need, $want) = @_;
+	my ($songOrTrack, $type, $streamModes, $need, $want, $formatOverride, $rateOverride) = @_;
 	
-	my $track  = $song->currentTrack();
+	my $track;
+	my $song;
+	my $client;
+	
+	if ( ref $songOrTrack eq 'Slim::Player::Song' ) {
+		$song   = $songOrTrack;
+		$track  = $song->currentTrack();
+		$client = $song->master();
+	}
+	else {
+		$track = $songOrTrack;
+	}
+	
 	$type ||= Slim::Music::Info::contentType($track);
-
-	my $client     = $song->master();
-	my $player     = $client->model();
-	my $clientid   = $client->id();
+	
+	my $player     = $client ? $client->model() : undef;
+	my $clientid   = $client ? $client->id() : undef;
 	my $transcoder = undef;
 	my $error;
-	my $backupTranscoder  = undef;
-	my $url      = $track->url;
+	my $backupTranscoder = undef;
+	my $url = $track->url;
 
 	my @supportedformats = ();
 	
 	# Check if we need to ratelimit
-	my $rateLimit = _rateLimit($client, $type, $track->bitrate);
+	my $rateLimit 
+		= $rateOverride ? $rateOverride
+		: $client ? _rateLimit($client, $type, $track->bitrate) : 0;
 	RATELIMIT: if ($rateLimit) {
 		foreach (@$want) {
 			last RATELIMIT if /B/;
@@ -295,41 +307,33 @@ sub getConvertCommand2 {
 	}
 	
 	# Check if we need to downsample
-	my $samplerateLimit = Slim::Player::CapabilitiesHelper::samplerateLimit($song);
+	my $samplerateLimit = $song ? Slim::Player::CapabilitiesHelper::samplerateLimit($song) : 0;
 	SAMPLELIMIT: if ($samplerateLimit) {
 		foreach (@$need) {
 			last SAMPLELIMIT if /D/;
 		}
 		push @$need, 'D';
 	}
-		
-	# special case for FLAC cuesheets for SB2. For now, we
-	# let flac do the seeking to the correct point and transcode
-	# to a complete stream that we can send to SB2.
-	# Yucky, but a stopgap until we get FLAC seeking code into
-	# a Perl invokable form.
-	if (($type eq "flc") && ($url =~ /#([^-]+)-([^-]+)$/)) {
-		my ($foundU, $foundT);
-		foreach (@$need) {
-			$foundT = 1 if /T/;
-			$foundU = 1 if /U/;
-		}
-		push @$need, 'T' if ! $foundT;
-		push @$need, 'U' if ! $foundU;
-	}
 	
 	# make sure we only test formats that are supported.
-	@supportedformats = Slim::Player::CapabilitiesHelper::supportedFormats($client);
+	if ( $formatOverride ) {
+		@supportedformats = ($formatOverride);
+	}
+	elsif ( $client ) {
+		@supportedformats = Slim::Player::CapabilitiesHelper::supportedFormats($client);
+	}
 
 	# Build the full list of possible profiles
 	my @profiles = ();
 	foreach my $checkFormat (@supportedformats) {
 
-		push @profiles, (
-			"$type-$checkFormat-$player-$clientid",
-			"$type-$checkFormat-*-$clientid",
-			"$type-$checkFormat-$player-*"
-		);
+		if ( $clientid && $player ) {
+			push @profiles, (
+				"$type-$checkFormat-$player-$clientid",
+				"$type-$checkFormat-*-$clientid",
+				"$type-$checkFormat-$player-*"
+			);
+		}
 
 		push @profiles, "$type-$checkFormat-*-*";
 		
@@ -427,18 +431,42 @@ sub getConvertCommand2 {
 	return wantarray ? ($transcoder, $error) : $transcoder;
 }
 
+#sub _dump_string {
+#	use bytes;
+#	my $res = '';
+#	my $string = shift;
+#	
+#	for (my $i = 0; $i < length($string); $i++) {
+#		my $c = substr($string, $i, 1);
+#		my $o = ord($c);
+#		if ($o > 127) {
+#			$res .= sprintf("\\x%02X", $o);
+#		} else {
+#			$res .= $c;
+#		}
+#	}
+#	return $res;
+#}
+
 sub tokenizeConvertCommand2 {
 	my ($transcoder, $filepath, $fullpath, $noPipe, $quality) = @_;
+	
+	# Bug 10199 - make sure we do not promote any strings to decoded ones (8859-1 => UFT-8)
+	use bytes;
 	
 	my $command = $transcoder->{'command'};
 	
 	# This must come above the FILE substitutions, otherwise it will break
 	# files with [] in their names.
 	$command =~ s/\[([^\]]+)\]/'"' . Slim::Utils::Misc::findbin($1) . '"'/eg;
-
+	
 	my ($start, $end);
-	# Special case for FLAC cuesheets. We pass the start and end
-	# of the track within the FLAC file.
+	
+	my %subs;
+	my %vars;
+
+	# Special case for cuesheets. We pass the start and end
+	# of the track within the file.
 	if ($fullpath =~ /#([^-]+)-([^-]+)$/) {
 		 ($start, $end) = ($1, $2);
 	}
@@ -446,9 +474,14 @@ sub tokenizeConvertCommand2 {
 	if ($transcoder->{'start'}) {
 		$start += $transcoder->{'start'};
 	}
-		
-	my %subs;
-	my %vars;
+	
+	if ($start) {
+		push @{$transcoder->{'usedCapabilities'}}, 'T';
+	}
+	
+	if ($end) {
+		push @{$transcoder->{'usedCapabilities'}}, 'U';
+	}
 	
 	# Start with some legacy ones
 	
@@ -475,10 +508,6 @@ sub tokenizeConvertCommand2 {
 		$fullpath =~ s/([\$\"\`])/\\$1/g;
 	}
 
-	if (Slim::Music::Info::isFile($filepath)) {
-		$filepath = Slim::Utils::OSDetect::getOS->decodeExternalHelperPath($filepath);
-	}
-	
 	foreach my $v (keys %vars) {
 		my $value;
 		
@@ -514,9 +543,6 @@ sub tokenizeConvertCommand2 {
 		$command =~ s/\$$_\$/$subs{$_}/g;
 	}
 
-	# XXX What was this for?
-	# $command =~ s/\$([^\$\\]+)\$/'"' . Slim::Utils::Misc::findbin($1) . '"'/eg;
-	
 	$command =~ s/\s+\$\w+\$//g;
 	
 	if (!defined($noPipe)) {
@@ -524,7 +550,7 @@ sub tokenizeConvertCommand2 {
 		$command .= ' |';
 	}
 
-	main::DEBUGLOG && $log->debug("Using command for conversion: $command");
+	main::DEBUGLOG && $log->debug("Using command for conversion: ", Slim::Utils::Unicode::utf8decode_locale($command));
 
 	return $command;
 }

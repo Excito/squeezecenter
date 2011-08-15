@@ -4,7 +4,7 @@
 <html>
 	<head>
 		<meta http-equiv="X-UA-Compatible" content="IE=7" />
-		<link rel="stylesheet" type="text/css" href="/html/ext/resources/css/ext-all.css" />
+		<link rel="stylesheet" type="text/css" href="/html/ext/resources/css/ext-all-notheme.css" />
 		<link rel="stylesheet" type="text/css" href="[% webroot %]slimserver.css?r=[% revision %]" />
 		<link rel="stylesheet" type="text/css" href="[% webroot %]skin.css?r=[% revision %]" />
 
@@ -27,8 +27,17 @@
 			Ext.onReady(function(){
 				SqueezeJS.UI.buttonTemplate = new Ext.Template(
 					'<table border="0" cellpadding="0" cellspacing="0"><tbody><tr>',
-					'<td></td><td><button type="{1}" style="padding:0" class="x-btn-text">{0}</button></td><td></td>',
-					'</tr></tbody></table>');
+					'<td></td><td><button type="{0}" style="padding:0" class="x-btn-text {2}"></button></td><td></td>',
+					'</tr></tbody></table>'
+				);
+				SqueezeJS.UI.buttonTemplate.compile();
+
+				SqueezeJS.UI.splitButtonTemplate = new Ext.Template(
+					'<table id="{4}" cellspacing="0" class="x-btn {3}"><tbody class="{1}">',
+					'<tr><td class="x-btn-ml"><i>&#160;</i></td><td class="x-btn-mc"><em class="{2}" unselectable="on"><button type="{0}"></button></em></td><td class="x-btn-mr"><i>&#160;</i></td></tr>',
+					'</tbody></table>'
+				);
+				SqueezeJS.UI.splitButtonTemplate.compile();
 
 				// initialize global controller, which is responsible for all communication with SC
 				SqueezeJS.Controller.init({
@@ -75,6 +84,11 @@
 	[% PROCESS jsString id='COLLAPSE' jsId='collapse' %]
 	[% PROCESS jsString id='EXPAND' jsId='expand' %]
 	[% PROCESS jsString id='UNDOCK_PLAYER_PANEL' jsId='undock' %]
+
+	Ext.onReady(function(){
+		SqueezeJS.externalImageProxy = new Ext.Template('[% imageproxy %]?u={url}&h={size}&w={size}');
+		SqueezeJS.externalImageProxy.compile();
+	});
 </script>
 
 <div id="playerbox">
@@ -126,7 +140,7 @@
 
 		<div id="expandedPlayerPanel">
 			<div id="ctrlCurrentArt">
-				<img src="[% webroot %]music/0/cover_96x96_p[% IF browserType == 'IE' %]_404040.gif[% END %]" alt="" height="96" width="96" border="0"/>
+				<img src="[% webroot %]music/0/cover_96x96_p" alt="" height="96" width="96" border="0"/>
 			</div>
 
 			<div id="ctrlCurrentSongInfo">

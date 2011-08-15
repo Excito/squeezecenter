@@ -1,6 +1,6 @@
 package Slim::Formats::Playlists::XSPF;
 
-# $Id: XSPF.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: XSPF.pm 31847 2011-01-27 11:38:29Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 #
@@ -40,8 +40,7 @@ sub read {
 		my $location = $track->location;
 		my $title    = $track->title;
 
-		my $enc = Slim::Utils::Unicode::encodingFromString($title);
-		 $title = Slim::Utils::Unicode::utf8decode_guess($title, $enc);
+		$title = Slim::Utils::Unicode::utf8decode_guess($title);
 
 		if ($class->playlistEntryIsValid($location, $url)) {
 
@@ -120,7 +119,7 @@ sub write {
 
 		if ($homeURL && $obj->cover) {
 
-			$track->image(sprintf('%s/music/%d/cover.jpg', $homeURL, $obj->id));
+			$track->image(sprintf('%s/music/%s/cover.jpg', $homeURL, $obj->coverid));
 		}
 
 		$track->location($obj->url);

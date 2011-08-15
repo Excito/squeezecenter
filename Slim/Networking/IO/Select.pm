@@ -1,6 +1,6 @@
 package Slim::Networking::IO::Select;
 
-# $Id: Select.pm 28762 2009-10-03 02:21:16Z andy $
+# $Id: Select.pm 32504 2011-06-07 12:16:25Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -142,8 +142,9 @@ sub _add {
 			main::PERFMON && Slim::Utils::PerfMon->check('io', AnyEvent->time - $now, undef, $cb);
 			
 			if ( $@ ) {
+				my $error = "$@";
 				my $func = Slim::Utils::PerlRunTime::realNameForCodeRef($cb);
-				logError("Select task failed calling $func: $@; fh=$fh");
+				logError("Select task failed calling $func: $error; fh=$fh");
 			}
 		},
 	);

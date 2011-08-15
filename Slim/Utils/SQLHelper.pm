@@ -1,6 +1,6 @@
 package Slim::Utils::SQLHelper;
 
-# $Id: SQLHelper.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: SQLHelper.pm 31775 2011-01-19 13:34:47Z ayoung $
 
 =head1 NAME
 
@@ -70,7 +70,7 @@ sub executeSQLFile {
 		next if $line =~ /^--/;
 		next if $line =~ /^\s*$/;
 
-		if ($line =~ /^\s*(?:ALTER|CREATE|USE|SET|INSERT|UPDATE|DELETE|DROP|SELECT|OPTIMIZE|TRUNCATE|UNLOCK|START|COMMIT)\s+/oi) {
+		if ($line =~ /^\s*(?:ANALYZE|ALTER|CREATE|USE|SET|INSERT|UPDATE|DELETE|DROP|SELECT|OPTIMIZE|TRUNCATE|UNLOCK|START|COMMIT)\b/oi) {
 			$inStatement = 1;
 		}
 

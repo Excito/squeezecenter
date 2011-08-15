@@ -1,6 +1,6 @@
 package Slim::Web::HTTP;
 
-# $Id: HTTP.pm 30695 2010-04-26 18:06:05Z agrundman $
+# $Id: HTTP.pm 32722 2011-07-16 15:00:26Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -9,6 +9,7 @@ package Slim::Web::HTTP;
 
 use strict;
 
+use AnyEvent::Handle;
 use CGI::Cookie;
 use Digest::SHA1 qw(sha1_base64);
 use FileHandle ();
@@ -395,7 +396,7 @@ sub processHTTP {
 		my $authorized = !$prefs->get('authorize');
 
 		if (my ($user, $pass) = $request->authorization_basic()) {
-			$authorized = checkAuthorization($user, $pass);
+			$authorized = checkAuthorization($user, $pass, $request);
 		}
 
 		# no Valid authorization supplied!
@@ -644,7 +645,7 @@ sub processHTTP {
 
 			$path =~ s|^/+||;
 
-			if ( !main::WEBUI || $path =~ m{^(?:html|music|plugins|apps|settings|firmware)/}i || Slim::Web::Pages->isRawDownload($path) ) {
+			if ( !main::WEBUI || $path =~ m{^(?:html|music|plugins|apps|settings|firmware|clixmlbrowser)/}i || Slim::Web::Pages->isRawDownload($path) ) {
 				# not a skin
 
 			} elsif ($path =~ m|^([a-zA-Z0-9]+)$| && $skinMgr->isaSkin($1)) {
@@ -814,8 +815,9 @@ sub processURL {
 
 	# is this an HTTP stream?
 	if (!defined($client) && ($path =~ /(?:stream\.mp3|stream)$/)) {
-	
-		my $address = $peeraddr{$httpClient};
+		
+		# Bug 14825, allow multiple stream.mp3 clients from the same address with a player param
+		my $address = $params->{player} || $peeraddr{$httpClient};
 	
 		main::INFOLOG && $log->is_info && $log->info("processURL found HTTP client at address=$address");
 	
@@ -1091,6 +1093,10 @@ sub generateHTTPResponse {
 
 			# if we match one of the page functions as defined above,
 			# execute that, and hand it a callback to send the data.
+			
+			$params->{'imageproxy'} = Slim::Networking::SqueezeNetwork->url(
+				"/public/imageproxy"
+			);
 
 			main::PERFMON && (my $startTime = AnyEvent->time);
 
@@ -1144,6 +1150,7 @@ sub generateHTTPResponse {
 			main::INFOLOG && $log->is_info && $log->info("Disabling keep-alive for stream.mp3");
 			delete $keepAlives{$httpClient};
 			Slim::Utils::Timers::killTimers( $httpClient, \&closeHTTPSocket );
+			$response->header( Connection => 'close' );
 
 			my $headers = _stringifyHeaders($response) . $CRLF;
 
@@ -1156,31 +1163,75 @@ sub generateHTTPResponse {
 		} elsif ($path =~ m{music/([^/]+)/(cover|thumb)} || 
 			$path =~ m{^plugins/cache/icons} || 
 			$path =~ /\/\w+_(X|\d+)x(X|\d+)
-	                        (?:_([sSfFpc]))?        # resizeMode, given by a single character
+	                        (?:_([mpsSfFco]))?        # resizeMode, given by a single character
 	                        (?:_[\da-fA-F]+)? 		# background color, optional
 				/x   # extend this to also include any image that gives resizing parameters
 			) {
 
 			main::PERFMON && (my $startTime = AnyEvent->time);
+			
+			# Bug 15723, We need to track if we have an async artwork request so 
+			# we don't return data out of order
+			my $async = 0;
+			my $sentResponse = 0;
 
-			($body, $mtime, $inode, $size, $contentType) = Slim::Web::Graphics::processCoverArtRequest(
+			($body, $mtime, $inode, $size, $contentType) = Slim::Web::Graphics::artworkRequest(
 				$client, 
 				$path, 
 				$params,
-				\&prepareResponseForSending,
+				sub {
+					$sentResponse = 1;
+					prepareResponseForSending(@_);
+					
+					if ( $async ) {
+						main::INFOLOG && $log->is_info && $log->info('Async artwork request done, enable read');
+						Slim::Networking::Select::addRead($httpClient, \&processHTTP);
+					}
+				},
 				$httpClient,
 				$response,
 			);
 			
+			# If artworkRequest did not directly call the callback, we are in an async request
+			if ( !$sentResponse ) {
+				main::INFOLOG && $log->is_info && $log->info('Async artwork request pending, pause read');
+				Slim::Networking::Select::removeRead($httpClient);
+				$async = 1;
+			}
+			
 			main::PERFMON && $startTime && Slim::Utils::PerfMon->check('web', AnyEvent->time - $startTime, "Page: $path");
+			
+			return;
+
+		# return quickly with a 404 if web UI is disabled
+		} elsif ( !main::WEBUI && (
+			   $path =~ /status\.m3u/
+			|| $path =~ /status\.txt/
+			|| $path =~ /(server|scanner|perfmon|log)\.(?:log|txt)/
+		) ) {
+			$response->content_type('text/html');
+			$response->code(RC_NOT_FOUND);
+		
+			$body = filltemplatefile('html/errors/404.html', $params);
+		
+			return prepareResponseForSending(
+				$client,
+				$params,
+				$body,
+				$httpClient,
+				$response,
+			);
 
 		} elsif ($path =~ /music\/(\d+)\/download/) {
 			# Bug 10730
+			my $id = $1;
+			
 			main::INFOLOG && $log->is_info && $log->info("Disabling keep-alive for file download");
 			delete $keepAlives{$httpClient};
 			Slim::Utils::Timers::killTimers( $httpClient, \&closeHTTPSocket );
+			$response->header( Connection => 'close' );
 
-			if ( main::WEBUI && Slim::Web::Pages::Common->downloadMusicFile($httpClient, $response, $1) ) {
+			if ( downloadMusicFile($httpClient, $response, $id) ) {
 				return 0;
 			}
 
@@ -1243,8 +1294,7 @@ sub generateHTTPResponse {
 				if ( $keepAlives{$httpClient} ) {
 					main::INFOLOG && $log->is_info && $log->info("Disabling keep-alive for raw file $file");
 					delete $keepAlives{$httpClient};
-					Slim::Utils::Timers::killTimers( $httpClient, \&closeHTTPSocket );
-					
+					Slim::Utils::Timers::killTimers( $httpClient, \&closeHTTPSocket );					
 					$response->header( Connection => 'close' );
 				}
 				
@@ -1431,6 +1481,9 @@ sub sendStreamingFile {
 	# we are not a real streaming session, so we need to avoid sendStreamingResponse using the random $client stored in
 	# $peerclient as this will cause streaming to the real client $client to stop.
 	delete $peerclient{$httpClient};
+	
+	# Disable metadata in case this client sent an Icy-Metadata header
+	$sendMetaData{$httpClient} = 0;
 
 	addStreamingResponse($httpClient, $headers);
 }
@@ -1569,6 +1622,9 @@ sub prepareResponseForSending {
 	my ($client, $params, $body, $httpClient, $response) = @_;
 
 	use bytes;
+	
+	# Trap empty content
+	$body ||= \'';
 
 	# Set the Content-Length - valid for either HEAD or GET
 	$response->content_length(length($$body));
@@ -1696,7 +1752,7 @@ sub addHTTPResponse {
 			# add a last empty chunk if we're closing the connection or if there's nothing more
 			if ($close || !$more) {
 				
-				$outbuf .= '0' . $CRLF;
+				$outbuf .= '0' . $CRLF . $CRLF;
 			}
 
 		} else {
@@ -1719,7 +1775,7 @@ sub addHTTPLastChunk {
 	my $httpClient = shift;
 	my $close = shift;
 	
-	my $emptychunk = "0" . $CRLF;
+	my $emptychunk = "0" . $CRLF . $CRLF;
 
 	push @{$outbuf{$httpClient}}, {
 		'data'     => \$emptychunk,
@@ -1771,13 +1827,9 @@ sub sendResponse {
 		$sentbytes = syswrite($httpClient, ${$segment->{'data'}}, $segment->{'length'}, $segment->{'offset'});
 	}
 
-	if ($! == EWOULDBLOCK) {
-
+	if (!defined $sentbytes && $! == EWOULDBLOCK) {
 		main::INFOLOG && $log->is_info && $log->info("Would block while sending. Resetting sentbytes for: $peeraddr{$httpClient}:$port");
-
-		if (!defined $sentbytes) {
-			$sentbytes = 0;
-		}
+		$sentbytes = 0;
 	}
 
 	if (!defined($sentbytes)) {
@@ -1911,8 +1963,9 @@ sub sendStreamingResponse {
 	
 	# when we are streaming a file, we may not have a client, rather it might just be going to a web browser.
 	# assert($client);
-
-	my $segment = shift(@{$outbuf{$httpClient}});
+	
+	my $outbuf = $outbuf{$httpClient};
+	my $segment = shift(@$outbuf);
 	my $streamingFile = $streamingFiles{$httpClient};
 
 	my $silence = 0;
@@ -1929,36 +1982,19 @@ sub sendStreamingResponse {
 		main::DEBUGLOG && $log->is_debug && $log->debug( "  range request, sending $rangeTotal bytes ($rangeCounter sent)" );
 	}
 
-	if ($client && 
-			$client->isa("Slim::Player::Squeezebox") && 
-			defined($httpClient) &&
-			(!defined($client->streamingsocket()) || $httpClient != $client->streamingsocket())
-		) {
-
-		if ( main::INFOLOG && $isInfo ) {
-			$log->info($client->id . " We're done streaming this socket to client");
-		}
-
-		closeStreamingSocket($httpClient);
-		return;
-	}
-	
-	if (!$httpClient->connected()) {
+	if (   !$httpClient->connected()
+		|| ($client && $client->isa("Slim::Player::Squeezebox")
+			&& (   !defined($client->streamingsocket())
+			    || $httpClient != $client->streamingsocket()
+				|| (!$streamingFile && $client->isStopped()) # XXX is the !$streamingFile test superfluous
+				)
+			)
+		)
+	{
+		main::INFOLOG && $isInfo &&
+			$log->info(($client ? $client->id : ''), " Streaming connection closed");
 
 		closeStreamingSocket($httpClient);
-
-		main::INFOLOG && $isInfo && $log->info("Streaming client closed connection...");
-
-		return undef;
-	}
-	
-	if (!$streamingFile && $client && $client->isa("Slim::Player::Squeezebox") && 
-		$client->isStopped()) {
-
-		closeStreamingSocket($httpClient);
-
-		main::INFOLOG && $isInfo && $log->info("Squeezebox closed connection...");
-
 		return undef;
 	}
 	
@@ -1994,7 +2030,7 @@ sub sendStreamingResponse {
 				'length' => length($$silence)
 			);
 
-			unshift @{$outbuf{$httpClient}}, \%segment;
+			unshift @$outbuf, \%segment;
 
 		} else {
 			my $chunkRef;
@@ -2052,11 +2088,12 @@ sub sendStreamingResponse {
 						'length' => length($$chunkRef)
 					);
 	
-					unshift @{$outbuf{$httpClient}},\%segment;
+					unshift @$outbuf,\%segment;
 					
 				} else {
 					main::INFOLOG && $log->info("Found an empty chunk on the queue - dropping the streaming connection.");
 					forgetClient($client);
+					return undef;
 				}
 
 			} else {
@@ -2068,14 +2105,12 @@ sub sendStreamingResponse {
 				
 				Slim::Networking::Select::removeWrite($httpClient);
 				
-				if ( $httpClient->connected() ) {
-					Slim::Utils::Timers::setTimer($client, Time::HiRes::time() + $retry, \&tryStreamingLater,($httpClient));
-				}
+				Slim::Utils::Timers::setTimer($client, Time::HiRes::time() + $retry, \&tryStreamingLater,($httpClient));
 			}
 		}
 
 		# try again...
-		$segment = shift(@{$outbuf{$httpClient}});
+		$segment = shift(@$outbuf);
 	}
 	
 	# try to send metadata, if appropriate
@@ -2086,7 +2121,7 @@ sub sendStreamingResponse {
 
 		if ($metaDataBytes{$httpClient} == METADATAINTERVAL) {
 
-			unshift @{$outbuf{$httpClient}}, $segment;
+			unshift @$outbuf, $segment;
 
 			my $url = Slim::Player::Playlist::url($client);
 
@@ -2125,7 +2160,7 @@ sub sendStreamingResponse {
 			$splitsegment{'offset'} += $splitpoint;
 			$splitsegment{'length'} -= $splitpoint;
 			
-			unshift @{$outbuf{$httpClient}}, \%splitsegment;
+			unshift @$outbuf, \%splitsegment;
 			
 			#only send the first part
 			$segment->{'length'} = $splitpoint;
@@ -2141,15 +2176,15 @@ sub sendStreamingResponse {
 		}
 	}
 
-	if (defined($segment) && $httpClient->connected()) {
+	if (defined($segment)) {
 
 		use bytes;
 
 		my $prebytes = $segment->{'length'};
 		$sentbytes   = syswrite($httpClient, ${$segment->{'data'}}, $segment->{'length'}, $segment->{'offset'});
 
-		if ($! == EWOULDBLOCK) {
-			$sentbytes = 0 unless defined $sentbytes;
+		if (!defined $sentbytes && $! == EWOULDBLOCK) {
+			$sentbytes = 0;
 		}
 
 		if (defined($sentbytes)) {
@@ -2165,7 +2200,7 @@ sub sendStreamingResponse {
 				$segment->{'length'} -= $sentbytes;
 				$segment->{'offset'} += $sentbytes;
 
-				unshift @{$outbuf{$httpClient}},$segment;
+				unshift @$outbuf,$segment;
 			}
 
 		} else {
@@ -2207,16 +2242,17 @@ sub tryStreamingLater {
 	my $client     = shift;
 	my $httpClient = shift;
 
-	if ( $httpClient == $client->streamingsocket() ) {
+	if ( defined $client->streamingsocket() && $httpClient == $client->streamingsocket() ) {
 
 		# Bug 10085 - This might be a callback for an old connection  
 		# which we decided to close after establishing the timer, so
 		# only kill the timer if we were called for the active streaming connection;
 		# otherwise we might kill the timer related to the next connection too.
 		Slim::Utils::Timers::killTimers($client, \&tryStreamingLater);
-		
-		Slim::Networking::Select::addWrite($httpClient, \&sendStreamingResponse, 1);
 	}
+
+	# Bug 14740 - always call sendStreamingResponse so we ensure the socket gets closed
+	Slim::Networking::Select::addWrite($httpClient, \&sendStreamingResponse, 1);
 }
 
 sub forgetClient {
@@ -2308,6 +2344,7 @@ sub closeStreamingSocket {
 sub checkAuthorization {
 	my $username = shift;
 	my $password = shift;
+	my $request = shift;
 
 	my $ok = 0;
 
@@ -2337,6 +2374,13 @@ sub checkAuthorization {
 				$ok = (crypt($password, $salt) eq $pwd);
 			}
 		}
+		
+		# Check for scanner progress request
+		if ( !$ok && $pwd eq $password ) {
+			if ( $request->header('X-Scanner') ) {
+				$ok = 1;
+			}
+		}
 
 	} else {
 
@@ -2358,8 +2402,10 @@ sub checkAuthorization {
 sub addCloseHandler{
 	my $funcPtr = shift;
 	
-	my $funcName = Slim::Utils::PerlRunTime::realNameForCodeRef($funcPtr);
-	main::INFOLOG && $log->is_info && $log->info("Adding Close handler: $funcName");
+	if ( main::INFOLOG && $log->is_info ) {
+		my $funcName = Slim::Utils::PerlRunTime::realNameForCodeRef($funcPtr);
+		$log->info("Adding Close handler: $funcName");
+	}
 	
 	push @closeHandlers, $funcPtr;
 }
@@ -2435,6 +2481,201 @@ sub protect { if ( main::WEBUI ) {
 	logBacktrace("Slim::Web::HTTP::protect() is deprecated - please use Slim::Web::HTTP::CSRF->protect() instead");
 	Slim::Web::HTTP::CSRF->protect(@_);
 } }
+
+sub downloadMusicFile {
+	my ($httpClient, $response, $id) = @_;
+
+	my $obj = Slim::Schema->find('Track', $id);
+
+	if (blessed($obj) && Slim::Music::Info::isSong($obj) && Slim::Music::Info::isFile($obj->url)) {
+		
+		# Bug 8808, support transcoding if a file extension is provided
+		my $uri    = $response->request->uri;
+		my $isHead = $response->request->method eq 'HEAD';
+		
+		if ( my ($outFormat) = $uri =~ m{download\.([^\?]+)} ) {				
+			$outFormat = 'flc' if $outFormat eq 'flac';
+			
+			if ( $obj->content_type ne $outFormat ) {
+				if ( main::TRANSCODING ) {
+					# Also support LAME bitrate/quality
+					my ($bitrate) = $uri =~ m{bitrate=(\d+)};
+					my ($quality) = $uri =~ m{quality=(\d)};
+					$quality = 9 unless $quality =~ /^[0-9]$/;
+				
+					my ($transcoder, $error) = Slim::Player::TranscodingHelper::getConvertCommand2(
+						$obj,
+						undef, # content-type will be determined from $obj
+						['F'], # File stream mode
+						[],
+						[],
+						$outFormat,
+						$bitrate || 0,
+					);
+				
+					if ( !$transcoder ) {
+						$log->error("Couldn't transcode " . $obj->url . " to $outFormat: $error");
+					
+						$response->code(400);					
+						addHTTPResponse($httpClient, $response, \'', 1, 0);
+						return 1;
+					}
+		
+					my $command = Slim::Player::TranscodingHelper::tokenizeConvertCommand2(
+						$transcoder, $obj->path, $obj->url, undef, $quality
+					);
+				
+					if ( !$command ) {
+						$log->error("Couldn't create transcoder command-line for " . $obj->url . " to $outFormat");
+					
+						$response->code(400);					
+						addHTTPResponse($httpClient, $response, \'', 1, 0);
+						return 1;
+					}
+				
+					my $in;
+					my $out;
+					my $done = 0;
+					
+					if ( !$isHead ) {
+						main::INFOLOG && $log->is_info && $log->info("Opening transcoded download (" . $transcoder->{profile} . "), command: $command");
+						
+						# Bug: 4318
+						# On windows ensure a child window is not opened if $command includes transcode processes
+						if (main::ISWINDOWS) {
+							Win32::SetChildShowWindow(0);
+						 	$in = FileHandle->new;
+							my $pid = $in->open($command);
+					
+							# XXX Bug 15650, this sets the priority of the cmd.exe process but not the actual
+							# transcoder process(es).
+							my $handle;
+							if ( Win32::Process::Open( $handle, $pid, 0 ) ) {
+								$handle->SetPriorityClass( Slim::Utils::OS::Win32::getPriorityClass() || Win32::Process::NORMAL_PRIORITY_CLASS() );
+							}
+					
+							Win32::SetChildShowWindow();
+						} else {
+							$in = FileHandle->new($command);
+						}
+					
+						Slim::Utils::Network::blocking($in, 0);
+					}
+				
+					$response->content_type( $Slim::Music::Info::types{$outFormat} );
+				
+					# Tell client range requests are not supported
+					$response->header( 'Accept-Ranges' => 'none' );
+					
+					my $filename = Slim::Utils::Misc::pathFromFileURL($obj->url);
+					$filename =~ s/\..+$/\.$outFormat/;
+					$response->header('Content-Disposition', 
+						sprintf('attachment; filename="%s"', basename($filename))
+					);
+				
+					my $is11 = $response->request->protocol eq 'HTTP/1.1';
+				
+					if ($is11) {
+						# Use chunked TE for HTTP/1.1 clients
+						$response->header( 'Transfer-Encoding' => 'chunked' );
+					}
+				
+					my $headers = _stringifyHeaders($response) . $CRLF;
+
+					# non-blocking stream $pipeline to $httpClient
+					my $writer; $writer = sub {
+						if ($headers) {
+							syswrite $httpClient, $headers;
+							undef $headers;
+							
+							if ($isHead) {
+								$done = 1;
+							}
+						}
+						
+						if ($done) {
+							$out && $out->destroy;
+							$in && $in->close;
+							
+							if ( $httpClient->opened() ) {
+								closeHTTPSocket($httpClient);
+							}
+							return;
+						}
+					
+						if ($in) {
+							# Try to read some data from the pipeline
+							my $len = sysread $in, my $buf, 32 * 1024;
+							if ( !defined $len ) {
+								my $w; $w = AnyEvent->io( fh => $in, poll => 'r', cb => sub {
+									undef $w;
+									$in && $writer->();
+								} );
+							}
+							elsif ( $len == 0 ) {
+								$done = 1;
+						
+								if ($is11) {
+									# Add last empty chunk
+									$out->push_write( '0' . $CRLF . $CRLF );
+								}
+							}
+							else {
+								if ($is11) {
+									$out->push_write( sprintf("%X", length($buf)) . $CRLF . $buf . $CRLF );
+								}
+								else {
+									$out->push_write($buf);
+								}
+							}
+						}
+					};
+					
+					$out = AnyEvent::Handle->new(
+						fh         => $httpClient,
+						linger     => 0,
+						timeout    => 300,
+						on_timeout => sub {
+							main::INFOLOG && $log->is_info && $log->info("Timing out transcoded download for $httpClient");
+							$done = 1;
+							$writer->();
+						},
+						on_error   => sub {
+							my ($hdl, $fatal, $msg) = @_;
+							main::INFOLOG && $log->is_info && $log->info("Transcoded download error: $msg");
+							$done = 1;
+							$writer->();
+						},						    
+					);
+					
+					# Bug 17212, Must add callback after object creation - references to $out within the $writer callback were
+					# failing when the on_drain callback was passed as a constructor argument
+					$out->on_drain($writer);
+				
+					return 1;
+				}
+				else {
+					# Transcoding is not enabled, return 400
+					$log->error("Transcoding is not enabled for " . $obj->url . " to $outFormat");
+				
+					$response->code(400);					
+					addHTTPResponse($httpClient, $response, \'', 1, 0);
+					return 1;
+				}
+			}
+		}
+		
+		main::INFOLOG && $log->is_info && $log->info("Opening $obj for download...");
+			
+		my $ct = $Slim::Music::Info::types{$obj->content_type()};
+			
+		Slim::Web::HTTP::sendStreamingFile( $httpClient, $response, $ct, Slim::Utils::Misc::pathFromFileURL($obj->url) );
+			
+		return 1;
+	}
+	
+	return;
+}
 
 1;
 

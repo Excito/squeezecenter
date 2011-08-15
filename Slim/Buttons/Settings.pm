@@ -31,7 +31,7 @@ if ( !main::SLIM_SERVICE ) {
 
 my $prefs = preferences('server');
 
-our @defaultSettingsChoices = qw(SHUFFLE REPEAT ALARM SYNCHRONIZE PLAYLIST_MODE AUDIO_SETTINGS DISPLAY_SETTINGS);
+our @defaultSettingsChoices = qw(SHUFFLE REPEAT ALARM SYNCHRONIZE AUDIO_SETTINGS DISPLAY_SETTINGS);
 
 if ( main::SLIM_SERVICE ) {
 	push @defaultSettingsChoices, qw(
@@ -222,7 +222,7 @@ sub init {
 							'initialValue' => sub { return $_[0]->stereoxl() },
 							'condition'   => sub {
 								my $client = shift;
-								return $client->can('maxXL') ? $client->maxXL() - $client->minXL() : 0;
+								return $client->maxXL() - $client->minXL();
 							},
 						},
 
@@ -247,7 +247,7 @@ sub init {
 							'initialValue' => sub { $prefs->client(shift)->get('lineInLevel') },
 							'condition'    => sub {
 								my $client = shift;
-								return $client->isa('Slim::Player::Boom') && Slim::Utils::PluginManager->isEnabled('Slim::Plugin::LineIn::Plugin');
+								return $client->can('setLineIn') && Slim::Utils::PluginManager->isEnabled('Slim::Plugin::LineIn::Plugin');
 							},
 						},
 
@@ -272,7 +272,7 @@ sub init {
 							'initialValue' => sub { $prefs->client(shift)->get('lineInAlwaysOn') },
 							'condition'    => sub {
 								my $client = shift;
-								return $client->isa('Slim::Player::Boom') && Slim::Utils::PluginManager->isEnabled('Slim::Plugin::LineIn::Plugin');
+								return $client->can('setLineIn') && Slim::Utils::PluginManager->isEnabled('Slim::Plugin::LineIn::Plugin');
 							},
 						},
 				
@@ -416,7 +416,12 @@ sub init {
 							'useMode'      => 'INPUT.Choice',
 							'header'       => '{TEXTSIZE}',
 							'headerAddCount' => 1,
-							'onChange'     => \&setPref,
+							# to display the font options, we temporarily set the activeFont pref to the current selection and then reset the pref in exit callback
+							'onChange'     => sub { $prefs->client($_[0])->set('activeFont_curr', $_[1]->{'value'}) },
+							'onPlay'       => sub { $_[0]->modeParam('settextsize', $_[1]->{'value'}) },
+							'onAdd'        => sub { $_[0]->modeParam('settextsize', $_[1]->{'value'}) },
+							'overlayRef'   => sub { [undef, Slim::Buttons::Common::radioButtonOverlay($_[0], $_[1]->{'value'} eq $_[0]->modeParam('settextsize')) ] },
+							'overlayRefArgs' => 'CV',
 							'pref'         => 'activeFont_curr',
 							'initialValue' => sub { $prefs->client(shift)->get('activeFont_curr') },
 							'condition'    => sub { $_[0]->display->isa('Slim::Display::Graphics'); },
@@ -435,7 +440,21 @@ sub init {
 								}
 		
 								$client->modeParam('listRef', \@fonts);
-							}
+								$client->modeParam('settextsize', $prefs->client($client)->get('activeFont_curr'));
+							},
+							'callback'      => sub {
+								my $client = shift;
+								my $action = shift;
+								if ($action eq 'right') {
+									my $valref = $client->modeParam('valueRef');
+									$client->modeParam('settextsize', $$valref->{'value'});
+									$client->update;
+								}
+								if ($action eq 'left') {
+									setPref($client, $client->modeParam('settextsize'));
+									Slim::Buttons::Common::popModeRight($client);
+								}
+							},
 						},
 
 						# Brightness submenus
@@ -764,44 +783,6 @@ sub init {
 					'subcommand'   => 'shuffle',
 				},
 	
-				
-				# Bugs: 13896, 13689, 8878
-				# playlist/party mode is in conflict with 7.4 touch/press-to-play behavior
-				# fix for bug 13689 will be the complete fix, but for now remove playlistModeSettings from ip3K menus entirely
-				#
-				# if/when playlist/party mode is taken out, so too can this commented code be stripped out
-				#'PLAYLIST_MODE'          => {
-				#	'useMode'      => 'INPUT.Choice',
-				#	'listRef'      => [
-				#		{
-				#			name   => '{PLAYLIST_MODE_DISABLED}',
-				#			value  => 'disabled',
-				#		},
-				#		{
-				#			name   => '{PLAYLIST_MODE_OFF}',
-				#			value  => 'off',
-				#		},
-				#		{
-				#			name   => '{PLAYLIST_MODE_ON}',
-				#			value  => 'on',
-				#		},
-				#		{
-				#			name   => '{PARTY_MODE_ON}',
-				#			value  => 'party',
-				#		},
-				#	],
-				#	'onPlay'        => \&executeCommand,
-				#	'onAdd'         => \&executeCommand,
-				#	'onRight'       => \&executeCommand,
-				#	'header'        => '{PLAYLIST_MODE}',
-				#	'headerAddCount'=> 1,
-				#	'condition'     => sub { 1 },
-				#	'pref'          => sub{ return Slim::Player::Playlist::playlistMode(shift)},
-				#	'initialValue'  => sub{ return Slim::Player::Playlist::playlistMode(shift)},
-				#	'command'       => 'playlistmode',
-				#	'subcommand'    => 'set',
-				#},
-		
 				'SYNCHRONIZE' => {
 					'useMode'   => 'synchronize',
 					'condition' => sub {

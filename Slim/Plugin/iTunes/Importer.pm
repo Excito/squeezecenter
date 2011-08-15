@@ -56,6 +56,7 @@ sub initPlugin {
 
 	Slim::Music::Import->addImporter($class, {
 		'type'         => 'file',
+		'weight'       => 20,
 		'reset'        => \&resetState,
 		'playlistOnly' => 1,
 		'use'          => $prefs->get('itunes'),
@@ -127,6 +128,7 @@ sub _getTotalCount {
 
 	my $count = 0;
 
+	local $_;
 	while(<XML>) {
 
 		if (/<key>$type/) {
@@ -186,6 +188,9 @@ sub startScan {
 	main::INFOLOG && $log->info("Finished scanning iTunes XML");
 
 	$class->doneScanning;
+	
+	# XXX return number of changes made
+	return 1;
 }
 
 sub doneScanning {

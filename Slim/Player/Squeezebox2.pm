@@ -1,6 +1,6 @@
 package Slim::Player::Squeezebox2;
 
-# $Id: Squeezebox2.pm 31559 2010-11-30 21:44:39Z agrundman $
+# $Id: Squeezebox2.pm 31864 2011-01-28 11:56:54Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -50,6 +50,7 @@ our $defaultPrefs = {
 	'snLastSyncUp'       => -1,
 	'snLastSyncDown'     => -1,
 	'snSyncInterval'     => 30,
+	'outputChannels'     => 0,
 };
 
 # Keep track of direct stream redirects
@@ -82,7 +83,8 @@ sub maxTransitionDuration { 10 };
 sub canDecodeRhapsody { 1 };
 sub hasPreAmp { 1 };
 sub hasDisableDac { 1 };
-sub hasServ { 1 }; 
+sub hasServ { 1 };
+sub hasOutputChannels { 1 }
 
 # SN only, this checks that the player's firmware version supports compression
 sub hasCompression {
@@ -91,7 +93,7 @@ sub hasCompression {
 
 # Do we have support for client-side scrolling?
 sub hasScrolling {
-	return shift->revision >= 131;
+	return shift->revision >= 135;
 }
 
 sub model {
@@ -156,6 +158,7 @@ sub statHandler {
 	} elsif ($code eq 'STMc') {
 		$client->readyToStream(0);
 		$client->bufferReady(0);
+		$client->connecting(1);	# reset in Slim::Networking::Slimproto::_http_response_handler() upon connection establishment
 	} elsif ($code eq 'STMs') {
 		$client->controller()->playerTrackStarted($client);
 	} elsif ($code eq 'STMo') {
@@ -416,9 +419,8 @@ sub songElapsedSeconds {
 
 	# Ignore values sent by the client if we're in the stopped
 	# state, since they may be out of sync.
-	if (defined($_[0]) && 
-	    Slim::Player::Source::playmode($client) eq 'stop') {
-		$client->SUPER::songElapsedSeconds(0);
+	if (defined($_[0]) && $client->isStopped()) {
+		return $client->SUPER::songElapsedSeconds(0);
 	}
 
 	return $client->SUPER::songElapsedSeconds(@_);
@@ -449,16 +451,12 @@ sub directHeaders {
 	my $controller = $client->controller()->songStreamController();
 	my $handler    = $controller ? $controller->protocolHandler() : undef;
 	
-	if ($handler) {
+	if ($handler && $handler->can('handlesStreamHeaders')) {
 
-		if ($handler->can('handlesStreamHeaders')) {
-			$handler->handlesStreamHeaders($client);
-		}
-
-		if ($handler->can('handlesStreamHeadersFully')) {
-			$handler->handlesStreamHeadersFully($client, $headers);
+		if ($handler->handlesStreamHeaders($client, $headers)) {
 			return;
 		}
+
 	}
 
 	unless ($controller && $controller->isDirect()) {return;}
@@ -802,7 +800,7 @@ sub failedDirectStream {
 	if (!$controller) {return;}
 
 	my $url = $controller->streamUrl();
-	$directlog->warn("Oh, well failed to do a direct stream for: $url [$error]");
+	$directlog->warn("Oh, well failed to do a direct stream for: $url: ", ($error || ''));
 
 	$client->directBody(undef);
 	
@@ -929,7 +927,7 @@ sub setPlayerSetting {
 
 	my $currpref = $pref_settings->{$pref};
 	
-	my $status = $client->pendingPrefChanges()->{$pref};
+	my $status = $client->pendingPrefChanges()->{$pref} || 0;
 
 	# Only send a setd packet to the player if it is stopped and we are not
 	# still waiting for a response to a previous setd packet for this pref
@@ -987,7 +985,7 @@ sub playerSettingsFrame {
 			}
 		}
 		else {
-			$value = Slim::Utils::Unicode::utf8on($value) if $pref eq 'playername'; 
+			utf8::decode($value) if $pref eq 'playername'; 
 			$prefs->client($client)->set( $pref, $value );
 		}
 	}

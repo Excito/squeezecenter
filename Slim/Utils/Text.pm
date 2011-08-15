@@ -3,7 +3,7 @@
 
 package Slim::Utils::Text;
 
-# $Id: Text.pm 26931 2009-06-07 03:53:36Z michael $
+# $Id: Text.pm 32470 2011-05-25 14:15:14Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -13,6 +13,7 @@ package Slim::Utils::Text;
 use strict;
 
 use Slim::Utils::Prefs;
+use Slim::Utils::Unicode;
 
 my $prefs = preferences('server');
 
@@ -132,6 +133,7 @@ strip out characters beyond U+FFFF as MySQL doesn't like them in TEXT fields.
 
 sub ignoreCaseArticles {
 	my $s = shift;
+	my $transliterate = shift;
 
 	if (!defined $s) {
 		return undef;
@@ -145,22 +147,31 @@ sub ignoreCaseArticles {
 	if (scalar keys %caseArticlesCache > 256) {
 		%caseArticlesCache = ();
 	}
+	
+	my $key = $s . ($transliterate ? '1' : '0');
 
-	if (!$caseArticlesCache{$s}) {
+	if (!$caseArticlesCache{$key}) {
 
 		use locale;
-
-		$caseArticlesCache{$s} = ignorePunct(ignoreArticles(uc($s)));
+		
+		my $value = ignorePunct(ignoreArticles(uc($s)));
 
 		# Remove characters beyond U+FFFF as MySQL doesn't like them in TEXT fields
-		$caseArticlesCache{$s} =~ s/[\x{10000}-\x{10ffff}]//g;
+		$value =~ s/[\x{10000}-\x{10ffff}]//g;
 
 		# strip leading & trailing spaces
-		$caseArticlesCache{$s} =~ s/^ +//o;
-		$caseArticlesCache{$s} =~ s/ +$//o;
+		$value =~ s/^ +//o;
+		$value =~ s/ +$//o;
+		
+		if ($transliterate) {
+			# Bug 16956, Transliterate Unicode characters
+			$value = Slim::Utils::Unicode::utf8toLatin1Transliterate($value);
+		}
+		
+		$caseArticlesCache{$key} = $value;
 	}
 
-	return $caseArticlesCache{$s};
+	return $caseArticlesCache{$key};
 }
 
 =head2 clearCaseArticleCache()
@@ -194,7 +205,7 @@ sub searchStringSplit {
 
 	# normalize the string
 	$search = Slim::Utils::Unicode::utf8decode_locale($search);
-	$search = ignoreCaseArticles($search);
+	$search = ignoreCaseArticles($search, 1);
 
 	my @strings = ();
 

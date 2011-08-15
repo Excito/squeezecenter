@@ -5,7 +5,7 @@ package Slim::Display::Lib::Fonts;
 # modify it under the terms of the GNU General Public License,
 # version 2.
 #
-# $Id: Fonts.pm 28348 2009-08-29 03:14:32Z andy $
+# $Id: Fonts.pm 31872 2011-02-02 07:07:07Z ayoung $
 #
 
 =head1 NAME
@@ -45,7 +45,11 @@ use Slim::Utils::Misc;
 use Slim::Utils::OSDetect;
 use Slim::Utils::Prefs;
 
+use constant FT_RENDER_MODE_MONO => 2;
+
 my $prefs = preferences('server');
+
+my $log = logger('player.fonts');
 
 our $fonts;
 our $fonthash;
@@ -60,24 +64,36 @@ my $maxLines = 3; # Max lines any display will render
 # Keep a cache of measure text results to avoid calling string which is expensive
 my %measureTextCache;
 
-# TrueType support by using GD
-my $canUseGD = eval {
-	require GD;
-	return 1;
-};
-
 # Hebrew support
-my $canUseHebrew = eval {
-	require Locale::Hebrew;
-	return 1;
+my $hasHebrew;
+my $canUseHebrew = sub {
+	return $hasHebrew if defined $hasHebrew;
+	main::DEBUGLOG && $log->debug('Loading Locale::Hebrew');
+	eval { require Locale::Hebrew };
+	if ($@) {
+		logWarning("Unable to load Hebrew support: $@");
+	}
+	$hasHebrew = $@ ? 0 : 1;
+	return $hasHebrew;
 };
 
-my $gdError = $@;
+my $hasFreeType;
+my $canUseFreeType = sub {
+	return $hasFreeType if defined $hasFreeType;
+	main::DEBUGLOG && $log->debug('Loading Font::FreeType');
+	eval { require Font::FreeType };
+	if ($@) {
+		logWarning("Unable to load TrueType font support: $@");
+	}
+	$hasFreeType = $@ ? 0 : 1;
+	return $hasFreeType;
+};
 
-my ($gd, $GDBlack, $GDWhite, $TTFFontFile, $useTTFCache, $useTTF, $FreeSans);
+my ($ft, $TTFFontFile);
 
 # Keep a cache of up to 256 characters at a time.
 tie my %TTFCache, 'Tie::Cache::LRU', 256;
+%TTFCache = ();
 
 # template for unpacking strings: U - unpacks Unicode chars into ords, C - is needed for 5.6 perl's
 my $unpackTemplate = ($] > 5.007) ? 'U*' : 'C*';
@@ -95,36 +111,36 @@ my %font2TTF = (
 
 	# The standard size - .1 is top line, .2 is bottom.
 	'standard.1' => {
-		'GDFontSize' => 9,
-		'GDBaseline' => 8,
+		'FTFontSize' => 9, # Code2000: max ascender 14, max descender 4
+		'FTBaseline' => 8,
 	},
 
 	'standard.2' => {
-		'GDFontSize' => 14,
-		'GDBaseline' => 28,
+		'FTFontSize' => 14, # Code2000: max ascender 19, max descender 6
+		'FTBaseline' => 28,
 	},
 
 	 # Small size - .1 is top line, .2 is bottom.
 	'light.1' => {
-		'GDFontSize' => 10,
-		'GDBaseline' => 10,
+		'FTFontSize' => 10, # Code2000: max ascender 14, max descender 4
+		'FTBaseline' => 10,
 	},
 
 	'light.2' => {
-		'GDFontSize' => 11,
-		'GDBaseline' => 29,
+		'FTFontSize' => 11, # Code2000: max ascender 15, max descender 5
+		'FTBaseline' => 29,
 	},
 
 	# Huge - only one line.
 	'full.2' => {
-		'GDFontSize' => 24,
-		'GDBaseline' => 26,
+		'FTFontSize' => 24, # Code2000: max ascender 32, max descender 10
+		'FTBaseline' => 25,
 	},
 
 	# text for push on/off in fullscreen visu.
 	'high.2' => {
-		'GDFontSize' => 7,
-		'GDBaseline' => 7,
+		'FTFontSize' => 7,
+		'FTBaseline' => 7,
 	},
 );
 
@@ -185,8 +201,6 @@ my %cp1252mapping = (
 
 my $cp1252re = qr/(\x{0152}|\x{0153}|\x{0160}|\x{0161}|\x{0178}|\x{017D}|\x{017E}|\x{0192}|\x{02C6}|\x{02DC}|\x{2013}|\x{2014}|\x{2018}|\x{2019}|\x{201A}|\x{201C}|\x{201D}|\x{201E}|\x{2020}|\x{2021}|\x{2022}|\x{2026}|\x{2030}|\x{2039}|\x{203A}|\x{20AC}|\x{2122})/;
 
-my $log = logger('player.fonts');
-
 my $initialized = 0;
 
 sub init {
@@ -197,63 +211,19 @@ sub init {
 	
 	loadFonts();
 
-	if ( main::INFOLOG && $log->is_info ) {
-		$log->info(sprintf("Trying to load GD Library for TTF support: %s", $canUseGD ? 'ok' : 'not ok!'));
-	}
+	FONTDIRS:
+	for my $fontFolder (graphicsDirs()) {
 
-	if ($canUseGD) {
+		# Try a few different fonts..
+		for my $fontFile (qw(arialuni.ttf ARIALUNI.TTF CODE2000.TTF Cyberbit.ttf CYBERBIT.TTF)) {
+	
+			my $file = catdir($fontFolder, $fontFile);
 
-		FONTDIRS:
-		for my $fontFolder (graphicsDirs()) {
-
-			# Try a few different fonts..
-			for my $fontFile (qw(arialuni.ttf ARIALUNI.TTF CODE2000.TTF Cyberbit.ttf CYBERBIT.TTF)) {
-		
-				$TTFFontFile = catdir($fontFolder, $fontFile);
-
-				if (-e $TTFFontFile) {
-					$useTTF = 1;
-					last FONTDIRS;
-				}
+			if (-e $file) {
+				$TTFFontFile = $file;
+				last FONTDIRS;
 			}
 		}
-		
-		# Look for the preferred hebrew font, FreeSans
-		FREESANS:
-		for my $fontFolder (graphicsDirs()) {
-			my $freeSansPath = catdir($fontFolder, 'FreeSans.ttf');
-			if (-e $freeSansPath) {
-				$FreeSans = $freeSansPath;
-				$useTTF = 1;
-				last FREESANS;
-			}
-		}
-			
-		if ($useTTF) {
-
-			main::INFOLOG && $log->info("Using TTF for Unicode on Player Display. Font: [$TTFFontFile]");
-	
-			$useTTFCache = 1;
-			%TTFCache    = ();
-	
-			# This should be configurable.
-			$gd = eval { GD::Image->new(32, 32) };
-	
-			if ($gd) {
-
-				$GDWhite = $gd->colorAllocate(255,255,255);
-				$GDBlack = $gd->colorAllocate(0,0,0);
-
-			} else {
-
-				$useTTF = 0;
-
-			}
-		}	
-
-	} else { 
-
-		main::INFOLOG && $log->info("Error while trying to load GD Library: [$gdError]");
 	}
 }
 
@@ -341,26 +311,28 @@ sub string {
 		return (0, $bits);
 	}
 
-	my ($GDFontSize, $GDBaseline);
+	my ($FTFontSize, $FTBaseline);
 	my $useTTFNow = 0;
 	my $reverse = 0; # flag for whether the text was reversed (Bidi:R)
-
-	if ($useTTF && defined $font2TTF{$defaultFontname}) {
-		$useTTFNow  = 1;
-		$GDFontSize = $font2TTF{$defaultFontname}->{'GDFontSize'};
-		$GDBaseline = $font2TTF{$defaultFontname}->{'GDBaseline'};
-
-		# If the string contains any Unicode characters which exist in our bitmap,
-		# use the bitmap version instead of the TTF version
-		# http://forums.slimdevices.com/showthread.php?t=42087
-		if ( $string =~ /[\x{0152}-\x{2122}]/ ) {
-			$string =~ s/$cp1252re/$cp1252mapping{$1}/ego;
-		}
-	}
 
 	my @ords = unpack($unpackTemplate, $string);
 
 	if (@ords && max(@ords) > 255) {
+		
+		if ($TTFFontFile && exists $font2TTF{$defaultFontname} && $canUseFreeType->()) {
+			$useTTFNow  = 1;
+			$FTFontSize = $font2TTF{$defaultFontname}->{'FTFontSize'};
+			$FTBaseline = $font2TTF{$defaultFontname}->{'FTBaseline'};
+			
+			$ft ||= Font::FreeType->new->face($TTFFontFile);
+
+			# If the string contains any Unicode characters which exist in our bitmap,
+			# use the bitmap version instead of the TTF version
+			# http://forums.slimdevices.com/showthread.php?t=42087
+			if ( $string =~ /[\x{0152}-\x{2122}]/ ) {
+				$string =~ s/$cp1252re/$cp1252mapping{$1}/ego;
+			}
+		}
 
 		if ($useTTFNow) {
 
@@ -371,7 +343,7 @@ sub string {
 			}
 
 			# flip BiDi R text and decide if scrolling should be reversed
-			if ($canUseHebrew && $string =~ $bidiR) {
+			if ($string =~ $bidiR && $canUseHebrew->()) {
 				$reverse = ($prefs->get('language') eq 'HE' || $string !~ $bidiL);
 				$string = Locale::Hebrew::hebrewflip($string);
 				@ords = ();
@@ -443,51 +415,68 @@ sub string {
 
 			if ($ord > 255 && $useTTFNow) {
 
-				my $bits_tmp = $useTTFCache ? $TTFCache{$defaultFontname}{$ord} : '';
+				my $char_bits = $TTFCache{"$FTFontSize.$FTBaseline.$ord"};
 
-				unless ($bits_tmp) {
+				if ( !$char_bits ) {
 
-					$bits_tmp = '';
-
-					# Create our canvas.
-					$gd->filledRectangle(0, 0, 31, 31, $GDWhite);
-
-					# Using a negative color index will
-					# disable anti-aliasing, as described
-					# in the libgd manual page at
-					# http://www.boutell.com/gd/manual2.0.9.html#gdImageStringFT.
-					#
+					my $bits_tmp = '';
 					
-					# GD doesn't at present support characters with 6 or more digits
-					if ($ord >= 99999) {
-						$ord = 0x25af; # 0x25af  = 'White Vertical Rectangle'
+					$ft->set_char_size($FTFontSize, $FTFontSize, 96, 96);
+					my $glyph = $ft->glyph_from_char_code($ord) || $ft->glyph_from_char_code(9647); # square as fallback
+					my ($bmp, $left, $top) = $glyph->bitmap(FT_RENDER_MODE_MONO);
+					my $width  = length $bmp->[0];
+					my $height = scalar @{$bmp};
+					
+					my $top_padding = $FTBaseline - $top;
+					my $start_y = 0;					
+					if ($top_padding < 0) {
+						# Top of char is cut off
+						$start_y = abs($top_padding);
+						$top_padding = 0;
 					}
 					
-					# use the FreeSans font if we've got it and this is hebrew.
-					my $fontPath = $FreeSans && (chr($ord) =~ $bidiR) ? $FreeSans : $TTFFontFile;
+					if ($height + $top_padding > 32) {
+						# Bottom of char is cut off
+						$height = 32 - $top_padding;
+					}
 					
-					my @GDBounds = $gd->stringFT(-1*$GDBlack, $fontPath, $GDFontSize, 0, 0, $GDBaseline, "&#${ord};");
-
-					# Construct the bitmap
-					for (my $x = 0; $x <= $GDBounds[2]; $x++) {
-
-						for (my $y = 0; $y < 32; $y++) {
-
-							$bits_tmp .= $gd->getPixel($x,$y) == $GDBlack ? 1 : 0
+					my $bottom_padding = 32 - $height - $top_padding + $start_y;
+					if ($bottom_padding < 0) {
+						$bottom_padding = 0;
+					}
+					
+					# Add left_bearing padding if any
+					for (my $x = 0; $x < $glyph->left_bearing; $x++) {
+						$bits_tmp .= '0' x 32;
+					}
+					
+					for (my $x = 0; $x < $width; $x++) {
+						$bits_tmp .= '0' x $top_padding;
+						
+						for (my $y = $start_y; $y < $height; $y++) {
+							$bits_tmp .= (substr $bmp->[$y], $x, 1) eq "\xFF" ? 1 : 0;
 						}
+						
+						$bits_tmp .= '0' x $bottom_padding;
 					}
+					
+					# Add right_bearing padding if any
+					for (my $x = 0; $x < $glyph->right_bearing; $x++) {
+						$bits_tmp .= '0' x 32;
+					}
+					
+					$char_bits = pack "B*", $bits_tmp;
 
-					$bits_tmp = pack("B*", $bits_tmp);
-
-					$TTFCache{$defaultFontname}{$ord} = $bits_tmp if $useTTFCache;
+					$TTFCache{"$FTFontSize.$FTBaseline.$ord"} = $char_bits;
 				}
 
 				if ($cursorpos) {
-					$bits_tmp |= substr($defaultFont->[$ord0a] x length($bits_tmp), 0, length($bits_tmp));
+					my $len = length($char_bits);
+					$char_bits |= substr($defaultFont->[$ord0a] x $len, 0, $len);
 					$cursorpos = 0;
 				}
 
-				$bits .= $bits_tmp;
+				$bits .= $char_bits;
 
 			} else {
 
@@ -499,15 +488,16 @@ sub string {
 
 				if ($cursorpos) {
 
-					my $bits_tmp = $font->[$ord];
+					my $char_bits = $font->[$ord];
 
 					# pad narrow characters so the cursor is wide enough to see
-					if (length($bits_tmp) < 3 * length($interspace) ) {
-						$bits_tmp = $interspace . $bits_tmp . $interspace;
+					if (length($char_bits) < 3 * length($interspace) ) {
+						$char_bits = $interspace . $char_bits . $interspace;
 					}
-
-					$bits_tmp |= substr($defaultFont->[$ord0a] x length($bits_tmp), 0, length($bits_tmp));
-					$bits .= $bits_tmp;
+					
+					my $len = length($char_bits);
+					$char_bits |= substr($defaultFont->[$ord0a] x $len, 0, $len);
+					$bits .= $char_bits;
 
 					$cursorpos = 0;
 
@@ -847,12 +837,6 @@ sub parseBMP {
 
 	return (\@font, $biHeight);
 }
-
-=head1 SEE ALSO
-
-L<GD>
-
-=cut
 
 1;
 

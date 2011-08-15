@@ -1,6 +1,6 @@
 package Slim::Buttons::Volume;
 
-# $Id: Volume.pm 26931 2009-06-07 03:53:36Z michael $
+# $Id: Volume.pm 30446 2010-03-31 12:11:29Z agrundman $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -20,7 +20,6 @@ handled by L<Slim::Player::Player::mixerDisplay>.
 =cut
 
 use strict;
-use warnings;
 
 use Time::HiRes;
 

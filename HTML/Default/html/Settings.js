@@ -127,14 +127,25 @@ Settings = {
 	},
 
 	showSettingsPage : function(page) {
-		if (page.id == 'PLAYER' && SqueezeJS.getCookie('Squeezebox-playersettings'))
+		if (page.id == 'PLAYER') {
 			page = SqueezeJS.getCookie('Squeezebox-playersettings');
 
-		else if (page.id == 'ADVANCED_SETTINGS' && SqueezeJS.getCookie('Squeezebox-advancedsettings'))
+			if (page == null || page == 'null')
+				page = 'settings/player/basic.html?';
+		}
+
+		else if (page.id == 'ADVANCED_SETTINGS') {
 			page = SqueezeJS.getCookie('Squeezebox-advancedsettings');
+
+			if (page == null || page == 'null')
+				page = 'settings/server/formatting.html?';
+		}
 
 		if (typeof page == 'object' && page.url)
 			page = page.url;
+			
+		if (page == null || page == 'null')
+			page = 'settings/server/basic.html?'
 
 		Ext.get('maincontent').dom.src = webroot + page + 'playerid=' + playerid;
 	},
@@ -315,18 +326,10 @@ Settings.Page = function(){
 			if (!Ext.get('playerSelector'))
 				return;
 
-			var playerChooser = new Ext.SplitButton({
+			var playerChooser = new SqueezeJS.UI.SplitButton({
 				renderTo: 'playerSelector',
-				handler: function(ev){
-					if(this.menu && !this.menu.isVisible()){
-						this.menu.show(this.el, this.menuAlign);
-					}
-					this.fireEvent('arrowclick', this, ev);
-				},
 				menu: new Ext.menu.Menu({shadow: Ext.isGecko && Ext.isMac ? true : 'sides'}),
-				tooltip: SqueezeJS.string('choose_player'),
-				arrowTooltip: SqueezeJS.string('choose_player'),
-				tooltipType: 'title'
+				arrowTooltip: SqueezeJS.string('choose_player')
 			});
 
 
@@ -363,18 +366,10 @@ Settings.Page = function(){
 			if (!Ext.get('settingsSelector'))
 				return;
 
-			var settingsChooser = new Ext.SplitButton({
+			var settingsChooser = new SqueezeJS.UI.SplitButton({
 				renderTo: 'settingsSelector',
-				handler: function(ev){
-					if(this.menu && !this.menu.isVisible()){
-						this.menu.show(this.el, this.menuAlign);
-					}
-					this.fireEvent('arrowclick', this, ev);
-				},
 				menu: new Ext.menu.Menu({shadow: Ext.isGecko && Ext.isMac ? true : 'sides'}),
-				tooltip: SqueezeJS.string('settings'),
-				arrowTooltip: SqueezeJS.string('settings'),
-				tooltipType: 'title'
+				arrowTooltip: SqueezeJS.string('settings')
 			});
 
 			for (var x=0; x<settingsList.length; x++){
@@ -429,12 +424,12 @@ Settings.Page = function(){
 						max = RegExp.$2;
 						increment = RegExp.$3;
 					}
-
+					
 					new SqueezeJS.UI.SliderInput({
 						width: 200,
-						minValue: min,
-						maxValue: max,
-						increment: increment,
+						minValue: parseInt(min),
+						maxValue: parseInt(max),
+						increment: parseInt(increment),
 				 		input: inputEl,
 				 		cls: 'settingsSlider'
 					});
@@ -686,6 +681,7 @@ Settings.Alarm = function() {
 					altFormats: (altFormats ? '|' + altFormats : '') + "g:iA|g:ia|g:i A|g:i a|h:i|g:i|H:i|ga|ha|gA|h a|g a|g A|gi|hi|gia|hia|g|H",
 					increment: 5,
 					format: timeFormat,
+					width: 50,
 					hideTrigger: true
 				});
 			}

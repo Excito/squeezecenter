@@ -10,7 +10,7 @@ package Slim::Player::Player;
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# $Id: Player.pm 31466 2010-10-25 17:49:57Z agrundman $
+# $Id: Player.pm 32504 2011-06-07 12:16:25Z agrundman $
 #
 
 use strict;
@@ -248,11 +248,6 @@ sub power {
 	 	
 		# turn off audio outputs
 		$client->audio_outputs_enable(0);
-
-		# shut playlist mode off
-		if (Slim::Player::Playlist::playlistMode($client) eq 'on') {
-			Slim::Player::Playlist::playlistMode($client, 'off');
-		}
 
 		# move display to off mode
 		$client->killAnimation();
@@ -535,6 +530,22 @@ sub currentSongLines {
 				);
 			}
 
+		} elsif ($client->isRetrying()) {
+			
+			$status = $lines[0] = $client->string('RETRYING');
+
+			if ( $playlistlen == 1 ) {
+
+				$lines[0] = $status;
+
+			} else {
+
+				$lines[0] = sprintf(
+					$status." (%d %s %d) ",
+					Slim::Player::Source::playingSongIndex($client) + 1, $client->string('OUT_OF'), $playlistlen
+				);
+			}
+			
 		} else {
 
 			$status = $lines[0] = $client->string('PLAYING');
@@ -556,25 +567,26 @@ sub currentSongLines {
 		my $currentTitle;
 		my $imgKey;
 		my $artwork;
+		my $remoteMeta;
 
 		if ( $song->isRemoteURL ) {
 			my $handler = Slim::Player::ProtocolHandlers->handlerForURL($song->url);
 
 			if ( $handler && $handler->can('getMetadataFor') ) {
 
-				my $meta = $handler->getMetadataFor( $client, $song->url );
+				$remoteMeta = $handler->getMetadataFor( $client, $song->url );
 
-				if ( $meta->{cover} ) {
+				if ( $remoteMeta->{cover} ) {
 					$imgKey = 'icon';
-					$artwork = $meta->{cover};
+					$artwork = $remoteMeta->{cover};
 				}
-				elsif ( $meta->{icon} ) {
+				elsif ( $remoteMeta->{icon} ) {
 					$imgKey = 'icon-id';
-					$artwork = $meta->{icon};
+					$artwork = $remoteMeta->{icon};
 				}
 				
 				# Format remote metadata according to title format
-				$currentTitle = Slim::Music::Info::getCurrentTitle( $client, $song->url, 0, $meta );
+				$currentTitle = Slim::Music::Info::getCurrentTitle( $client, $song->url, 0, $remoteMeta );
 			}
 			
 			# If that didn't return anything, use default title
@@ -596,7 +608,7 @@ sub currentSongLines {
 			
 			if ( my $album = $song->album ) {
 				$imgKey = 'icon-id';
-				$artwork = ( $album->artwork || 0 ) + 0;
+				$artwork = $album->artwork || 0;
 			}
 		}
 		
@@ -614,14 +626,19 @@ sub currentSongLines {
 				my $title = Slim::Music::Info::displayText($client, $song, 'TITLE');
 
 				if ( ($currentTitle || '') ne ($title || '') && !Slim::Music::Info::isURL($title) ) {
+
 					$s2line2 = $title;
+
+				} elsif ($remoteMeta) {
+
+					$s2line1 = Slim::Music::Info::displayText($client, $song, 'ALBUM', $remoteMeta);
+					$s2line2 = Slim::Music::Info::displayText($client, $song, 'ARTIST', $remoteMeta);
 				}
 
 			} else {
 
 				$s2line1 = Slim::Music::Info::displayText($client, $song, 'ALBUM');
 				$s2line2 = Slim::Music::Info::displayText($client, $song, 'ARTIST');
-
 			}
 
 			$screen2 = {
@@ -1038,7 +1055,7 @@ sub rebuffer {
 	my $handler = $song->currentTrackHandler();
 	my $remoteMeta = $handler->can('getMetadataFor') ? $handler->getMetadataFor($client, $url) : {};
 	my $title = Slim::Music::Info::getCurrentTitle($client, $url, 0, $remoteMeta) || Slim::Music::Info::title($url);
-	my $cover = $remoteMeta->{cover} || $remoteMeta->{icon} || '/music/' . $song->currentTrack()->id . '/cover.jpg';
+	my $cover = $remoteMeta->{cover} || $remoteMeta->{icon} || '/music/' . $song->currentTrack()->coverid . '/cover.jpg';
 	
 	if ( my $bitrate = $song->streambitrate() ) {
 		$threshold = 5 * ( int($bitrate / 8) );
@@ -1077,7 +1094,7 @@ sub buffering {
 	my $handler = $song->currentTrackHandler();
 	my $remoteMeta = $handler->can('getMetadataFor') ? $handler->getMetadataFor($client, $url) : {};
 	my $title = Slim::Music::Info::getCurrentTitle($client, $url, 0, $remoteMeta) || Slim::Music::Info::title($url);
-	my $cover = $remoteMeta->{cover} || $remoteMeta->{icon} || '/music/' . $song->currentTrack()->id . '/cover.jpg';
+	my $cover = $remoteMeta->{cover} || $remoteMeta->{icon} || '/music/' . $song->currentTrack()->coverid . '/cover.jpg';
 	
 	# Set a timer for feedback during buffering
 	$client->bufferStarted( Time::HiRes::time() ); # track when we started buffering
@@ -1210,13 +1227,14 @@ sub _buffering {
 	# Only show buffering status if no user activity on player or we're on the Now Playing screen
 	my $nowPlaying = Slim::Buttons::Playlist::showingNowPlaying($client);
 	my $lastIR     = Slim::Hardware::IR::lastIRTime($client) || 0;
+	my $screen     = Slim::Buttons::Common::msgOnScreen2($client) ? 'screen2' : 'screen1';
 	
 	if ( ($nowPlaying || $lastIR < $client->bufferStarted()) ) {
 
 		if ( !$suppressPlayersMessage->($handler, $client, $song, $string) ) {
 			$client->display->updateMode(0);
 			$client->showBriefly({
-				line => [ $line1, $line2 ],
+				$screen => { line => [ $line1, $line2 ] },
 				jive => { type => 'song', text => [ $status, $args->{'title'} ], duration => 500 },
 				cli  => undef,
 			}, { duration => 1, block => 1 });

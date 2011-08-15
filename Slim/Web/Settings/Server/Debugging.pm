@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::Debugging;
 
-# $Id: Debugging.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Debugging.pm 30446 2010-03-31 12:11:29Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -73,17 +73,9 @@ sub handler {
 	$paramRef->{'logLevels'}  = \@validLogLevels;
 	$paramRef->{'persist'}    = Slim::Utils::Log->persist;
 
-	$paramRef->{'logs'} = getLogs();
+	$paramRef->{'logs'} = Slim::Utils::Log->getLogFiles();
 
 	return $class->SUPER::handler($client, $paramRef, $pageSetup);
-}
-
-sub getLogs {
-	return [
-		{SERVER  => Slim::Utils::Log->serverLogFile},
-		{SCANNER => (Slim::Schema::hasLibrary() ? Slim::Utils::Log->scannerLogFile : undef)},
-		{PERFMON => (main::PERFMON ? Slim::Utils::Log->perfmonLogFile : undef )},
-	]
 }
 
 1;

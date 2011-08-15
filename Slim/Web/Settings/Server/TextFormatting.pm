@@ -1,6 +1,6 @@
 package Slim::Web::Settings::Server::TextFormatting;
 
-# $Id: TextFormatting.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: TextFormatting.pm 31945 2011-02-24 18:03:39Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

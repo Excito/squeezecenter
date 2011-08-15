@@ -1,6 +1,6 @@
 package Slim::Formats::Movie;
 
-# $Id: Movie.pm 30637 2010-04-15 20:16:58Z agrundman $
+# $Id: Movie.pm 30639 2010-04-15 20:17:20Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -107,6 +107,9 @@ sub getCoverArt {
 	my $class = shift;
 	my $file  = shift;
 	
+	# Enable artwork in Audio::Scan
+	local $ENV{AUDIO_SCAN_NO_ARTWORK} = 0;
+	
 	my $s = Audio::Scan->scan_tags($file);
 	
 	return $s->{tags}->{COVR};
@@ -141,13 +144,26 @@ sub _doTagMapping {
 	}
 	
 	# Flag if we have embedded cover art
-	$tags->{HAS_COVER} = 1 if $tags->{COVR};
+	if ( $tags->{ARTWORK} ) {
+		if ( $ENV{AUDIO_SCAN_NO_ARTWORK} ) {
+			# In 'no artwork' mode, ARTWORK is the length
+			$tags->{COVER_LENGTH} = $tags->{ARTWORK};
+		}
+		else {
+			$tags->{COVER_LENGTH} = length( $tags->{ARTWORK} );
+		}
+	}
 }
 
 sub getInitialAudioBlock {
-	my ($class, $fh) = @_;
+	my ($class, $fh, $track, $time) = @_;
 	
 	my $sourcelog = logger('player.source');
+	
+	# When playing the start of a virtual cue sheet track, findFrameBoundaries will not have been called
+	if ( !exists ${*$fh}{_mp4_seek_header} && $track->url =~ /#([^-]+)-([^-]+)$/ ) {
+		$class->findFrameBoundaries( $fh, undef, $1 );
+	}
 	
 	main::INFOLOG && $sourcelog->is_info && $sourcelog->info(
 	    'Reading initial audio block: length ' . length( ${ ${*$fh}{_mp4_seek_header} } )

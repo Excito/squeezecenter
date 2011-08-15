@@ -1,6 +1,6 @@
 package Slim::Utils::Strings;
 
-# $Id: Strings.pm 30010 2010-02-04 14:23:34Z michael $
+# $Id: Strings.pm 31638 2010-12-14 17:00:46Z ayoung $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -41,9 +41,8 @@ use Exporter::Lite;
 our @EXPORT_OK = qw(string cstring clientString);
 
 use Config;
-use Data::URIEncode qw(complex_to_query);
 use Digest::SHA1 qw(sha1_hex);
-use POSIX qw(setlocale LC_TIME);
+use POSIX qw(setlocale LC_TIME LC_COLLATE);
 use File::Slurp qw(read_file write_file);
 use File::Spec::Functions qw(:ALL);
 use JSON::XS::VersionOneAndTwo;
@@ -339,6 +338,9 @@ sub parseStrings {
 				$strings->{'langchoices'}->{$language} = $string;
 				next LINE;
 			}
+			elsif ($stringname eq 'LOCALE') {
+				$strings->{locales}->{$language} = $string;
+			}
 
 			if (defined $stringData->{$language}) {
 				$stringData->{$language} .= "\n$string";
@@ -399,6 +401,7 @@ strings for apps.
 
 # Cache extra strings to avoid reading from disk
 my $extraStringsCache = {};
+my $extraStringsDirty = 0;
 
 sub storeExtraStrings {
 	my $extra = shift;
@@ -415,24 +418,42 @@ sub storeExtraStrings {
 		}
 	}
 	
-	my $in = complex_to_query($extraStringsCache);
+	# This function determines if the string hash data has changed
+	my $hash_diff = sub {
+		for my $k ( keys %{ $_[1] } ) {
+			if ( !exists $_[0]->{$k} || $_[0]->{$k} ne $_[1]->{$k} ) {
+				return 1;
+			}
+		}
+		return 0;
+	};
 	
 	# Turn into a hash
 	$extra = { map { $_->{token} => $_->{strings} } @{$extra} };
 
 	for my $string ( keys %{$extra} ) {
 		storeString( $string, $extra->{$string} );
-		$extraStringsCache->{$string} = $extra->{$string};
+		if ( !exists $extraStringsCache->{$string} || $hash_diff->( $extraStringsCache->{$string}, $extra->{$string} ) ) {
+			$extraStringsCache->{$string} = $extra->{$string};
+			$extraStringsDirty = 1;
+		}
 	}
-	
-	# Only update the file on disk if the data has changed
-	my $out = complex_to_query($extraStringsCache);
-	
-	if ( $out ne $in ) {
-		main::DEBUGLOG && $log->is_debug && $log->debug('Writing updated extrastrings.json file');
-		eval { write_file( $extraCache, to_json($extraStringsCache) ) };
+
+	if ( $extraStringsDirty ) {
+		# Batch changes to avoid lots of writes
+		Slim::Utils::Timers::killTimers( $extraCache, \&_writeExtraStrings );
+		Slim::Utils::Timers::setTimer( $extraCache, time() + 5, \&_writeExtraStrings );
 	}
 }
+
+sub _writeExtraStrings {
+	my $extraCache = shift;
+	
+	main::DEBUGLOG && $log->is_debug && $log->debug('Writing updated extrastrings.json file');
+	
+	$extraStringsDirty = 0;
+	eval { write_file( $extraCache, to_json($extraStringsCache) ) };
+};
 
 =head2 loadExtraStrings
 
@@ -644,11 +665,25 @@ sub checkChangedStrings {
 }
 
 sub setLocale {
-	my $locale = string('LOCALE' . (main::ISWINDOWS ? '_WIN' : '') );
-	$locale .= Slim::Utils::Unicode::currentLocale() =~ /utf8/i ? '.UTF-8' : '';
+	my $locale = string(main::ISWINDOWS ? 'LOCALE_WIN' : 'LOCALE');
+	$locale .= '.UTF-8' if Slim::Utils::Unicode::currentLocale() =~ /utf8/i;
 
 	setlocale( LC_TIME, $locale );
+	
+	# We leave LC_TYPE unchanged.
+	# This is used in Slim::Music::Info::sortFilename() to modify the
+	# behaviour of uc() when sorting native-encoded filenames.
+	# It is also used, probably incorrectly, in Slim::Schema::Genre::add() for ucfirst()
+	
+	# We set LC_COLLATE always to utf8 so that it can be used correctly within 
+	# the collate function (perlcollate) for SQLite DB sorting, where the field values
+	# are always UTF-8
+	$locale = string(main::ISWINDOWS ? 'LOCALE_WIN' : 'LOCALE') . '.UTF-8';
+	setlocale( LC_COLLATE, $locale );
 }
 
+sub getLocales {
+	return $strings->{locales};
+}
 
 1;

@@ -73,6 +73,9 @@ sub init {
 	Slim::Control::Request::addDispatch(['jivetonesettings', '_index', '_quantity'],
 		[1, 1, 1, \&toneSettingsQuery]);
 
+	Slim::Control::Request::addDispatch(['jivefixedvolumesettings', '_index', '_quantity'],
+		[1, 1, 1, \&fixedVolumeSettingsQuery]);
+
 	Slim::Control::Request::addDispatch(['jivestereoxl', '_index', '_quantity'],
 		[1, 1, 1, \&stereoXLQuery]);
 
@@ -96,6 +99,9 @@ sub init {
 
 	Slim::Control::Request::addDispatch(['jivefavorites', '_cmd' ],
 		[1, 0, 1, \&jiveFavoritesCommand]);
+
+	Slim::Control::Request::addDispatch(['jivepresets', '_index', '_quantity' ],
+		[1, 1, 1, \&jivePresetsMenu]);
 
 	Slim::Control::Request::addDispatch(['jivealarmvolume'],
 		[1, 0, 1, \&jiveAlarmVolumeSlider ]);
@@ -123,12 +129,6 @@ sub init {
 
 	Slim::Control::Request::addDispatch(['jiverecentsearches'],
 		[0, 1, 0, \&jiveRecentSearchQuery]);
-
-	Slim::Control::Request::addDispatch(['jiveplaytrackalbum'],
-		[1, 0, 1, \&jivePlayTrackAlbumCommand]);
-
-	Slim::Control::Request::addDispatch(['jiveplaytrackplaylist'],
-		[1, 0, 1, \&jivePlayTrackPlaylistCommand]);
 
 	Slim::Control::Request::addDispatch(['date'],
 		[0, 1, 1, \&dateQuery]);
@@ -159,57 +159,12 @@ sub init {
 	# setup a cli command for jive that returns nothing; can be useful in some situations
 	Slim::Control::Request::addDispatch( ['jiveblankcommand'],
 		[0, 0, 0, sub { return 1; }]);
-
-	if ( !main::SLIM_SERVICE ) {
-		# Load memory caches to help with menu performance
-		buildCaches();
-		
-		# Re-build the caches after a rescan
-		Slim::Control::Request::subscribe( \&buildCaches, [['rescan', 'done']] );
-	}
 	
-	Slim::Control::Request::subscribe(\&_libraryChanged, [['library'], ['changed']]);
 }
 
 sub _libraryChanged {
 	foreach ( Slim::Player::Client::clients() ) {
 		myMusicMenu(0, $_);
-	}
-}
-
-sub buildCaches {
-	main::DEBUGLOG && $log->debug("Begin function");
-	
-	return if !Slim::Schema::hasLibrary();
-
-	my $sort    = $prefs->get('jivealbumsort') || 'album';
-
-	for my $partymode ( 0..1 ) {
-		# Pre-cache albums query
-		if ( my $numAlbums = Slim::Schema->rs('Album')->count ) {
-			main::DEBUGLOG && $log->debug( "Pre-caching $numAlbums album items for partymode:$partymode" );
-			Slim::Control::Request::executeRequest( undef, [ 'albums', 0, $numAlbums, "useContextMenu:1", "sort:$sort", 'menu:track', 'cache:1', "party:$partymode" ] );
-		}
-		
-		main::idleStreams();
-		
-		# Artists
-		if ( my $numArtists = Slim::Schema->rs('Contributor')->browse->search( {}, { distinct => 'me.id' } )->count ) {
-			# Add one since we may have a VA item
-			$numArtists++;
-			main::DEBUGLOG && $log->debug( "Pre-caching $numArtists artist items for partymode:$partymode." );
-			Slim::Control::Request::executeRequest( undef, [ 'artists', 0, $numArtists, "useContextMenu:1", 'menu:album', 'cache:1', "party:$partymode" ] );
-		}
-		
-		main::idleStreams();
-		
-		# Genres
-		if ( my $numGenres = Slim::Schema->rs('Genre')->browse->search( {}, { distinct => 'me.id' } )->count ) {
-			main::DEBUGLOG && $log->debug( "Pre-caching $numGenres genre items for partymode:$partymode." );
-			Slim::Control::Request::executeRequest( undef, [ 'genres', 0, $numGenres, "useContextMenu:1", 'menu:artist', 'cache:1', "party:$partymode" ] );
-		}
-		
-		main::idleStreams();
 	}
 }
 
@@ -383,67 +338,7 @@ sub jiveSetAlbumSort {
 	my $client  = $request->client;
 	my $sort = $request->getParam('sortMe');
 	$prefs->set('jivealbumsort', $sort);
-	# resend the myMusic menus with the new sort pref set
-	myMusicMenu(0, $client);
 	$request->setStatusDone();
-}
-
-sub playlistModeSettings {
-	main::INFOLOG && $log->info("Begin function");
-
-	my $client       = shift;
-	my $batch        = shift;
-	my $playlistmode = Slim::Player::Playlist::playlistMode($client);
-
-	my @menu = ();
-
-	my @modeStrings = ('DISABLED', 'OFF', 'ON', 'PARTY');
-	my @translatedModeStrings = map { ucfirst($client->string($_)) } @modeStrings;
-	my %modes = (
-		disabled => 1,
-		off      => 2,
-		on       => 3,
-		party    => 4,
-	);
-
-	#todo: move node to "betaFeatures",  left as advancedSettings for backwards compat 
-	my $choice = {
-		text          => $client->string('PLAYLIST_MODE'),
-		choiceStrings => [ @translatedModeStrings ] ,
-		selectedIndex => $modes{$playlistmode},
-		id            => 'settingsPlaylistMode',
-		node          => 'advancedSettings',
-		weight        => 100,
-		actions       => {
-			do => { 
-				choices => [ 
-					{
-						player => 0,
-						cmd    => [ 'playlistmode', 'set', 'disabled' ],
-					},
-					{
-						player => 0,
-						cmd    => [ 'playlistmode', 'set', 'off' ],
-					},
-					{
-						player => 0,
-						cmd    => [ 'playlistmode', 'set', 'on' ],
-					},
-					{
-						player => 0,
-						cmd    => [ 'playlistmode', 'set', 'party' ],
-					},
-				], 
-			},
-		},
-	};
-
-	if ($batch) {
-		return $choice;
-	} else {
-		_notifyJive( [ $choice ], $client);
-	}
-
 }
 
 
@@ -491,6 +386,7 @@ sub albumSortSettingsItem {
 		text           => $client->string('ALBUMS_SORT_METHOD'),
 		id             => 'settingsAlbumSettings',
 		node           => 'advancedSettings',
+		iconStyle      => 'hm_advancedSettings',
 		weight         => 105,
 			actions        => {
 			go => {
@@ -1110,11 +1006,25 @@ sub syncSettingsQuery {
 	main::INFOLOG && $log->info("Begin function");
 	my $request           = shift;
 	my $client            = $request->client();
-	my $playersToSyncWith = getPlayersToSyncWith($client);
+	my $synchablePlayers  = howManyPlayersToSyncWith($client);
 
-	my @menu = @$playersToSyncWith;
+	if ( $synchablePlayers > 0 ) {
+		my $playersToSyncWith = getPlayersToSyncWith($client);
+		my @menu = @$playersToSyncWith;
+		sliceAndShip($request, $client, \@menu);
 
-	sliceAndShip($request, $client, \@menu);
+	# Bug 16030
+	# when no sync players present, give message about how adding squeezeboxes could allow you to sync players
+	} else {
+		
+		my $textarea = {
+			textarea    => $request->string('SYNC_ABOUT'),
+		};
+		$request->addResult('window', $textarea);
+		$request->addResult("count", 0);
+		$request->setStatusDone()
+	}
+
 
 }
 
@@ -1246,6 +1156,45 @@ sub lineOutQuery {
 	$request->setStatusDone();
 
 }
+
+
+sub fixedVolumeSettingsQuery {
+
+	main::INFOLOG && $log->info("Begin function");
+	my $request        = shift;
+	my $client         = $request->client();
+	my $setting        = $request->getParam('cmd');
+
+
+	my $digitalVolumeControl = $prefs->client($client)->get('digitalVolumeControl');
+	my $currentSetting = 0;
+	if ( ( defined $digitalVolumeControl && $digitalVolumeControl == 0 ) ) {
+		$currentSetting = 1;
+	}
+
+	my @menu = ();
+	my $checkbox = {
+		text           => $client->string("FIXED_VOLUME_100"),
+		checkbox       => $currentSetting,
+		actions => {
+			on => {
+				player => 0,
+				cmd    => [ 'playerpref', 'digitalVolumeControl', 0 ],
+			},
+			off => {
+				player => 0,
+				cmd    => [ 'playerpref', 'digitalVolumeControl', 1 ],
+			},
+		},
+	};
+
+	push @menu, $checkbox;
+
+	sliceAndShip($request, $client, \@menu);
+
+	$request->setStatusDone();
+}
+
 
 sub toneSettingsQuery {
 
@@ -1406,12 +1355,6 @@ sub playerSettingsMenu {
 	# always add shuffle
 	push @menu, shuffleSettings($client, 1);
 
-	# always add playlist mode
-	# Bugs: 13896, 13689, 8878
-	# playlist/party mode is in conflict with 7.4 touch/press-to-play behavior
-	# fix for bug 13689 will be the complete fix, but for now remove playlistModeSettings from SP menus entirely
-	# push @menu, playlistModeSettings($client, 1);
-
 	# add alarm only if this is a slimproto player
 	if ($client->isPlayer()) {
 		push @menu, {
@@ -1434,6 +1377,7 @@ sub playerSettingsMenu {
 			text           => $client->string("BASS"),
 			id             => 'settingsBass',
 			node           => 'settingsAudio',
+			iconStyle      => 'hm_settingsAudio',
 			weight         => 10,
 			actions        => {
 				go => {
@@ -1447,12 +1391,30 @@ sub playerSettingsMenu {
 		};
 	}
 
+	# send an option for fixed 100% volume setting is sent for any player that has a digital out
+	if ( $client->hasDigitalOut() ) {
+		push @menu, {
+			text           => $client->string("FIXED_VOLUME"),
+			id             => 'settingsFixedVolume',
+			iconStyle      => 'hm_settingsAudio',
+			node           => 'settingsAudio',
+			weight         => 100,
+			actions        => {
+				go => {
+					cmd    => ['jivefixedvolumesettings'],
+					player => 0,
+				},
+			},
+		};
+	}
+
 	# treble, if available
 	if ( $client->maxTreble() - $client->minTreble() > 0 ) {
 		push @menu, {
 			text           => $client->string("TREBLE"),
 			id             => 'settingsTreble',
 			node           => 'settingsAudio',
+			iconStyle      => 'hm_settingsAudio',
 			weight         => 20,
 			actions        => {
 				go => {
@@ -1467,11 +1429,12 @@ sub playerSettingsMenu {
 	}
 
 	# stereoXL, if available
-	if ( $client->can('maxXL') ) {
+	if ( $client->maxXL() - $client->minXL() ) {
 		push @menu, {
 			text           => $client->string("STEREOXL"),
 			id             => 'settingsStereoXL',
 			node           => 'settingsAudio',
+			iconStyle      => 'hm_settingsAudio',
 			weight         => 90,
 			actions        => {
 				go => {
@@ -1488,6 +1451,7 @@ sub playerSettingsMenu {
 			text           => $client->string("SETUP_ANALOGOUTMODE"),
 			id             => 'settingsLineOut',
 			node           => 'settingsAudio',
+			iconStyle      => 'hm_settingsAudio',
 			weight         => 80,
 			actions        => {
 				go => {
@@ -1513,22 +1477,8 @@ sub playerSettingsMenu {
 		},
 	};	
 
-	# synchronization. only if numberOfPlayers > 1
-	my $synchablePlayers = howManyPlayersToSyncWith($client);
-	if ($synchablePlayers > 0) {
-		push @menu, {
-			text           => $client->string("SYNCHRONIZE"),
-			id             => 'settingsSync',
-			node           => 'settings',
-			weight         => 70,
-			actions        => {
-				go => {
-					cmd    => ['syncsettings'],
-					player => 0,
-				},
-			},
-		};	
-	}
+	# sync menu
+	push @menu, syncMenuItem($client, 1);
 
 	# information, always display
 	push @menu, {
@@ -1579,6 +1529,7 @@ sub playerSettingsMenu {
 		push @menu, {
 			text           => $client->string("SETUP_TRANSITIONTYPE"),
 			id             => 'settingsXfade',
+			iconStyle      => 'hm_settingsAudio',
 			node           => 'settingsAudio',
 			weight         => 30,
 			actions        => {
@@ -1595,6 +1546,7 @@ sub playerSettingsMenu {
 		push @menu, {
 			text           => $client->string("REPLAYGAIN"),
 			id             => 'settingsReplayGain',
+			iconStyle      => 'hm_settingsAudio',
 			node           => 'settingsAudio',
 			weight         => 40,
 			actions        => {
@@ -1612,12 +1564,14 @@ sub playerSettingsMenu {
 		{
 			stringToken    => 'JIVE_PLAYER_DISPLAY_SETTINGS',
 			id             => 'squeezeboxDisplaySettings',
+			iconStyle      => 'hm_advancedSettings',
 			isANode        => 1,
 			node           => 'advancedSettings',
 		},
 		{
 			text           => $client->string("PLAYER_BRIGHTNESS"),
 			id             => 'settingsPlayerBrightness',
+			iconStyle      => 'hm_settingsBrightness',
 			node           => 'squeezeboxDisplaySettings',
 			actions        => {
 				  go => {
@@ -1635,6 +1589,7 @@ sub playerSettingsMenu {
 			text           => $client->string("TEXTSIZE"),
 			id             => 'settingsPlayerTextsize',
 			node           => 'squeezeboxDisplaySettings',
+			iconStyle      => 'hm_advancedSettings',
 			actions        => {
 				  go => {
 					cmd    => [ 'jiveplayertextsettings', 'activeFont' ],
@@ -1646,6 +1601,7 @@ sub playerSettingsMenu {
 			text           => $client->string("OFFDISPLAYSIZE"),
 			id             => 'settingsPlayerOffTextsize',
 			node           => 'squeezeboxDisplaySettings',
+			iconStyle      => 'hm_advancedSettings',
 			actions        => {
 				  go => {
 					cmd    => [ 'jiveplayertextsettings', 'idleFont' ],
@@ -1661,6 +1617,31 @@ sub playerSettingsMenu {
 		_notifyJive(\@menu, $client);
 	}
 }
+
+sub syncMenuItem {
+	my $client = shift;
+	my $batch = shift;
+
+	my $return = {
+		text           => $client->string("SYNCHRONIZE"),
+		id             => 'settingsSync',
+		node           => 'settings',
+		weight         => 70,
+		actions        => {
+			go => {
+				cmd    => ['syncsettings'],
+				player => 0,
+			},
+		},
+	};
+
+	if ($batch) {
+		return $return;
+	} else {
+		_notifyJive( [ $return ], $client);
+	}
+}
+
 
 sub minAutoBrightness {
 	my $current_setting = shift;
@@ -1833,44 +1814,6 @@ sub playerTextMenu {
 
 	$request->setStatusDone();
 
-}
-
-sub browseMusicFolder {
-	main::INFOLOG && $log->info("Begin function");
-	my $client = shift;
-	my $batch = shift;
-
-	# first we decide if $audiodir has been configured. If not, don't show this
-	my $audiodir = $prefs->get('audiodir');
-
-	my $return = 0;
-	if (defined($audiodir) && -d $audiodir) {
-		main::INFOLOG && $log->info("Adding Browse Music Folder");
-		$return = {
-				text           => $client->string('BROWSE_MUSIC_FOLDER'),
-				id             => 'myMusicMusicFolder',
-				node           => 'myMusic',
-				weight         => 70,
-				actions        => {
-					go => {
-						cmd    => ['musicfolder'],
-						params => {
-							menu => 'musicfolder',
-						},
-					},
-				},
-			};
-	} else {
-		# if it disappeared, send a notification to get rid of it if it exists
-		main::INFOLOG && $log->info("Removing Browse Music Folder from Jive menu via notification");
-		deleteMenuItem('myMusicMusicFolder', $client);
-	}
-
-	if ($batch) {
-		return $return;
-	} else {
-		_notifyJive( [ $return ], $client);
-	}
 }
 
 sub repeatSettings {
@@ -2165,6 +2108,19 @@ sub jiveSyncCommand {
 	$request->setStatusDone();
 }
 
+sub dateQuery_filter {
+	my ($self, $request) = @_;
+
+	# if time is to be set, pass along the new time value to the listeners
+	if (my $newTime = $request->getParam('set')) {
+		$self->privateData($newTime);
+		return 1;
+	}
+
+	$self->privateData(0);
+	return 0;
+}
+
 sub dateQuery {
 	# XXX dateQuery uses registerAutoExecute which is called for every notification!
 	# (See Request.pm "send the notification to all filters...")
@@ -2177,9 +2133,20 @@ sub dateQuery {
 		$request->setStatusBadDispatch();
 		return;
 	}
+	
+	my $newTime = $request->getParam('set') || 0;
+
+	# it time is expliciely set, we'll have to notify our listeners
+	if ($newTime) {
+		$request->notify();
+	}
+	else {
+		$newTime = $request->privateData() || 0;
+		$request->privateData(0);
+	}
 
 	# 7.5+ SP devices use epoch time now, much simpler
-	$request->addResult( 'date_epoch', time() );
+	$request->addResult( 'date_epoch', $newTime || time() );
 
 	# This is the field 7.3 and earlier players expect.
 	#  7.4 is smart enough to take no action when missing
@@ -2195,7 +2162,7 @@ sub dateQuery {
 
 	# manage the subscription
 	if (defined(my $timeout = $request->getParam('subscribe'))) {
-		$request->registerAutoExecute($timeout, \&dateQuery);
+		$request->registerAutoExecute($timeout, \&dateQuery_filter);		
 	}
 
 	$request->setStatusDone();
@@ -2229,7 +2196,9 @@ sub firmwareUpgradeQuery {
 	if ( my $url = Slim::Utils::Firmware->url($model) ) {
 		# Bug 6828, Send relative firmware URLs for Jive versions which support it
 		my ($cur_rev) = $firmwareVersion =~ m/\sr(\d+)/;
-		if ( $cur_rev >= 1659 ) {
+		
+		# return full url when running SqueezeOS - we'll serve the direct download link from squeezenetwork
+		if ( $cur_rev >= 1659 && !Slim::Utils::OSDetect->getOS()->directFirmwareDownload() ) {
 			$request->addResult( relativeFirmwareUrl => URI->new($url)->path );
 		}
 		else {
@@ -2349,309 +2318,34 @@ sub replayGainHash {
 	return \%return;
 }
 
+my %allMyMusicMenuItems;
+
 sub myMusicMenu {
 	main::INFOLOG && $log->info("Begin function: ", (Slim::Schema::hasLibrary() ? 'library' : 'no library'));
 	my $batch = shift;
 	my $client = shift;
-	my $sort   = $prefs->get('jivealbumsort') || 'album';
-	my $party  = (Slim::Player::Playlist::playlistMode($client) eq 'party');
-	my @myMusicMenu = ();
+
+	my $myMusicMenu = Slim::Menu::BrowseLibrary::getJiveMenu($client, 'myMusic', \&_libraryChanged);
 	
-	if (Slim::Schema::hasLibrary()) {
-		
-		@myMusicMenu = (
-			{
-				text           => $client->string('BROWSE_BY_ARTIST'),
-				homeMenuText   => $client->string('BROWSE_ARTISTS'),
-				id             => 'myMusicArtists',
-				node           => 'myMusic',
-				weight         => 10,
-				actions        => {
-					go => {
-						cmd    => ['artists'],
-						params => {
-							menu  => 'album',
-							party => $party,
-						},
-					},
-				},
-			},		
-			{
-				text           => $client->string('BROWSE_BY_ALBUM'),
-				homeMenuText   => $client->string('BROWSE_ALBUMS'),
-				id             => 'myMusicAlbums',
-				node           => 'myMusic',
-				weight         => 20,
-				actions        => {
-					go => {
-						cmd    => ['albums'],
-						params => {
-							menu     => 'track',
-							sort     => $sort,
-							party    => $party,
-						},
-					},
-				},
-				window         => {
-					menuStyle => 'album',
-					menuStyle => 'album',
-				},
-			},
-			{
-				text           => $client->string('BROWSE_BY_GENRE'),
-				homeMenuText   => $client->string('BROWSE_GENRES'),
-				id             => 'myMusicGenres',
-				node           => 'myMusic',
-				weight         => 30,
-				actions        => {
-					go => {
-						cmd    => ['genres'],
-						params => {
-							menu  => 'artist',
-							party => $party,
-						},
-					},
-				},
-			},
-			{
-				text           => $client->string('BROWSE_BY_YEAR'),
-				homeMenuText   => $client->string('BROWSE_YEARS'),
-				id             => 'myMusicYears',
-				node           => 'myMusic',
-				weight         => 40,
-				actions        => {
-					go => {
-						cmd    => ['years'],
-						params => {
-							menu  => 'album',
-							party => $party,
-						},
-					},
-				},
-			},
-			{
-				text           => $client->string('BROWSE_NEW_MUSIC'),
-				id             => 'myMusicNewMusic',
-				node           => 'myMusic',
-				weight         => 50,
-				actions        => {
-					go => {
-						cmd    => ['albums'],
-						params => {
-							menu  => 'track',
-							sort  => 'new',
-							party => $party,
-						},
-					},
-				},
-				window        => {
-					menuStyle => 'album',
-				},
-			},
-			{
-				text           => $client->string('SAVED_PLAYLISTS'),
-				id             => 'myMusicPlaylists',
-				node           => 'myMusic',
-				weight         => 80,
-				actions        => {
-					go => {
-						cmd    => ['playlists'],
-						params => {
-							menu  => 'track',
-							party => $party,
-						},
-					},
-				},
-			},
-			{
-				text           => $client->string('SEARCH'),
-				id             => 'myMusicSearch',
-				node           => 'myMusic',
-				isANode        => 1,
-				weight         => 90,
-			},
-		);
-		# add the items for under mymusicSearch
-		my $searchMenu = searchMenu(1, $client);
-		@myMusicMenu = (@myMusicMenu, @$searchMenu);
 	
-		if (my $browseMusicFolder = browseMusicFolder($client, 1)) {
-			push @myMusicMenu, $browseMusicFolder;
-		}
+	if (!$batch) {
+		my %newMenuItems = map {$_->{'id'} => 1} @$myMusicMenu;
+		my @myMusicMenuDelete = map +{id => $_, node => 'myMusic'}, (grep {!$newMenuItems{$_}} keys %allMyMusicMenuItems);
+			
+		_notifyJive(\@myMusicMenuDelete, $client, 'remove');
 	}
-
+	
+	foreach (@$myMusicMenu) {
+		$allMyMusicMenuItems{$_->{'id'}} = 1;
+	}
+	
 	if ($batch) {
-		return \@myMusicMenu;
+		return $myMusicMenu;
 	} else {
-		_emptyMyMusicMenu($client);
-		_notifyJive(\@myMusicMenu, $client);
+		_notifyJive($myMusicMenu, $client);
 	}
-
 }
 
-sub _emptyMyMusicMenu {
-	main::INFOLOG && $log->info("Begin function");
-	my $client = shift;
-		
-	my @myMusicMenu = map +{id => $_, node => 'myMusic'},
-		qw(
-			myMusicArtists
-			myMusicAlbums
-			myMusicGenres
-			myMusicYears
-			myMusicNewMusic
-			myMusicPlaylists
-			myMusicSearch
-			myMusicMusicFolder
-		);
-
-	_notifyJive(\@myMusicMenu, $client, 'remove');
-}
-
-sub searchMenu {
-	main::INFOLOG && $log->info("Begin function");
-	my $batch = shift;
-	my $client = shift || undef;
-	my $party = ( $client && Slim::Player::Playlist::playlistMode($client) eq 'party' );
-	my @searchMenu = (
-	{
-		text           => $client->string('ARTISTS'),
-		homeMenuText   => $client->string('ARTIST_SEARCH'),
-		id             => 'myMusicSearchArtists',
-		node           => 'myMusicSearch',
-		weight         => 10,
-		input => {
-			len  => 1, #bug 5318
-			processingPopup => {
-				text => $client->string('SEARCHING'),
-			},
-			help => {
-				text => $client->string('JIVE_SEARCHFOR_HELP')
-			},
-		},
-		actions => {
-			go => {
-				cmd => ['artists'],
-				params => {
-					menu     => 'album',
-					menu_all => '1',
-					useContextMenu => '1',
-					search   => '__TAGGEDINPUT__',
-					party    => $party,
-					_searchType => 'artists',
-				},
-                        },
-		},
-                window => {
-                        text => $client->string('SEARCHFOR_ARTISTS'),
-                },
-	},
-	{
-		text           => $client->string('ALBUMS'),
-		homeMenuText   => $client->string('ALBUM_SEARCH'),
-		id             => 'myMusicSearchAlbums',
-		node           => 'myMusicSearch',
-		weight         => 20,
-		input => {
-			len  => 1, #bug 5318
-			processingPopup => {
-				text => $client->string('SEARCHING'),
-			},
-			help => {
-				text => $client->string('JIVE_SEARCHFOR_HELP')
-			},
-		},
-		actions => {
-			go => {
-				cmd => ['albums'],
-				params => {
-					menu     => 'track',
-					menu_all => '1',
-					useContextMenu => '1',
-					search   => '__TAGGEDINPUT__',
-					_searchType => 'albums',
-					party    => $party,
-				},
-			},
-		},
-		window => {
-			text => $client->string('SEARCHFOR_ALBUMS'),
-			menuStyle  => 'album',
-		},
-	},
-	{
-		text           => $client->string('SONGS'),
-		homeMenuText   => $client->string('TRACK_SEARCH'),
-		id             => 'myMusicSearchSongs',
-		node           => 'myMusicSearch',
-		weight         => 30,
-		input => {
-			len  => 1, #bug 5318
-			processingPopup => {
-				text => $client->string('SEARCHING'),
-			},
-			help => {
-				text => $client->string('JIVE_SEARCHFOR_HELP')
-			},
-		},
-		actions => {
-			go => {
-				cmd => ['tracks'],
-				params => {
-					menu     => 'track',
-					menuStyle => 'album',
-					useContextMenu => '1',
-					menu_all => '1',
-					search   => '__TAGGEDINPUT__',
-					_searchType => 'tracks',
-				},
-                        },
-		},
-		window => {
-			text => $client->string('SEARCHFOR_SONGS'),
-			menuStyle => 'album',
-		},
-	},
-	{
-		text           => $client->string('PLAYLISTS'),
-		homeMenuText   => $client->string('PLAYLIST_SEARCH'),
-		id             => 'myMusicSearchPlaylists',
-		node           => 'myMusicSearch',
-		weight         => 40,
-		input => {
-			len  => 1, #bug 5318
-			processingPopup => {
-				text => $client->string('SEARCHING'),
-			},
-			help => {
-				text => $client->string('JIVE_SEARCHFOR_HELP')
-			},
-		},
-		actions => {
-			go => {
-				cmd => ['playlists'],
-				params => {
-					menu     => 'track',
-					menu_all => '1',
-					search   => '__TAGGEDINPUT__',
-					party    => $party,
-				},
-                        },
-		},
-		window => {
-			text => $client->string('SEARCHFOR_PLAYLISTS'),
-		},
-	},
-
-	);
-
-	if ($batch) {
-		return \@searchMenu;
-	} else {
-		_notifyJive(\@searchMenu, $client);
-	}
-
-}
 
 sub globalSearchMenu {
 	my $client = shift || undef;
@@ -2662,7 +2356,7 @@ sub globalSearchMenu {
 		homeMenuText   => $client->string('SEARCH'),
 		id             => 'globalSearch',
 		node           => 'home',
-		weight         => 110,
+		weight         => 22, # after internet radio
 		input => {
 			len  => 1, #bug 5318
 			processingPopup => {
@@ -2701,101 +2395,6 @@ sub menuNotification {
 	main::DEBUGLOG && $log->is_debug && $log->debug(Data::Dump::dump($dataRef));
 }
 
-sub jivePlayTrackPlaylistCommand {
-
-	main::INFOLOG && $log->info("Begin function");
-
-	my $request    = shift;
-	my $client     = $request->client || return;
-	my $playlistID = $request->getParam('playlist_id');
-	my $listIndex  = $request->getParam('list_index');
-	
-	$client->execute( ["playlist", "clear"] );
-
-	if ( !defined ($playlistID) ) {
-		$request->setStatusBadDispatch();
-		return;
-	}
-
-	# load the playlist
-	$client->execute( ["playlistcontrol", "cmd:load", "playlist_id:$playlistID" ]);
-	# jump to the correct index
-	$client->execute( ["playlist", "jump", $listIndex] );
-
-	$request->setStatusDone();
-}
-
-sub jivePlayTrackAlbumCommand {
-
-	main::INFOLOG && $log->info("Begin function");
-
-	my $request    = shift;
-	my $client     = $request->client || return;
-	my $albumID    = $request->getParam('album_id');
-	my $artistID   = $request->getParam('artist_id');
-	my $trackID    = $request->getParam('track_id');
-	my $playlistID = $request->getParam('playlist_id');
-	my $folder     = $request->getParam('folder')|| undef;
-	my $listIndex  = $request->getParam('list_index');
- 	my $mode       = Slim::Player::Playlist::playlistMode($client);
-	
-	if ( ( $mode eq 'on' || $mode eq 'party' ) && $trackID ) {
-		# send the track with cmd of 'load' so playlistcontrol doesn't turn off playlistmode
-		$client->execute( ['playlistcontrol', 'cmd:load', "track_id:$trackID" ] );
-		return;
-	}
-
-	$client->execute( ["playlist", "clear"] );
-
-	# Database album browse is the simple case
-	if ( $albumID ) {
-		if ($artistID) {
-			$client->execute( ["playlist", "addtracks", { 'contributor.id' => $artistID, 'album.id' => $albumID } ] );
-		} else {
-			$client->execute( ["playlist", "addtracks", { 'album.id' => $albumID } ] );
-		}
-		$client->execute( ["playlist", "jump", $listIndex] );
-
-	}
-
-	elsif ( $playlistID ) {
-		# load the playlist
-		$client->execute( ["playlistcontrol", "cmd:load", "playlist_id:$playlistID" ]);
-		# jump to the correct index
-		$client->execute( ["playlist", "jump", $listIndex] );
-	}
-
-	# hard case is Browse Music Folder - re-create the playlist, starting playback with the current item
-	elsif ( $folder && defined $listIndex ) {
-
-		my $wasShuffled = Slim::Player::Playlist::shuffle($client);
-		Slim::Player::Playlist::shuffle($client, 0);
-
-		my ($topLevelObj, $items, $count) = Slim::Utils::Misc::findAndScanDirectoryTree( {
-			url => $folder,
-		} );
-
-		main::INFOLOG && $log->info("Playing all in folder, starting with $listIndex");
-
-		# filter out folders
-		@{$items} = grep { Slim::Music::Info::isSong($_) }
-		# make sure we get a valid path
-		map { ref $_ ? $_ : Slim::Utils::Misc::fixPath($_, $folder) }
-		@$items;
-
-		main::INFOLOG && $log->info("Load folder playlist, now starting at index: $listIndex");
-
-		$client->execute(['playlist', 'clear']);
-		$client->execute(['playlist', 'addtracks', 'listref', $items]);
-		$client->execute(['playlist', 'jump', $listIndex]);
-
-		if ($wasShuffled) {
-			$client->execute(['playlist', 'shuffle', 1]);
-		}
-	}
-
-	$request->setStatusDone();
-}
 
 sub jivePlaylistsCommand {
 
@@ -2899,6 +2498,118 @@ sub jiveAlarmCommand {
 	$request->setStatusDone();
 }
 
+
+sub jivePresetsMenu {
+	main::INFOLOG && $log->info("Begin function");
+	my $request = shift;
+	my $client  = $request->client || shift;
+
+	my $index    = $request->getParam('_index');
+	my $quantity = $request->getParam('_quantity');
+
+	my $title   = $request->getParam('title');
+	my $url     = $request->getParam('url');
+	my $type    = $request->getParam('type');
+	my $icon    = $request->getParam('icon');
+	my $preset = $request->getParam('key');
+	my $parser = $request->getParam('parser');
+	my $action = 'grandparent';
+
+	# if playlist_index is sent, that's for the current NP track, derive everything you need from it
+	my $playlist_index = $request->getParam('playlist_index');
+	if ( defined($playlist_index) ) {
+		my $song = Slim::Player::Playlist::song( $client, $playlist_index );
+		$url     = $song->url;
+		$type    = 'audio';
+		$title   = $song->title;
+	}
+
+	# preset needs to be saved as either a playlist or default to audio
+	if ( defined($type) && $type ne 'playlist' ) {
+		$type = 'audio';
+	}
+	if ( ! defined $title || ! defined $url ) {
+		$request->setStatusBadDispatch();
+		return;
+	}
+
+	my $presets = $prefs->client($client)->get('presets');
+	my @presets_menu;
+	for my $preset (0..5) {
+		my $jive_preset = $preset + 1;
+		# is this preset currently set?
+		my $set = ref($presets) eq 'ARRAY' && defined $presets->[$preset] ? 1 : 0;
+		my $item;
+
+		if ($set) {
+			my $currentPreset = $presets->[$preset]->{'text'};
+			$log->error($currentPreset);
+			$item = {
+				text    => $request->string('JIVE_SET_PRESET_X', $jive_preset),
+				count   => 2,
+				offset   => 0,
+				isContextMenu => 1,
+				item_loop => [
+					{
+						text    => $client->string('CANCEL'),
+						actions => {
+							go => {
+								player => 0,
+								cmd    => [ 'jiveblankcommand' ],
+							},
+						},
+						nextWindow => 'parent',
+					},
+					{
+						text    => $client->string('JIVE_OVERWRITE_PRESET_X', $currentPreset),
+						actions => {
+							go => {
+								player => 0,
+								cmd    => [ 'jivefavorites', 'set_preset', ],
+								params => {
+									key	=> $jive_preset,
+									favorites_url	=> $url,
+									favorites_title	=> $title,
+									favorites_type	=> $type,
+									parser	=> $parser,
+								},
+							},
+						},
+						nextWindow => 'presets',
+					},
+
+				],
+			};
+		} else {
+			$item = {
+				text    => $request->string('JIVE_SET_PRESET_X', $jive_preset),
+				actions => {
+					go => {
+						player => 0,
+						cmd    => [ 'jivefavorites', 'set_preset', ],
+						params => {
+							key	=> $jive_preset,
+							favorites_url	=> $url,
+							favorites_title	=> $title,
+							favorites_type	=> $type,
+							parser	=> $parser,
+						},
+					},
+				},
+				nextWindow => 'presets',
+			};
+		}
+		push @presets_menu, $item;
+	}
+
+	$request->addResult('offset', 0);
+	$request->addResult('count', scalar(@presets_menu));
+	$request->addResult('item_loop', \@presets_menu);
+	$request->setStatusDone();
+		
+} 
+
+
 sub jiveFavoritesCommand {
 
 	main::INFOLOG && $log->info("Begin function");
@@ -2908,6 +2619,7 @@ sub jiveFavoritesCommand {
 	my $url     = $request->getParam('url');
 	my $type    = $request->getParam('type');
 	my $icon    = $request->getParam('icon');
+	my $parser  = $request->getParam('parser');
 	my $command = $request->getParam('_cmd');
 	my $token   = uc($command); # either ADD or DELETE
 	my $action = 'grandparent';
@@ -2919,7 +2631,6 @@ sub jiveFavoritesCommand {
 		my $title  = $request->getParam('favorites_title');
 		my $url    = $request->getParam('favorites_url');
 		my $type   = $request->getParam('favorites_type');
-		my $parser = $request->getParam('parser');
 
 		# if playlist_index is sent, that's for the current NP track, derive everything you need from it
 		my $playlist_index = $request->getParam('playlist_index');
@@ -2974,9 +2685,10 @@ sub jiveFavoritesCommand {
 					player => 0,
 					cmd    => ['favorites', $command ],
 					params => {
-						title => $title,
-						url   => $url,
-						type  => $type,
+						title  => $title,
+						url    => $url,
+						type   => $type,
+						parser => $parser,
 					},
 				},
 			},
@@ -3270,6 +2982,9 @@ sub appMenus {
 					# Use title from app list
 					$clone->{stringToken} = $apps->{$app}->{title};
 
+					# flag as an app
+					$clone->{isApp} = 1;
+
 					push @{$menu}, $clone;
 				}
 			}
@@ -3309,6 +3024,7 @@ sub appMenus {
 					},
 					displayWhenOff => 0,
 					id             => 'opml' . $app,
+					isApp		=> 1,
 					node           => $node,
 					text           => $apps->{$app}->{title},
 					window         => {
@@ -3322,7 +3038,7 @@ sub appMenus {
 	return [] if !scalar @{$menu};
 	
 	# Alpha sort and add weighting
-	my $weight = 21; # After Internet Radio
+	my $weight = 25; # After Search
 	
 	my @sorted =
 	 	map { $_->{weight} = $weight++; $_ } 

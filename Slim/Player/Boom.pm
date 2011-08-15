@@ -248,8 +248,9 @@ sub hasCompression { 1 }
 
 # Do we have support for client-side scrolling?
 sub hasScrolling {
-	return shift->revision >= 51;
+	return shift->revision >= 55;
 }
+
 
 sub maxTreble {	return 23; }
 sub minTreble {	return -23; }

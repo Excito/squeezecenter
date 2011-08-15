@@ -1,6 +1,6 @@
 package Slim::Music::Artwork;
 
-# $Id: Artwork.pm 28225 2009-08-19 08:47:37Z michael $
+# $Id: Artwork.pm 31945 2011-02-24 18:03:39Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -19,8 +19,10 @@ L<Slim::Music::Artwork>
 
 use strict;
 
-use File::Basename qw(dirname);
+use File::Basename qw(basename dirname);
 use File::Slurp;
+use File::Path qw(mkpath rmtree);
+use File::Spec::Functions qw(catfile catdir);
 use Path::Class;
 use Scalar::Util qw(blessed);
 use Tie::Cache::LRU;
@@ -34,7 +36,8 @@ use Slim::Utils::Misc;
 use Slim::Utils::Prefs;
 use Slim::Utils::Unicode;
 use Slim::Utils::OSDetect;
-use Slim::Web::Graphics;
+
+use constant MAX_RETRIES => 5;
 
 # Global caches:
 my $artworkDir = '';
@@ -43,74 +46,106 @@ my $importlog  = logger('scan.import');
 
 my $prefs = preferences('server');
 
-tie my %lastFile, 'Tie::Cache::LRU', 32;
+tie my %lastFile, 'Tie::Cache::LRU', 128;
+
+# Small cache of path -> cover.jpg mapping to speed up
+# scans of files in the same directory
+# Don't use Tie::Cache::LRU as it is a bit too expensive in the scanner
+my %findArtCache;
 
 # Public class methods
-sub findArtwork {
-	my $class = shift;
-	my $track = shift;
+sub findStandaloneArtwork {
+	my ( $class, $trackAttributes, $deferredAttributes, $dirurl ) = @_;
 	
-	my $isDebug = $importlog->is_debug;
+	my $isInfo = main::INFOLOG && $log->is_info;
 	
-	# Initialize graphics resizing
-	Slim::Web::Graphics::init();
+	my $art = $findArtCache{$dirurl};
+	
+	# Files to look for
+	my @files = qw(cover folder album thumb);
 
-	# Only look for track/album combos that don't already have artwork.
-	my $cond = {
-		'me.audio'      => 1,
-		'me.timestamp'  => { '>=' => Slim::Music::Import->lastScanTime },
-		'album.artwork' => { '='  => undef },
-	};
+	if ( !defined $art ) {
+		my $parentDir = Path::Class::dir( Slim::Utils::Misc::pathFromFileURL($dirurl) );
+		
+		# coverArt/artfolder pref support
+		if ( my $coverFormat = $prefs->get('coverArt') ) {
+			# If the user has specified a pattern to match the artwork on, we need
+			# to generate that pattern. This is nasty.
+			if ( $coverFormat && $coverFormat =~ /^%(.*?)(\..*?){0,1}$/ ) {
+				my $suffix = $2 ? $2 : '.jpg';
 
-	my $attr = {
-		'join'     => 'album',
-		'group_by' => 'album',
-	};
+				# Merge attributes to use with TitleFormatter
+				# XXX This may break for some people as it's not using a Track object anymore
+				my $meta = { %{$trackAttributes}, %{$deferredAttributes} };
+				
+				if ( my $prefix = Slim::Music::TitleFormatter::infoFormat( undef, $1, undef, $meta ) ) {
+					$coverFormat = $prefix . $suffix;
 
-	# If the user passed in a track (dir) object, match on that base directory.
-	if (blessed($track) && $track->content_type eq 'dir') {
+					if ( main::ISWINDOWS ) {
+						# Remove illegal characters from filename.
+						$coverFormat =~ s/\\|\/|\:|\*|\?|\"|<|>|\|//g;
+					}
+					
+					# Generating a pathname from tags is dangerous because the filesystem
+					# encoding may not match the locale, but that is the best guess that we have.
+					$coverFormat = Slim::Utils::Unicode::encode_locale($coverFormat);
 
-		$cond->{'me.url'} = { 'like' => sprintf('%s%%', $track->url) };
-
-	} elsif (blessed($track) && $track->audio) {
-
-		$cond->{'me.url'} = { 'like' => sprintf('%s%%', dirname($track->url)) };
-	}
-
-	# Find distinct albums to check for artwork.
-	my $tracks = Slim::Schema->search('Track', $cond, $attr);
-
-	my $progress = undef;
-	my $count    = $tracks->count;
-
-	if ($count) {
-		$progress = Slim::Utils::Progress->new({ 
-			'type' => 'importer', 'name' => 'artwork', 'total' => $count, 'bar' => 1
-		});
-	}
-
-	while (my $track = $tracks->next) {
-
-		my $album = $track->album;
-
-		if ($track->coverArtExists) {
-
-			if ( !$progress ) {
-				$isDebug && $importlog->debug(sprintf("Album [%s] has artwork.", $album->name));
+					my $artPath = $parentDir->file($coverFormat)->stringify;
+					
+					if ( my $artDir = $prefs->get('artfolder') ) {
+						$artDir  = Path::Class::dir($artDir);
+						$artPath = $artDir->file($coverFormat)->stringify;
+					}
+					
+					if ( -e $artPath ) {
+						$isInfo && $log->info("Found variable cover $coverFormat from $1");
+						$art = $artPath;
+					}
+					else {
+						$isInfo && $log->info("No variable cover $coverFormat found from $1");
+					}
+				}
+				else {
+				 	$isInfo && $log->info("No variable cover match for $1");
+				}
 			}
-
-			$album->artwork($track->id);
-			$album->update;
-			
-			precacheArtwork( $track->id );
+			elsif ( defined $coverFormat ) {
+				push @files, $coverFormat;
+			}
 		}
-
-		$progress->update($album->name);
+		
+		if ( !$art ) {
+			# Find all image files in the file directory
+			my $types = qr/\.(?:jpe?g|png|gif)$/i;
+			
+			my $files = File::Next::files( {
+				file_filter    => sub { Slim::Utils::Misc::fileFilter($File::Next::dir, $_, $types) },
+				descend_filter => sub { 0 },
+			}, $parentDir );
+	
+			my @found;
+			while ( my $image = $files->() ) {
+				push @found, $image;
+			}
+			
+			# Prefer cover/folder/album/thumb, then just take the first image
+			my $filelist = join( '|', @files );
+			if ( my @preferred = grep { basename($_) =~ qr/^(?:$filelist)/i } @found ) {
+				$art = $preferred[0];
+			}
+			else {
+				$art = $found[0] || 0;
+			}
+		}
+	
+		# Cache found artwork for this directory to speed up later tracks
+		%findArtCache = () if scalar keys %findArtCache > 32;
+		$findArtCache{$dirurl} = $art;
 	}
-
-	$progress->final($count) if $count;
-
-	Slim::Music::Import->endImporter('findArtwork');
+	
+	$isInfo && $log->info("Using $art");
+	
+	return $art || 0;
 }
 
 sub getImageContentAndType {
@@ -119,11 +154,8 @@ sub getImageContentAndType {
 
 	# Bug 3245 - for systems who's locale is not UTF-8 - turn our UTF-8
 	# path into the current locale.
-	my $locale = Slim::Utils::Unicode::currentLocale();
-
-	if ($locale ne 'utf8' && !-e $path) {
-		$path = Slim::Utils::Unicode::encode($locale, $path);
-	}
+	# Bug 16683: this is no longer true - all paths should be native encoding already
+	# (locale encoding of $path removed)
 
 	my $content = eval { read_file($path, 'binmode' => ':raw') };
 
@@ -200,7 +232,7 @@ sub _readCoverArtTags {
 	my $track = shift;
 	my $file  = shift;
 
-	my $isInfo = $log->is_info;
+	my $isInfo = main::INFOLOG && $log->is_info;
 
 	$isInfo && $log->info("Looking for a cover art image in the tags of: [$file]");
 
@@ -221,7 +253,7 @@ sub _readCoverArtTags {
 			
 			$isInfo && $log->info(sprintf("Found image of length [%d] bytes with type: [$contentType]", length($body)));
 
-			return ($body, $contentType, 1);
+			return ($body, $contentType, length($body));
 		}
 
  	} else {
@@ -237,7 +269,7 @@ sub _readCoverArtFiles {
 	my $track = shift;
 	my $path  = shift;
 	
-	my $isInfo = $log->is_info;
+	my $isInfo = main::INFOLOG && $log->is_info;
 
 	my @names      = qw(cover Cover thumb Thumb album Album folder Folder);
 	my @ext        = qw(png jpg jpeg gif);
@@ -270,7 +302,11 @@ sub _readCoverArtFiles {
 			if (main::ISWINDOWS) {
 				# Remove illegal characters from filename.
 				$artwork =~ s/\\|\/|\:|\*|\?|\"|<|>|\|//g;
-			}
+			}		
+			
+			# Generating a pathname from tags is dangerous because the filesystem
+			# encoding may not match the locale, but that is the best guess that we have.
+			$artwork = Slim::Utils::Unicode::encode_locale($artwork);
 	
 			my $artPath = $parentDir->file($artwork)->stringify;
 	
@@ -349,45 +385,542 @@ sub _readCoverArtFiles {
 	return undef;
 }
 
-sub precacheArtwork {
-	my $id = shift;
+sub precacheAllArtwork {
+	my $class = shift;
+	my $cb    = shift; # optional callback when done (main process async mode)
 	
-	my $isDebug = $log->is_debug;
+	my $isDebug = main::DEBUGLOG && $importlog->is_debug;
 	
-	if ( $prefs->get('precacheArtwork') ) {
-		# Pre-cache this artwork resized to our commonly-used sizes/formats
-		# 1. user's thumb size or 100x100_o (large web artwork)
-		# 2. 50x50_o (small web artwork)
-		# 3+ SqueezePlay/Jive size artwork
+	my $isEnabled = $prefs->get('precacheArtwork');
+	
+	my $dbh = Slim::Schema->dbh;
+		
+	# Find all tracks with un-cached artwork:
+	# * All distinct cover values where cover isn't 0 and cover_cached is null
+	# * Tracks share the same cover art when the cover field is the same
+	#   (same path or same embedded art length).
+	my $sql = qq{
+		SELECT
+			tracks.url,
+			tracks.cover,
+			tracks.coverid,
+			albums.id AS albumid,
+			albums.title AS album_title,
+			albums.artwork AS album_artwork
+		FROM   tracks
+		JOIN   albums ON (tracks.album = albums.id)
+		WHERE  tracks.cover != '0'
+		AND    tracks.coverid IS NOT NULL
+		AND    tracks.cover_cached IS NULL
+		GROUP BY tracks.cover
+ 	};
 
-		my $coversize = $prefs->get('thumbSize') || 100;
+	my $sth_update_tracks = $dbh->prepare( qq{
+	    UPDATE tracks
+	    SET    coverid = ?, cover_cached = 1
+	    WHERE  album = ?
+	    AND    cover = ?
+	} );
 	
-		my @dims = (
-			"${coversize}x${coversize}_o",
-			'50x50_o',
-			'40x40_m',
-			'41x41_m',
-			'64x64_m',
-#			'300x143_m',
-#			'180x180_m',
-#			'240x240_m',
-#			'470x153_m',
-#			'470x170_m',
-		);
+	my $sth_update_albums = $dbh->prepare( qq{
+		UPDATE albums
+		SET    artwork = ?
+		WHERE  id = ?
+	} );
+
+	my ($count) = $dbh->selectrow_array( qq{
+		SELECT COUNT(*) FROM ( $sql ) AS t1
+	} );
 	
-		for my $dim ( @dims ) {
-			$isDebug && $importlog->debug( "Pre-caching artwork for trackid $id at size $dim" );
-			eval {
-				Slim::Web::Graphics::processCoverArtRequest( undef, "music/$id/cover_$dim" );
-			};
-			
-			$log->error("Pre-caching failed for trackid $id at size $dim: $@") if $@;
+	$log->error("Starting precacheArtwork for $count albums");
+	
+	if ( !$count ) {
+		$cb && $cb->();
+		
+		if ( main::SCANNER ) {
+			Slim::Music::Import->endImporter('precacheArtwork');
 		}
+		
+		return;
+	}
+
+	my $progress = Slim::Utils::Progress->new( { 
+		type  => 'importer',
+		name  => 'precacheArtwork',
+		total => $count, 
+		bar   => 1,
+	} );
+	
+	# Pre-cache this artwork resized to our commonly-used sizes/formats
+	# 1. user's thumb size or 100x100_o (large web artwork)
+	# 2. 50x50_o (small web artwork)
+	# 3+ SqueezePlay/Jive size artwork
+	my @specs;
+	
+	if ($isEnabled) {
+		if (Slim::Utils::OSDetect::isSqueezeOS()) {
+			@specs = (
+				'75x75_p',  # iPeng
+				'64x64_m',	# Fab4 10'-UI Album list
+				'41x41_m',	# Jive/Baby Album list
+				'40x40_m',	# Fab4 Album list
+			);
+		} else {
+			my $thumbSize = $prefs->get('thumbSize') || 100;
+			@specs = (
+				"${thumbSize}x${thumbSize}_o", # Web UI large thumbnails
+				'75x75_p',	# iPeng
+				'64x64_m',	# Fab4 10'-UI Album list
+				'50x50_o',	# Web UI small thumbnails
+				'41x41_m',	# Jive/Baby Album list
+				'40x40_m',	# Fab4 Album list
+			);
+		}
+		
+		require Slim::Utils::ImageResizer;
+	}
+	
+	my $sth = $dbh->prepare($sql);
+	$sth->execute;
+	
+	my ($url, $cover, $coverid, $albumid, $album_title, $album_artwork);
+	$sth->bind_columns(\$url, \$cover, \$coverid, \$albumid, \$album_title, \$album_artwork);
+	
+	my $i = 0;
+	
+	my $work = sub {
+		if ( $sth->fetch ) {
+			# Make sure album.artwork points to this track, as it may not
+			# be pointing there now because we did not join tracks via the
+			# artwork column.
+			if ( $album_artwork && $album_artwork ne $coverid ) {
+				$sth_update_albums->execute( $coverid, $albumid );
+			}
+			
+			# Do the actual pre-caching only if the pref for it is enabled
+			if ( $isEnabled ) {
+					
+				# Image to resize is either a cover path or the audio file
+				my $path = $cover =~ /^\d+$/
+					? Slim::Utils::Misc::pathFromFileURL($url)
+					: $cover;
+			
+				$isDebug && $importlog->debug( "Pre-caching artwork for " . $album_title . " from $path" );
+			
+				if ( Slim::Utils::ImageResizer->resize($path, "music/$coverid/cover_", join(',', @specs), undef) ) {				
+					# Update the rest of the tracks on this album
+					# to use the same coverid and cover_cached status
+					$sth_update_tracks->execute( $coverid, $albumid, $cover );
+				}
+			}
+		
+			$progress->update( $album_title );
+		
+			if ( ++$i % 50 == 0 ) {
+				Slim::Schema->forceCommit;
+			}
+			
+			return 1;
+		}
+		
+		$progress->final;
+		
+		$log->error( "precacheArtwork finished in " . $progress->duration );
+		
+		$cb && $cb->();
+		
+		return 0;
+	};
+	
+	if ( main::SCANNER ) {
+		# Non-async mode in scanner
+		while ( $work->() ) { }
+		
+		Slim::Music::Import->endImporter('precacheArtwork');
+	}
+	else {
+		# Run async in main process
+		Slim::Utils::Scheduler::add_ordered_task($work);
+	}	
+}
+
+=pod We don't have an artwork provider for this feature.
+
+sub downloadArtwork {
+	my $class = shift;
+	my $cb    = shift; # optional callback when done (main process async mode)
+	
+	# don't try to run this in embedded mode
+	if ( !$prefs->get('downloadArtwork') ) {
+		$cb && $cb->();
+		return;
+	}
+	
+	# Artwork requires an SN account
+	if ( !$prefs->get('sn_email') && !Slim::Utils::OSDetect::isSqueezeOS() ) {
+		$importlog->warn( "Automatic artwork download requires a SqueezeNetwork account" );
+		Slim::Music::Import->endImporter('downloadArtwork');
+		$cb && $cb->();
+		return;
+	}
+	
+	# Find distinct albums to check for artwork.
+	my $tracks = Slim::Schema->search('Track', {
+		'me.audio'   => 1,
+		'me.coverid' => { '='  => undef },
+	}, {
+		'join'     => 'album',
+	});
+
+	my $dbh = Slim::Schema->dbh;
+
+	my $sth_update_tracks = $dbh->prepare( qq{
+	    UPDATE tracks
+	    SET    cover = ?, coverid = ?
+	    WHERE  album = ?
+	} );
+	
+	my $sth_update_albums = $dbh->prepare( qq{
+		UPDATE albums
+		SET    artwork = ?
+		WHERE  id = ?
+	} );
+	
+	my $progress = undef;
+	my $count    = $tracks->count;
+
+	if ($count) {
+		$progress = Slim::Utils::Progress->new({ 
+			'type'  => 'importer',
+			'name'  => 'downloadArtwork',
+			'total' => $count,
+			'bar'   => 1
+		});
+	}
+
+	$importlog->error("Starting downloadArtwork for $count tracks");
+
+	# don't load these modules unless we get here, as they're pulling in a lot of dependencies
+	require Slim::Networking::SqueezeNetwork;
+
+	if ( main::SCANNER ) {
+		require LWP::UserAgent;
+		require HTTP::Headers;
+	}
+	else {
+		require Slim::Networking::SimpleAsyncHTTP;
+		require Slim::Utils::Network;
+	}
+
+	# Add an auth header
+	my $authHeader = Slim::Networking::SqueezeNetwork->getAuthHeaders();
+
+	my $cacheDir = catdir( $prefs->get('librarycachedir'), 'DownloadedArtwork' );
+	mkpath $cacheDir if !-d $cacheDir;
+	
+	my $ua;
+	
+	if ( main::SCANNER ) {
+		$ua = LWP::UserAgent->new(
+			agent   => 'Squeezebox Server/' . $::VERSION,
+			timeout => 10,
+		);
+		$ua->default_header($authHeader->[0] => $authHeader->[1]);
+	}
+
+	while ( _downloadArtwork({
+		headers           => $authHeader,
+		snUrl             => Slim::Networking::SqueezeNetwork->url( '/api/artwork/search' ),
+		tracks            => $tracks,
+		count             => $count,
+		progress          => $progress,
+		sth_update_tracks => $sth_update_tracks,
+		sth_update_albums => $sth_update_albums, 
+		cacheDir          => $cacheDir,
+		cb                => $cb,
+		ua                => $ua,
+	}) ) {}
+}
+
+my $serverDown = 0;
+sub _downloadArtwork {
+	my $params = shift;
+
+	if ( $serverDown < MAX_RETRIES ) {
+
+		my $isInfo  = main::INFOLOG && $importlog->is_info;
+		my $isDebug = main::DEBUGLOG && $importlog->is_debug;
+
+		my ($artist, $done);
+	
+		# try other contributors of previous track
+		if ( $artist = delete $lastFile{meta}->{contributors} ) {
+			$lastFile{meta}->{title} = $lastFile{meta}->{albumname} . '/' . $artist;
+		}
+		
+		# get next track from db
+		elsif ( my $track = $params->{tracks}->next ) {
+			
+			my $albumname = $track->album->name;
+			my $albumid   = $track->album->id;
+			
+			# Skip if we have already looked for this album before with no results
+			if ( $lastFile{ "failed_$albumid" } ) {
+				$isDebug && $importlog->debug( "Skipping $albumname, previous search failed" );
+			} 
+			
+			# Only lookup albums that have artist names
+			elsif ( $track->album->contributor && !$lastFile{ $albumid } ) {
+
+				# let's join all contributors together, in case the album artist doesn't match (eg. compilations)
+				my @artists;
+				foreach ($track->album->contributors) {
+					push @artists, $_->name;
+				}
+				
+				# last.fm stores compilations under the non-localized "Various Artists" artist
+				if ($track->album->compilation) {
+					push @artists, 'Various Artists';
+				}
+
+				my $trackartists = join(',', @artists);
+				$artist = $track->album->contributor->name;
+
+				$lastFile{meta} = {
+					albumname  => $albumname,
+					albumid    => $albumid,
+					album_mbid => $track->album->musicbrainz_id,
+					title      => "$albumname/$artist",
+					track      => $track,
+				};
+				
+				# we'll not only try the album artist, but track artists too
+				# iTunes tends to oddly flag albums as compilations when they're not
+				# store contributors in params hash for later use
+				if ( lc($trackartists) ne lc($artist) ) {
+					$lastFile{meta}->{contributors} = $trackartists;
+				}
+			}
+
+			# update the progress status unless we give this track another try with a different contributor
+			if ( $params->{progress} ) {
+				$params->{progress}->update( $albumname );
+			}
+		}
+		
+		# nothing left to do
+		else {
+			$done = 1;
+		}
+
+		my $args = '?album=' . URI::Escape::uri_escape_utf8( $lastFile{meta}->{albumname} || '' )
+			. '&artist=' . URI::Escape::uri_escape_utf8( $artist || '' )
+			. '&mbid=' . ( $lastFile{meta}->{album_mbid} || '' );
+	
+		my $base = catfile( $params->{cacheDir}, Digest::SHA1::sha1_hex($args) );
+	
+		# if we're done or have failed on that combination before, skip it
+		if ( $done || $lastFile{ "failed_" . $lastFile{meta}->{albumid} } || $lastFile{ "failed_$base" } || $lastFile{ $lastFile{meta}->{albumid} } ) {
+			# nothing really to do here... 
+		}
+		
+		# check whether we already have cached artwork from earlier lookup
+		elsif ( my $file = _getCoverFromFileCache( $base ) ) {
+			 if ($isDebug) {
+			 	 $importlog->debug( "Artwork for $lastFile{meta}->{title} found in cache:" );
+			 	 $importlog->debug( $file );
+			 }
+			_setCoverArt( $file, $params );
+		}
+		
+		# get artwork from mysb.com
+		else {
+
+			$isInfo && $importlog->info("Trying to get artwork for $lastFile{meta}->{title} from mysqueezebox.com");
+
+			my $file = catfile($base) . '.tmp';
+			my $url  = $params->{snUrl} . $args;
+
+			# we're going to use sync downloads in the scanner
+			if ( main::SCANNER ) {
+				my $res = $params->{ua}->get( $url, ':content_file' => $file );
+				
+				_gotArtwork({
+					params => {
+						%$params,
+						saveAs => $file,
+					},
+					error  => $res->code != 200 ? $res->code . ' ' . $res->message : undef,
+					ct     => $res->content_type,
+				})
+			}
+			
+			# use async downloads when running in-process
+			else {
+				my $http = Slim::Networking::SimpleAsyncHTTP->new(
+					\&_gotArtwork,
+					\&_gotArtwork,
+					{
+						%$params,
+						saveAs   => $file,
+						timeout  => 10,
+					}
+				);
+			
+				$http->get( $url, @{ $params->{headers} } );
+
+				return;
+			}
+		}
+
+
+		# if we're running in the standalone scanner, return true value
+		if ( main::SCANNER && !$done ) {
+			return 1;
+		}
+		# didn't need to download artwork - call ourselves for the next lookup
+		elsif (!$done) {
+			_downloadArtwork($params);			
+			return;
+		}
+	}
+
+	if ( my $progress = $params->{progress} ) {
+		$progress->final($params->{count}) ;
+	
+		if ($serverDown >= MAX_RETRIES) {
+			$importlog->error( "downloadArtwork aborted after repeated failure connecting to mysqueezebox.com " . $progress->duration );
+		}
+		else {
+			$importlog->error( "downloadArtwork finished in " . $progress->duration );
+		}
+	}
+
+	Slim::Music::Import->endImporter('downloadArtwork');
+
+	$serverDown = 0;
+	%lastFile = ();
+	if ( my $cb = $params->{cb} ) {
+		$cb->();
+	}
+	
+	return 0;
+}
+
+sub _gotArtwork {
+	my $http = shift;
+	
+	my ($params, $ct, $error);
+	
+	# SimpleAsyncHTTP will return an object
+	if ( blessed($http) ) {
+		$params = $http->params;
+		$ct     = $http->headers() && $http->headers()->content_type;
+		$error  = $http->error;
+	}
+	else {
+		$params = $http->{params};
+		$ct     = $http->{ct};
+		$error  = $http->{error};
+	}
+	
+	my $base = $params->{saveAs};
+	$base =~ s/\.tmp$//i;
+
+	if ( !$error && $ct =~ m{image/(jpe?g|gif|png)$} && -f $params->{saveAs} ) {
+		# move artwork file to sub-folder 
+		my $file = catfile( $base, "cover.$1" );
+		mkdir $base;
+		rename $params->{saveAs}, $file;
+
+		if (main::DEBUGLOG && $importlog->is_debug) {
+			$importlog->debug( "Successfully downloaded artwork for $lastFile{meta}->{title}" );
+			$importlog->debug( "Cached as $file" );
+		} 
+		$serverDown = 0;
+		delete $lastFile{meta}->{contributor};
+		
+		_setCoverArt( $file, $params );
+	}
+	elsif ( !$error ) {
+		
+		# sometimes the error message is the response's content
+		if ( $ct eq 'text/plain' && -f $params->{saveAs} ) {
+			$error = eval { read_file($params->{saveAs}) };
+		}
+
+		$error ||= "Invalid file type $ct, or file not found: $params->{saveAs}";
+
+	}
+
+	if ( $error ) {
+		# 50x - server problem, 403 - authentication required
+		if ( $error =~ /^(:5|403|connect timed out)/i ) {
+			$serverDown++;
+		}
+		else {
+			$serverDown = 0;
+		}
+
+		$importlog->error( "Failed to download artwork for $lastFile{meta}->{title}: " . $error );
+		$lastFile{ "failed_$base" } = 1;
+	}	
+	
+	# remove left-overs
+	unlink $params->{saveAs};
+	delete $params->{saveAs};
+	
+	# we're in async mode - call ourselves
+	if ( !main::SCANNER ) {
+		_downloadArtwork($params);
 	}
 }
 
-=head1 SEE ALSO
+sub _setCoverArt {
+	my ( $file, $params ) = @_;
+	
+	my $track     = $lastFile{meta}->{track};
+	my $progress  = $params->{progress};
+	my $albumid   = $lastFile{meta}->{albumid};
+	
+	if ( $file && -e $file ) {
+		my $coverid = $track->generateCoverId({
+			cover => $file,
+			url   => $track->url,
+			mtime => $track->timestamp,
+			size  => $track->filesize,
+		});
+		
+		my $c = $params->{sth_update_tracks}->execute( $file, $coverid, $albumid );
+		$params->{sth_update_albums}->execute( $coverid, $albumid );
 
+		# if the track update returned a number, we'll increase progress by this value
+		if ( $c && $progress ) {
+			$progress->update( $lastFile{meta}->{title}, $progress->done() + $c - 1 );
+		}
+
+		$lastFile{ $albumid } = 1;
+		
+		# don't look up alternative artist for track if one has been found
+		delete $lastFile{meta}->{contributors};
+	}
+	
+	else {
+		$importlog->warn( "Failed to download artwork for $lastFile{meta}->{title}" );
+		
+		$lastFile{ "failed_$albumid" } = 1;
+	}
+}
+
+sub _getCoverFromFileCache {
+	my $base = shift;
+	
+	opendir(DIR, $base) || return;
+	
+	my @f = grep /cover\.(?:jpe?g|png|gif)$/i, readdir(DIR);
+
+	return catdir($base, $f[0]) if @f;
+}
 =cut
 
 1;

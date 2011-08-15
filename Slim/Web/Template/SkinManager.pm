@@ -1,6 +1,6 @@
 package Slim::Web::Template::SkinManager;
 
-# $Id: SkinManager.pm 28447 2009-09-05 02:38:55Z andy $
+# $Id: SkinManager.pm 32504 2011-06-07 12:16:25Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -213,25 +213,17 @@ sub addSkinTemplate {
 				my ($context, @args) = @_;
 				sub { Slim::Utils::Strings::getString(shift, @args) }
 			}, 1 ],
-			'nbsp'          => \&_nonBreaking,
-			'uri'           => \&URI::Escape::uri_escape_utf8,
-			'unuri'         => \&URI::Escape::uri_unescape,
-			'utf8decode'    => \&Slim::Utils::Unicode::utf8decode,
-			'utf8encode'    => \&Slim::Utils::Unicode::utf8encode,
-			'utf8on'        => \&Slim::Utils::Unicode::utf8on,
-			'utf8off'       => \&Slim::Utils::Unicode::utf8off,
-			'imageproxy'    => [ sub {
-				my ( $context, $width, $height ) = @_;
-				
-				$height ||= '';
-				
-				return sub {
-					my $url = shift;
-					
-					return Slim::Networking::SqueezeNetwork->url(
-						"/public/imageproxy?w=$width&h=$height&u=" . uri_escape($url)
-					);
-				};
+			'nbsp'              => \&_nonBreaking,
+			'uri'               => \&URI::Escape::uri_escape_utf8,
+			'unuri'             => \&URI::Escape::uri_unescape,
+			'utf8decode'        => \&Slim::Utils::Unicode::utf8decode,
+			'utf8decode_locale' => \&Slim::Utils::Unicode::utf8decode_locale,
+			'utf8encode'        => \&Slim::Utils::Unicode::utf8encode,
+			'utf8on'            => \&Slim::Utils::Unicode::utf8on,
+			'utf8off'           => \&Slim::Utils::Unicode::utf8off,
+			'resizeimage'       => [ \&_resizeImage, 1 ],  
+			'imageproxy'        => [ sub {
+				return _resizeImage($_[0], $_[1], $_[2], '-');
 			}, 1 ],
 		},
 
@@ -250,6 +242,66 @@ sub _nonBreaking {
 
 	return $string;
 }
+
+
+sub _resizeImage {
+	my ( $context, $width, $height, $mode, $prefix ) = @_;
+	
+	$height ||= '';
+	$mode   ||= '';
+	$prefix ||= '';
+	
+	return sub {
+		my $url = shift;
+
+		# don't use imageproxy on local network
+		if ( $url =~ m{^http://(?:192\.168\.|172\.16\.|10\.|127\.0|localhost)}i && !$ENV{SN_DEV} ) {
+			# XXX - we might consider a local imageproxy handling local URLs and files
+			return $url;
+		}
+		
+		# external resource
+		elsif ( $url =~ m{^http://} ) {
+			return Slim::Networking::SqueezeNetwork->url(
+				"/public/imageproxy?w=$width&h=$height&u=" . uri_escape($url)
+			);
+		}
+		elsif ( $url =~ m{^http} ) {
+			return Slim::Networking::SqueezeNetwork->url(
+				"/public/imageproxy?w=$width&h=$height&u=$url"
+			);
+		}
+		
+		# sometimes we'll need to prepend the webroot to our url
+		$url = $prefix . $url unless $url =~ m{^/};
+
+		# local url - use internal image resizer
+		my $resizeParams = "_$width";
+		$resizeParams .= "x$height" if $height;
+
+		# music artwork
+		if ( $url =~ m{^(/music/.*/cover)(?:\.jpg)?$} ) {
+			return $1 . $resizeParams . '_o';
+		}
+		
+		# special mode "-": don't resize local urls (some already come with resize parameters)
+		if ($mode eq '-') {
+			if ($url =~ m|/[a-z]+\.png$|) {
+				$mode = '';
+			}
+			else {
+				return $url;
+			}
+		}
+
+		$resizeParams .= "_$mode" if $mode;
+	
+		$url =~ s/(\.png|\.gif|\.jpe?g|)$/$resizeParams$1/i;
+		
+		return $url; 
+	};
+}
+
 
 sub _fillTemplate {
 	my ($class, $params, $path, $skin) = @_;

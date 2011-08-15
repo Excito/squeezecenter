@@ -38,9 +38,11 @@ our $VERSION = $AnyEvent::VERSION;
 
 # some public dns servers
 our @DNS_FALLBACK = (
-   v209.244.0.3, v209.244.0.4, # level3
-   v4.2.2.1, v4.2.2.3, v4.2.2.4, v4.2.2.5, v4.2.2.6, # vnsc-pri.sys.gtei.net
+   (v8.8.8.8, v8.8.4.4)[rand 2], # google public dns
+   (v209.244.0.3, v209.244.0.4)[rand 2], # level3
+   (v4.2.2.1, v4.2.2.3, v4.2.2.4, v4.2.2.5, v4.2.2.6)[rand 4], # vnsc-pri.sys.gtei.net
 );
+push @DNS_FALLBACK, splice @DNS_FALLBACK, rand $_, 1 for reverse 1..@DNS_FALLBACK;
 
 =item AnyEvent::DNS::a $domain, $cb->(@addrs)
 
@@ -118,7 +120,7 @@ sub MAX_PKT() { 4096 } # max packet size we advertise and accept
 
 sub DOMAIN_PORT() { 53 } # if this changes drop me a note
 
-sub resolver;
+sub resolver ();
 
 sub a($$) {
    my ($domain, $cb) = @_;
@@ -764,7 +766,7 @@ sub new {
 
    Scalar::Util::weaken (my $wself = $self);
 
-   if (socket my $fh4, AF_INET , &Socket::SOCK_DGRAM, 0) {
+   if (socket my $fh4, AF_INET , Socket::SOCK_DGRAM(), 0) {
       ++$got_socket;
 
       AnyEvent::Util::fh_nonblocking $fh4, 1;
@@ -776,7 +778,7 @@ sub new {
       };
    }
 
-   if (AF_INET6 && socket my $fh6, AF_INET6, &Socket::SOCK_DGRAM, 0) {
+   if (AF_INET6 && socket my $fh6, AF_INET6, Socket::SOCK_DGRAM(), 0) {
       ++$got_socket;
 
       $self->{fh6} = $fh6;
@@ -878,7 +880,7 @@ sub os_config {
    $self->{search} = [];
 
    if ((AnyEvent::WIN32 || $^O =~ /cygwin/i)) {
-      no strict 'refs';
+      #no strict 'refs';
 
       # there are many options to find the current nameservers etc. on windows
       # all of them don't work consistently:
@@ -887,40 +889,62 @@ sub os_config {
       # - calling windows api functions doesn't work on cygwin
       # - ipconfig uses locale-specific messages
 
-      # we use ipconfig parsing because, despite all its brokenness,
-      # it seems most stable in practise.
-      # for good measure, we append a fallback nameserver to our list.
+      # we use Net::DNS::Resolver first, and if it fails, will fall back to
+      # ipconfig parsing.
+      unless (eval {
+         # Net::DNS::Resolver uses a LOT of ram (~10mb), but what can we do :/
+         # (this seems mostly to be due to Win32::API).
+         require Net::DNS::Resolver;
+         my $r = Net::DNS::Resolver->new;
 
-      if (open my $fh, "ipconfig /all |") {
-         # parsing strategy: we go through the output and look for
-         # :-lines with DNS in them. everything in those is regarded as
-         # either a nameserver (if it parses as an ip address), or a suffix
-         # (all else).
+         $r->nameservers
+            or die;
 
-         my $dns;
-         local $_;
-         while (<$fh>) {
-            if (s/^\s.*\bdns\b.*://i) {
-               $dns = 1;
-            } elsif (/^\S/ || /^\s[^:]{16,}: /) {
-               $dns = 0;
+         for my $s ($r->nameservers) {
+            if (my $ipn = AnyEvent::Socket::parse_address ($s)) {
+               push @{ $self->{server} }, $ipn;
             }
-            if ($dns && /^\s*(\S+)\s*$/) {
-               my $s = $1;
-               $s =~ s/%\d+(?!\S)//; # get rid of ipv6 scope id
-               if (my $ipn = AnyEvent::Socket::parse_address ($s)) {
-                  push @{ $self->{server} }, $ipn;
-               } else {
-                  push @{ $self->{search} }, $s;
+         }
+         $self->{search} = [$r->searchlist];
+
+         1
+      }) {
+         # we use ipconfig parsing because, despite all its brokenness,
+         # it seems most stable in practise.
+         # unfortunately it wants a console window.
+         # for good measure, we append a fallback nameserver to our list.
+
+         if (open my $fh, "ipconfig /all |") {
+            # parsing strategy: we go through the output and look for
+            # :-lines with DNS in them. everything in those is regarded as
+            # either a nameserver (if it parses as an ip address), or a suffix
+            # (all else).
+
+            my $dns;
+            local $_;
+            while (<$fh>) {
+               if (s/^\s.*\bdns\b.*://i) {
+                  $dns = 1;
+               } elsif (/^\S/ || /^\s[^:]{16,}: /) {
+                  $dns = 0;
+               }
+               if ($dns && /^\s*(\S+)\s*$/) {
+                  my $s = $1;
+                  $s =~ s/%\d+(?!\S)//; # get rid of ipv6 scope id
+                  if (my $ipn = AnyEvent::Socket::parse_address ($s)) {
+                     push @{ $self->{server} }, $ipn;
+                  } else {
+                     push @{ $self->{search} }, $s;
+                  }
                }
             }
          }
-
-         # always add one fallback server
-         push @{ $self->{server} }, $DNS_FALLBACK[rand @DNS_FALLBACK];
-
-         $self->_compile;
       }
+
+      # always add the fallback servers
+      push @{ $self->{server} }, @DNS_FALLBACK;
+
+      $self->_compile;
    } else {
       # try resolv.conf everywhere else
 
@@ -1070,7 +1094,7 @@ sub _exec {
                      &$do_retry;
                   };
 
-               $handle->push_write (pack "n/a", $req->[0]);
+               $handle->push_write (pack "n/a*", $req->[0]);
                $handle->push_read (chunk => 2, sub {
                   $handle->unshift_read (chunk => (unpack "n", $_[1]), sub {
                      undef $handle;
@@ -1102,7 +1126,7 @@ sub _exec {
 sub _scheduler {
    my ($self) = @_;
 
-   no strict 'refs';
+   #no strict 'refs';
 
    $NOW = time;
 

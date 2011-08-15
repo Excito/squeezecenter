@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner::Remote;
 
-# $Id: Remote.pm 31352 2010-09-17 13:07:08Z agrundman $
+# $Id: Remote.pm 32799 2011-07-21 12:44:26Z mherger $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -164,6 +164,9 @@ sub scanURL {
 			}
 		}
 	}
+	else {
+		$url =~ s/#slim:.+$//;
+	}
 	
 	if ( $isAudio ) { 	 
 		main::DEBUGLOG && $log->is_debug && $log->debug( "Remote stream $url known to be audio" ); 	 
@@ -206,7 +209,7 @@ sub scanURL {
 		addWMAHeaders( $request );
 	}
 	
-	if ( main::SLIM_SERVICE && $url =~ /radiotime/ ) {
+	if ( main::SLIM_SERVICE && $url =~ /(?:radiotime|tunein\.com)/ ) {
 		# Add real client IP for Radiotime so they can do proper geo-location
 		$request->header( 'X-Forwarded-For' => $client->ip );
 	}

@@ -1,6 +1,6 @@
 package Slim::Plugin::Napster::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 31439 2010-10-15 13:49:40Z agrundman $
+# $Id: ProtocolHandler.pm 31441 2010-10-15 13:50:23Z agrundman $
 
 # Napster handler for napster:// URLs.
 
@@ -320,6 +320,7 @@ sub _getTrackInfo {
 			if ( $@ || $info->{error} ) {
 				if ( main::DEBUGLOG && $log->is_debug ) {
 					$log->debug( 'getTrackInfo failed: ' . ( $@ || $info->{error} ) );
+					$log->debug( '      data received: ' . Data::Dump::dump($info) );
 				}
 				
 				_gotTrackError( $@ || $info->{error}, $client, $params );

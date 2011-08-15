@@ -1,6 +1,6 @@
 package Slim::Utils::Accessor;
 
-# $Id: Accessor.pm 30783 2010-05-18 13:56:41Z agrundman $
+# $Id: Accessor.pm 30446 2010-03-31 12:11:29Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

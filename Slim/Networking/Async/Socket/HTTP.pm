@@ -1,6 +1,6 @@
 package Slim::Networking::Async::Socket::HTTP;
 
-# $Id: HTTP.pm 31688 2010-12-23 20:40:49Z agrundman $
+# $Id: HTTP.pm 31691 2010-12-23 20:41:50Z agrundman $
 
 # Squeezebox Server Copyright 2003-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -10,7 +10,6 @@ package Slim::Networking::Async::Socket::HTTP;
 # This class contains the socket we use for async HTTP communication
 
 use strict;
-use warnings;
 
 use base qw(Net::HTTP::NB Slim::Networking::Async::Socket);
 

@@ -1,6 +1,6 @@
 package Slim::Web::Settings;
 
-# $Id: Settings.pm 30485 2010-04-07 07:31:22Z mherger $
+# $Id: Settings.pm 30456 2010-04-01 09:45:03Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

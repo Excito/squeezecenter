@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Base;
 
-# $Id: Base.pm 31508 2010-11-09 15:44:35Z agrundman $
+# $Id: Base.pm 32247 2011-04-08 06:11:04Z ayoung $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -223,7 +223,6 @@ sub set {
 
 	my $root  = $class->_root;
 	my $change = $root->{'onchange'}->{ $pref };
-	my $readonly  = $root->{'readonly'};
 	my $namespace = $root->{'namespace'};
 	my $clientid  = $class->{'clientid'} || '';
 
@@ -233,13 +232,6 @@ sub set {
 	}
 
 	my $valid = $class->validate($pref, $new);
-
-	if ($readonly) {
-
-		logBacktrace(sprintf "attempt to set %s:%s:%s while namespace is readonly", $namespace, $clientid, $pref);
-
-		return wantarray ? ($old, 0) : $old;
-	}
 
 	if ( $valid && ( main::SLIM_SERVICE || $pref !~ /^_/ ) ) {
 
@@ -423,9 +415,9 @@ sub bulkSet { if ( main::SLIM_SERVICE ) { # optimize out for SC
 	
 	for my $func ( @handlers ) {
 		eval { $func->(); };
-		if ( $@ && $log->is_debug ) {
+		if ( main::DEBUGLOG && $@ && $log->is_debug ) {
 			my $handler = Slim::Utils::PerlRunTime::realNameForCodeRef($func);
-			main::DEBUGLOG && $log->debug( "Error running bulkSet change handler $handler: $@" );
+			$log->debug( "Error running bulkSet change handler $handler: $@" );
 			Slim::Utils::Misc::bt();
 		}
 	}

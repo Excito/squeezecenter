@@ -1,6 +1,6 @@
 package Slim::Player::Client;
 
-# $Id: Client.pm 31559 2010-11-30 21:44:39Z agrundman $
+# $Id: Client.pm 32504 2011-06-07 12:16:25Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -51,7 +51,6 @@ our $defaultPrefs = {
 	'shuffle'              => 0,
 	'titleFormat'          => [5, 1, 3, 6, 0],
 	'titleFormatCurr'      => 4,
-	'playlistmode'         => 'disabled',
 	'presets'              => [],
 };
 
@@ -63,13 +62,6 @@ $prefs->setValidate({
 		    && $new >= $client->mixerConstant($pref, 'min');
 	} 
 }, qw(bass treble));
-
-$prefs->setChange( sub {
-	my $value  = $_[1];
-	my $client = $_[2] || return;
-	Slim::Control::Request::executeRequest( $client, [ 'status', '-', 10, 'menu:menu' ] );
-	Slim::Control::Jive::myMusicMenu(0, $client);
-}, 'playlistmode' );
 
 $prefs->setChange( sub {
 	my $value  = $_[1];
@@ -119,7 +111,7 @@ use constant KNOB_NOACCELERATION => 0x02;
 								knobPos knobTime knobSync
 								sequenceNumber
 								controller
-								bufferReady readyToStream streamStartTimestamp
+								bufferReady readyToStream connecting streamStartTimestamp
 								streamformat streamingsocket remoteStreamStartTime
 								trackStartTime outputBufferFullness bytesReceived songBytes pauseTime
 								bytesReceivedOffset streamBytes songElapsedSeconds bufferSize bufferStarted
@@ -133,11 +125,11 @@ use constant KNOB_NOACCELERATION => 0x02;
 								curDepth lastLetterIndex lastLetterDigit lastLetterTime lastDigitIndex lastDigitTime searchFor
 								syncSelection _playPoint playPoints
 								jiffiesEpoch jiffiesOffsetList
-								_tempVolume musicInfoTextCache metaTitle languageOverride controlledBy password currentSleepTime
+								_tempVolume musicInfoTextCache metaTitle languageOverride controlledBy controllerUA password currentSleepTime
 								sleepTime pendingPrefChanges _pluginData
 								alarmData knobData
 								modeStack modeParameterStack playlist chunks
-								shufflelist syncSelections searchTerm
+								shufflelist shuffleInhibit syncSelections searchTerm
 								updatePending httpState
 								disconnected
 							));
@@ -245,6 +237,7 @@ sub new {
 		# playlist state
 		playlist                => [],
 		shufflelist             => [],
+		shuffleInhibit          => undef,
 		startupPlaylistLoading  => undef,
 		_currentPlaylist        => undef,
 		currentPlaylistModified => undef,
@@ -296,6 +289,7 @@ sub new {
 		metaTitle               => undef,
 		languageOverride        => undef,
 		controlledBy            => undef,
+		controllerUA            => undef,
 		password                => undef,
 		currentSleepTime        => 0,
 		sleepTime               => 0,
@@ -682,6 +676,8 @@ sub hasServ { return 0; }
 sub hasRTCAlarm { return 0; }
 sub hasLineIn { return 0; }
 sub hasIR { return 0; }
+sub hasOutputChannels { 0 }
+sub hasRolloff { 0 }
 
 sub maxBrightness() { return undef; }
 
@@ -696,6 +692,9 @@ sub minTreble {	return 50; }
 
 sub maxBass {	return 50; }
 sub minBass {	return 50; }
+
+sub maxXL {	return 0; }
+sub minXL {	return 0; }
 
 sub canDirectStream { return 0; }
 sub canLoop { return 0; }
@@ -1362,6 +1361,7 @@ sub playingSong {return $_[0]->controller()->playingSong();}
 sub isPlaying {return $_[0]->controller()->isPlaying($_[1]);}
 sub isPaused {return $_[0]->controller()->isPaused();}
 sub isStopped {return $_[0]->controller()->isStopped();}
+sub isRetrying {return $_[0]->controller()->isRetrying();}
 
 sub currentTrackForUrl {
 	my ($client, $url) = @_;
@@ -1451,7 +1451,17 @@ sub hasScrolling { 0 }
 sub apps {
 	my $client = shift;
 	
-	return $prefs->client($client)->get('apps') || {};
+	my %clientApps = %{$prefs->client($client)->get('apps') || {}};
+
+	if (my $nonSNApps = Slim::Plugin::Base->nonSNApps) {
+		for my $plugin (@$nonSNApps) {
+			if ($plugin->can('tag')) {
+				$clientApps{ $plugin->tag } = { plugin => $plugin };
+			}
+		}
+	}
+
+	return \%clientApps;
 }
 
 sub isAppEnabled {
