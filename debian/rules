@@ -14,6 +14,7 @@ override_dh_install:
 	install -d debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql
 	cat SQL/mysql/schema_7_up.sql  SQL/mysql/schema_8_up.sql > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql/7.2.99
 	cat SQL/mysql/schema_9_up.sql  SQL/mysql/schema_10_up.sql > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql/7.4.0
+	cat SQL/mysql/schema_11_up.sql  SQL/mysql/schema_12_up.sql > debian/squeezecenter/usr/share/dbconfig-common/data/squeezecenter/upgrade/mysql/7.6.0
 	# fix changelogs
 	mkdir debian/tmp
 	for i in Changelog?.html; do html2text -style pretty $$i; done > debian/tmp/changelog

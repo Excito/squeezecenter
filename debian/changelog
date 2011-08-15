@@ -1,3 +1,9 @@
+squeezecenter (7.6.0.dfsg1-1) vincent hugo; urgency=low
+
+  * Imported Upstream version 7.6.0.dfsg1
+
+ -- Carl Fürstenberg <carl@excito.com>  Mon, 15 Aug 2011 11:39:35 +0200
+
 squeezecenter (7.5.4.dfsg1-2) vincent hugo; urgency=low
 
   * change compression back to gzip
