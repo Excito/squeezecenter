@@ -68,6 +68,10 @@ case "$1" in
 		/etc/init.d/apparmor restart		 
 		printf "\n\n"
 	fi
+
+	if dpkg --compare-versions "$2" lt-nl "7.6.0.dfsg1-5"; then
+		sed -i 's/dbusername: squeezecenter/dbusername: squeezecenter\ndbtype: MySQL/g' /var/lib/squeezecenter/prefs/server.prefs
+	fi
 	
 	db_stop
     ;;
