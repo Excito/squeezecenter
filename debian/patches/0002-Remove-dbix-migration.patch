@@ -6,11 +6,11 @@ we take care of the migration at packager level instead of delegating
 dynamic updating to squeezeboxserver itself, as it's generally only
 decreasing performance and is to little use
 ---
- Slim/Schema.pm |   67 ++-----------------------------------------------------
- 1 files changed, 3 insertions(+), 64 deletions(-)
+ Slim/Schema.pm |   72 +-------------------------------------------------------
+ 1 files changed, 1 insertions(+), 71 deletions(-)
 
 diff --git a/Slim/Schema.pm b/Slim/Schema.pm
-index 8dff35e..90aed7f 100644
+index 8dff35e..d19e580 100644
 --- a/Slim/Schema.pm
 +++ b/Slim/Schema.pm
 @@ -27,7 +27,6 @@ use strict;
@@ -21,7 +21,7 @@ index 8dff35e..90aed7f 100644
  use Digest::MD5 qw(md5_hex);
  use File::Basename qw(basename dirname);
  use File::Spec::Functions qw(:ALL);
-@@ -443,69 +442,9 @@ data files handed to L<DBIx::Migration>.
+@@ -443,76 +442,7 @@ data files handed to L<DBIx::Migration>.
  =cut
  
  sub migrateDB {
@@ -88,10 +88,15 @@ index 8dff35e..90aed7f 100644
 -			}
 -
 -			return 1;
+-
+-		}
+-
+-		logError(sprintf("Unable to create database - **** You may need to manually delete the database ****", $old));
+-
+-	}
+-
 +# Stubbed as we don't want to try migrate the DB
-+	return 0;
-+}
- 
- 		}
+ 	return 0;
+ }
  
 -- 

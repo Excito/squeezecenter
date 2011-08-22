@@ -1,3 +1,9 @@
+squeezecenter (7.6.0.dfsg1-4) vincent hugo; urgency=low
+
+  * Fix the patch for removal of migration which was broken
+
+ -- Carl Fürstenberg <azatoth@gmail.com>  Mon, 22 Aug 2011 12:24:05 +0200
+
 squeezecenter (7.6.0.dfsg1-3) vincent hugo; urgency=low
 
   * bump libjson-xs-perl depends
