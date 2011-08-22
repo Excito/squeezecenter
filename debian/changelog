@@ -1,3 +1,9 @@
+squeezecenter (7.6.0.dfsg1-7) vincent hugo; urgency=low
+
+  * Specifying dbtype in custom os instead of modifying prefs file directly
+
+ -- Carl Fürstenberg <azatoth@gmail.com>  Mon, 22 Aug 2011 15:05:03 +0200
+
 squeezecenter (7.6.0.dfsg1-6) vincent hugo; urgency=low
 
   * Adding DBD::Sqlite

@@ -6,16 +6,16 @@ Adding custom OS detection for the Bubba platform
 
 ===================================================================
 ---
- Slim/Utils/OS/Custom.pm |  136 +++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 136 insertions(+), 0 deletions(-)
+ Slim/Utils/OS/Custom.pm |  138 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 138 insertions(+), 0 deletions(-)
  create mode 100644 Slim/Utils/OS/Custom.pm
 
 diff --git a/Slim/Utils/OS/Custom.pm b/Slim/Utils/OS/Custom.pm
 new file mode 100644
-index 0000000..92c98c3
+index 0000000..04a9690
 --- /dev/null
 +++ b/Slim/Utils/OS/Custom.pm
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,138 @@
 +
 +
 +package Slim::Utils::OS::Custom;
@@ -48,6 +48,8 @@ index 0000000..92c98c3
 +		$prefs->{dbpassword}		= $dbpass;
 +		$prefs->{dbsource}			= "dbi\:$dbtype\:database=$dbname;hostname=$dbserver;port=$dbport";
 +	}
++
++	$prefs->{dbtype} = "MySQL";
 +
 +	$prefs->{scannerPriority}   = 20;
 +	$prefs->{resampleArtwork}   = 0;
