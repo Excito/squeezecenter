@@ -1,3 +1,9 @@
+squeezecenter (7.6.0.dfsg1-3) vincent hugo; urgency=low
+
+  * bump libjson-xs-perl depends
+
+ -- Carl Fürstenberg <azatoth@gmail.com>  Mon, 22 Aug 2011 11:50:34 +0200
+
 squeezecenter (7.6.0.dfsg1-2) vincent hugo; urgency=low
 
   * Wrong version for libtimedata-perl
