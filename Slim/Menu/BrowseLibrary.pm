@@ -743,6 +743,23 @@ sub _generic {
 		$getIndexList   # boolean:   (optional)
 	) = @_;
 	
+	if (!Slim::Schema::hasLibrary()) {
+	
+		$log->warn('Database not fully initialized yet - return dummy placeholder');
+	
+		logBacktrace('no callback') unless $callback;
+	
+		$callback->({
+			items => [ {
+				type  => 'text',
+				title => cstring($client, 'LIBRARY_NOT_READY'),
+			} ],
+			total => 1
+		});
+		
+		return;
+	}
+	
 	my $index = $args->{'index'} || 0;
 	my $quantity = $args->{'quantity'};
 	
@@ -820,6 +837,15 @@ sub _generic {
 			# just add them all
 			push @{$result->{'items'}}, @$extraItems;
 		}
+	}
+	
+	if ( !$args->{search} && (!$result->{items} || !scalar @{ $result->{items} }) ) {
+		$result->{items} = [ {
+			type  => 'text',
+			title => cstring($client, 'EMPTY'),
+		} ];
+		
+		$result->{total} = 1;
 	}
 		
 #	$log->error(Data::Dump::dump($result));
@@ -1395,42 +1421,36 @@ sub _albums {
 				} ];
 			}
 			
+			my $params = _tagsToParams(\@searchTags);
 			my %actions = (
 				allAvailableActionsDefined => 1,
 				commonVariables	=> [album_id => 'id'],
 				info => {
 					command     => ['albuminfo', 'items'],
+					fixedParams => $params,
 				},
 				items => {
 					command     => [BROWSELIBRARY, 'items'],
 					fixedParams => {
 						mode       => 'tracks',
-						%{&_tagsToParams(\@searchTags)},
+						%$params,
 					},
 				},
 				play => {
 					command     => ['playlistcontrol'],
-					fixedParams => {cmd => 'load'},
-				},
-				playall => {
-					command     => ['playlistcontrol'],
-					fixedParams => {cmd => 'load'},
+					fixedParams => {cmd => 'load', %$params},
 				},
 				add => {
 					command     => ['playlistcontrol'],
-					fixedParams => {cmd => 'add'},
-				},
-				addall => {
-					command     => ['playlistcontrol'],
-					fixedParams => {cmd => 'add'},
+					fixedParams => {cmd => 'add', %$params},
 				},
 				insert => {
 					command     => ['playlistcontrol'],
-					fixedParams => {cmd => 'insert'},
+					fixedParams => {cmd => 'insert', %$params},
 				},
 				remove => {
 					command     => ['playlistcontrol'],
-					fixedParams => {cmd => 'delete'},
+					fixedParams => {cmd => 'delete', %$params},
 				},
 			);
 			$actions{'playall'} = $actions{'play'};
@@ -1455,7 +1475,7 @@ sub _tracks {
 	my $search     = $pt->{'search'};
 	my $offset     = $args->{'index'} || 0;
 	my $getMetadata= $pt->{'wantMetadata'} && grep {/album_id:/} @searchTags;
-	my $tags       = 'dtuxgaliqyorf';
+	my $tags       = 'dtuxgaAliqyorf';
 	
 	if (!defined $search && !scalar @searchTags && defined $args->{'search'}) {
 		$search = $args->{'search'};
@@ -1498,6 +1518,9 @@ sub _tracks {
 				$_->{'type'}          = 'audio';
 				$_->{'playall'}       = 1;
 				$_->{'play_index'}    = $offset++;
+				
+				# bug 17340 - in track lists we give the trackartist precedence over the artist
+				$_->{'artist'} = $_->{'trackartist'} if $_->{'trackartist'};
 				
 				my $name2;
 				$name2 = $_->{'artist'} if $addArtistToName2;
@@ -1636,6 +1659,18 @@ sub _bmf {
 						info => {
 							command     => ['folderinfo', 'items'],
 							fixedParams => {folder_id =>  $_->{'id'}},
+						},
+						play => {
+							command     => ['playlistcontrol'],
+							fixedParams => {cmd => 'load', folder_id =>  $_->{'id'}},
+						},
+						add => {
+							command     => ['playlistcontrol'],
+							fixedParams => {cmd => 'add', folder_id =>  $_->{'id'}},
+						},
+						insert => {
+							command     => ['playlistcontrol'],
+							fixedParams => {cmd => 'insert', folder_id =>  $_->{'id'}},
 						},
 					};
 					$gotsubfolder = 1;

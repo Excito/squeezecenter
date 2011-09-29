@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner::Local;
 
-# $Id: Local.pm 32483 2011-05-27 15:14:05Z mherger $
+# $Id: Local.pm 33079 2011-08-15 02:30:17Z agrundman $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -26,6 +26,9 @@ use constant PENDING_CHANGED => 0x04;
 
 # If more than this many items are changed during a scan, the database is optimized
 use constant OPTIMIZE_THRESHOLD => 100;
+
+# Number of items to process at once, this value will affect the max size of the WAL file
+use constant CHUNK_SIZE => 50;
 
 my $log   = logger('scan.scanner');
 my $prefs = preferences('server');
@@ -176,12 +179,17 @@ sub rescan {
 		
 		my $dbh = Slim::Schema->dbh;
 		
+		# Use the most recent existing track ID to prevent paged onDiskOnly query
+		# from missing any files. This will be 0 during a wipe
+		my ($maxTrackId) = $dbh->selectrow_array('SELECT MAX(id) FROM tracks');
+		$maxTrackId ||= 0;
+		
 		# Generate 3 lists of files:
 		
 		# 1. Files that no longer exist on disk
 		#    and are not virtual (from a cue sheet)
 		my $inDBOnlySQL = qq{
-			SELECT DISTINCT url
+			SELECT DISTINCT(url)
 			FROM            tracks
 			WHERE           url NOT IN (
 				SELECT url FROM scanned_files
@@ -194,10 +202,11 @@ sub rescan {
 		
 		# 2. Files that are new and not in the database.
 		my $onDiskOnlySQL = qq{
-			SELECT DISTINCT url
+			SELECT DISTINCT(url)
 			FROM            scanned_files
 			WHERE           url NOT IN (
 				SELECT url FROM tracks
+				WHERE id <= $maxTrackId
 			)
 			AND             url LIKE '$basedir%'
 			AND             filesize != 0
@@ -206,7 +215,7 @@ sub rescan {
 		# 3. Files that have changed mtime or size.
 		# XXX can this query be optimized more?
 		my $changedOnlySQL = qq{
-			SELECT scanned_files.url
+			SELECT DISTINCT(scanned_files.url)
 			FROM scanned_files
 			JOIN tracks ON (
 				scanned_files.url = tracks.url
@@ -220,9 +229,11 @@ sub rescan {
 			WHERE scanned_files.url LIKE '$basedir%'
 		};
 		
-		my ($inDBOnlyCount) = $dbh->selectrow_array( qq{
+		# only remove missing tracks when looking for audio tracks
+		my $inDBOnlyCount = 0;
+		($inDBOnlyCount) = $dbh->selectrow_array( qq{
 			SELECT COUNT(*) FROM ( $inDBOnlySQL ) AS t1
-		} );
+		} ) if $args->{types} =~ /audio/;
     	
 		my ($onDiskOnlyCount) = $dbh->selectrow_array( qq{
 			SELECT COUNT(*) FROM ( $onDiskOnlySQL ) AS t1
@@ -235,11 +246,7 @@ sub rescan {
 		$log->error( "Removing deleted files ($inDBOnlyCount)" ) unless main::SCANNER && $main::progress;
 		
 		if ( $inDBOnlyCount && !Slim::Music::Import->hasAborted() ) {
-			my $inDBOnly = $dbh->prepare_cached($inDBOnlySQL);
-			$inDBOnly->execute;
-			
-			my $deleted;
-			$inDBOnly->bind_col(1, \$deleted);
+			my $inDBOnlySth;
 
 			$pending{$next} |= PENDING_DELETE;
 			
@@ -247,19 +254,33 @@ sub rescan {
 			if ( $args->{progress} ) {
 				$progress = Slim::Utils::Progress->new( {
 					type  => 'importer',
-					name  => $args->{scanName} . '_deleted',
+					name  => $next . '|' . ($args->{scanName} . '_deleted'),
 					bar	  => 1,
 					every => ($args->{scanName} && $args->{scanName} eq 'playlist'), # record all playists in the db
 					total => $inDBOnlyCount,
 				} );
 			}
 			
+			my $deleted;
 			my $handle_deleted = sub {
+				if ( hasAborted($progress, $args->{no_async}) ) {
+					$inDBOnlySth && $inDBOnlySth->finish;
+					return 0;
+				}
 				
-				return if hasAborted($progress, $args->{no_async});
+				# Page through the files, this is to avoid a long-running read query which 
+				# would prevent WAL checkpoints from occurring.
+				# Note: Bug 17438, this limit query always uses the first items, because it
+				# will be removing those tracks before the next query is run.
+				if ( !$inDBOnlySth ) {
+					my $sql = $inDBOnlySQL . " LIMIT 0, " . CHUNK_SIZE;
+					$inDBOnlySth = $dbh->prepare($sql);
+					$inDBOnlySth->execute;
+					$inDBOnlySth->bind_col(1, \$deleted);
+				}
 				
-				if ( $inDBOnly->fetch ) {
-					$progress && $progress->update($deleted);
+				if ( $inDBOnlySth->fetch ) {
+					$progress && $progress->update( Slim::Utils::Misc::pathFromFileURL($deleted) );
 					$changes++;
 					
 					deleted($deleted);
@@ -267,21 +288,30 @@ sub rescan {
 					return 1;
 				}
 				else {
-					markDone( $next => PENDING_DELETE, $changes ) unless $args->{no_async};
-				
-					$progress && $progress->final;
+					my $more = 1;
 					
-					return 0;
+					if ( !$inDBOnlySth->rows ) {
+						markDone( $next => PENDING_DELETE, $changes ) unless $args->{no_async};
+						
+						$progress && $progress->final;
+						$inDBOnlySth->finish;
+						$more = 0;
+					}
+					else {
+						# Continue paging with the next chunk
+						$inDBOnlySth->finish;
+						undef $inDBOnlySth;
+					}
+					
+					# Commit for every chunk when using scanner.pl
+					main::SCANNER && Slim::Schema->forceCommit;
+					
+					return $more;
 				}
 			};
 			
 			if ( $args->{no_async} ) {
-				my $i = 0;
-				while ( $handle_deleted->() ) {
-					if (++$i % 200 == 0) {
-						Slim::Schema->forceCommit;
-					}
-				}
+				while ( $handle_deleted->() ) { }
 			}
 			else {
 				Slim::Utils::Scheduler::add_ordered_task( $handle_deleted );
@@ -291,11 +321,8 @@ sub rescan {
 		$log->error( "Scanning new files ($onDiskOnlyCount)" ) unless main::SCANNER && $main::progress;
 		
 		if ( $onDiskOnlyCount && !Slim::Music::Import->hasAborted() ) {
-			my $onDiskOnly = $dbh->prepare_cached($onDiskOnlySQL);
-			$onDiskOnly->execute;
-			
-			my $new;
-			$onDiskOnly->bind_col(1, \$new);
+			my $onDiskOnlySth;
+			my $onDiskOnlyDone = 0;			
 			
 			$pending{$next} |= PENDING_NEW;
 			
@@ -303,41 +330,63 @@ sub rescan {
 			if ( $args->{progress} ) {
 				$progress = Slim::Utils::Progress->new( {
 					type  => 'importer',
-					name  => $args->{scanName} . '_new',
+					name  => $next . '|' . ($args->{scanName} . '_new'),
 					bar   => 1,
 					every => ($args->{scanName} && $args->{scanName} eq 'playlist'), # record all playists in the db
 					total => $onDiskOnlyCount,
 				} );
 			}
 			
+			my $new;
 			my $handle_new = sub {
+				if ( hasAborted($progress, $args->{no_async}) ) {
+					$onDiskOnlySth && $onDiskOnlySth->finish;
+					return 0;
+				}
 				
-				return if hasAborted($progress, $args->{no_async});
+				# Page through the files, this is to avoid a long-running read query which 
+				# would prevent WAL checkpoints from occurring.
+				if ( !$onDiskOnlySth ) {
+					my $sql = $onDiskOnlySQL . " LIMIT $onDiskOnlyDone, " . CHUNK_SIZE;
+					$onDiskOnlySth = $dbh->prepare($sql);
+					$onDiskOnlySth->execute;
+					$onDiskOnlySth->bind_col(1, \$new);
+				}
 				
-				if ( $onDiskOnly->fetch ) {
-					$progress && $progress->update($new);
+				if ( $onDiskOnlySth->fetch ) {
+					$progress && $progress->update( Slim::Utils::Misc::pathFromFileURL($new) );
 					$changes++;
+					$onDiskOnlyDone++;
 				
 					new($new);
 					
 					return 1;
 				}
 				else {
-					markDone( $next => PENDING_NEW, $changes ) unless $args->{no_async};
-				
-					$progress && $progress->final;
+					my $more = 1;
 					
-					return 0;
+					if ( !$onDiskOnlySth->rows ) {
+						markDone( $next => PENDING_NEW, $changes ) unless $args->{no_async};
+						
+						$progress && $progress->final;
+						$onDiskOnlySth->finish;
+						$more = 0;
+					}
+					else {
+						# Continue paging with the next chunk
+						$onDiskOnlySth->finish;
+						undef $onDiskOnlySth;
+					}
+					
+					# Commit for every chunk when using scanner.pl
+					main::SCANNER && Slim::Schema->forceCommit;
+					
+					return $more;
 				}
 			};
 			
 			if ( $args->{no_async} ) {
-				my $i = 0;
-				while ( $handle_new->() ) {
-					if (++$i % 200 == 0) {
-						Slim::Schema->forceCommit;
-					}
-				}
+				while ( $handle_new->() ) { }
 			}
 			else {
 				Slim::Utils::Scheduler::add_ordered_task( $handle_new );
@@ -347,11 +396,8 @@ sub rescan {
 		$log->error( "Rescanning changed files ($changedOnlyCount)" ) unless main::SCANNER && $main::progress;
 		
 		if ( $changedOnlyCount && !Slim::Music::Import->hasAborted() ) {
-			my $changedOnly = $dbh->prepare_cached($changedOnlySQL);
-			$changedOnly->execute;
-			
-			my $changed;
-			$changedOnly->bind_col(1, \$changed);
+			my $changedOnlySth;
+			my $changedOnlyDone = 0;
 						
 			$pending{$next} |= PENDING_CHANGED;
 			
@@ -359,41 +405,63 @@ sub rescan {
 			if ( $args->{progress} ) {
 				$progress = Slim::Utils::Progress->new( {
 					type  => 'importer',
-					name  => $args->{scanName} . '_changed',
+					name  => $next . '|' . ($args->{scanName} . '_changed'),
 					bar   => 1,
 					every => ($args->{scanName} && $args->{scanName} eq 'playlist'), # record all playists in the db
 					total => $changedOnlyCount,
 				} );
 			}
 			
+			my $changed;
 			my $handle_changed = sub {
+				if ( hasAborted($progress, $args->{no_async}) ) {
+					$changedOnlySth && $changedOnlySth->finish;
+					return 0;
+				}
 				
-				return if hasAborted($progress, $args->{no_async});
+				# Page through the files, this is to avoid a long-running read query which 
+				# would prevent WAL checkpoints from occurring.
+				if ( !$changedOnlySth ) {
+					my $sql = $changedOnlySQL . " LIMIT $changedOnlyDone, " . CHUNK_SIZE;
+					$changedOnlySth = $dbh->prepare($sql);
+					$changedOnlySth->execute;
+					$changedOnlySth->bind_col(1, \$changed);
+				}
 				
-				if ( $changedOnly->fetch ) {
-					$progress && $progress->update($changed);
+				if ( $changedOnlySth->fetch ) {
+					$progress && $progress->update( Slim::Utils::Misc::pathFromFileURL($changed) );
 					$changes++;
-					
+					$changedOnlyDone++;
+				
 					changed($changed);
 					
 					return 1;
 				}
 				else {
-					markDone( $next => PENDING_CHANGED, $changes ) unless $args->{no_async};
-				
-					$progress && $progress->final;
+					my $more = 1;
 					
-					return 0;
+					if ( !$changedOnlySth->rows ) {
+						markDone( $next => PENDING_CHANGED, $changes ) unless $args->{no_async};
+						
+						$progress && $progress->final;
+						$changedOnlySth->finish;
+						$more = 0;
+					}
+					else {
+						# Continue paging with the next chunk
+						$changedOnlySth->finish;
+						undef $changedOnlySth;
+					}
+					
+					# Commit for every chunk when using scanner.pl
+					main::SCANNER && Slim::Schema->forceCommit;
+					
+					return $more;
 				}	
 			};
 			
 			if ( $args->{no_async} ) {
-				my $i = 0;
-				while ( $handle_changed->() ) {
-					if (++$i % 200 == 0) {
-						Slim::Schema->forceCommit;
-					}
-				}
+				while ( $handle_changed->() ) { }
 			}
 			else {
 				Slim::Utils::Scheduler::add_ordered_task( $handle_changed );
@@ -789,7 +857,7 @@ sub changed {
 				SELECT DISTINCT(contributor) FROM contributor_track WHERE track = ?
 			} );
 			$sth->execute( $origTrack->{id} );
-			$orig->{contribs} = $sth->fetchall_arrayref;
+			$orig->{contribs} = $sth->fetchall_arrayref( {} );
 			$sth->finish;
 			
 			# Fetch all genres used on the original track
@@ -797,7 +865,7 @@ sub changed {
 				SELECT genre FROM genre_track WHERE track = ?
 			} );
 			$sth->execute( $origTrack->{id} );
-			$orig->{genres} = $sth->fetchall_arrayref;
+			$orig->{genres} = $sth->fetchall_arrayref( {} );
 			$sth->finish;
 			
 			# Scan tags & update track row
@@ -817,7 +885,7 @@ sub changed {
 			# Tell Contributors to rescan, if no other tracks left, remove contributor.
 			# This will also remove entries from contributor_track and contributor_album
 			for my $contrib ( @{ $orig->{contribs} } ) {
-				Slim::Schema::Contributor->rescan( $contrib->[0] );
+				Slim::Schema::Contributor->rescan( $contrib->{contributor} );
 			}
 			
 			my $album = $track->album;
@@ -851,13 +919,13 @@ sub changed {
 			# Rescan comments
 			
 			# Rescan genre, to check for no longer used genres
-			my $origGenres = join( ',', sort map { $_->[0] } @{ $orig->{genres} } );
+			my $origGenres = join( ',', sort map { $_->{genre} } @{ $orig->{genres} } );
 			my $newGenres  = join( ',', sort map { $_->id } $track->genres );
 			
 			if ( $origGenres ne $newGenres ) {
 				main::DEBUGLOG && $isDebug && $log->debug( "Rescanning changed genre(s) $origGenres -> $newGenres" );
 				
-				Slim::Schema::Genre->rescan( @{ $orig->{genres} } );
+				Slim::Schema::Genre->rescan( map { $_->{genre} } @{ $orig->{genres} } );
 			}
 			
 			# Bug 8034, Rescan years if year value changed, to remove the old year

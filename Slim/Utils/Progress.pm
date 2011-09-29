@@ -1,6 +1,6 @@
 package Slim::Utils::Progress;
 
-# $Id: Progress.pm 30446 2010-03-31 12:11:29Z agrundman $
+# $Id: Progress.pm 32993 2011-08-05 09:01:26Z mherger $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -237,7 +237,7 @@ sub update {
 			my $total = $self->total;
 		
 			my $sqlHelperClass = $os->sqlHelperClass();
-			$sqlHelperClass->updateProgress( "progress:${start}-${type}-${name}-${done}-${total}-" );
+			$sqlHelperClass->updateProgress( "progress:${start}||${type}||${name}||${done}||${total}||" );
 		}
 	}
 
@@ -283,7 +283,7 @@ sub final {
 		$done = 1 if !defined $done;
 		
 		my $sqlHelperClass = $os->sqlHelperClass();
-		$sqlHelperClass->updateProgress( "progress:${start}-${type}-${name}-${done}-${done}-${finish}" );
+		$sqlHelperClass->updateProgress( "progress:${start}||${type}||${name}||${done}||${done}||${finish}" );
 				
 		if ( $self->bar ) {
 			$self->_finalBar($done);

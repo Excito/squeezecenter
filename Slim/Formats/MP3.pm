@@ -1,6 +1,6 @@
 package Slim::Formats::MP3;
 
-# $Id: MP3.pm 30608 2010-04-15 02:18:17Z agrundman $
+# $Id: MP3.pm 33070 2011-08-12 16:33:32Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -133,6 +133,7 @@ sub getTag {
 	$tags->{STEREO}     = $info->{stereo};
 	$tags->{CHANNELS}   = $info->{stereo} ? 2 : 1;
 	$tags->{RATE}       = $info->{samplerate};
+	$tags->{LAYER_ID}   = $info->{layer}; # 2 = mp2, 1 = mp3
 	
 	if ( $info->{vbr} ) {
 		$tags->{VBR_SCALE} = 1;

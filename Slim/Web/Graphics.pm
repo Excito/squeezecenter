@@ -117,19 +117,13 @@ sub artworkRequest {
 	
 	# Parse out spec from path
 	# WxH[_m][_bg][.ext]
-	my ($spec) = File::Basename::basename($path) =~ /_?((?:\d+x\d+)?(?:_\w)?(?:_[\da-fA-F]+)?(?:\.\w+)?)$/;
+	# 'X' can be used instead of either W or H to determine automatically
+	my ($spec) = File::Basename::basename($path) =~ /_?((?:[0-9X]+x[0-9X]+)?(?:_\w)?(?:_[\da-fA-F]+)?(?:\.\w+)?)$/;
 
 	main::DEBUGLOG && $isInfo && $log->info("  Resize specification: $spec");
 	
-	# Special cases:
-	# /music/current/cover.jpg (mentioned in CLI docs)
-	if ( $path =~ m{^music/current} ) {
-		# XXX
-		main::INFOLOG && $isInfo && $log->info("  Special path translated to $path");
-	}
-	
 	# /music/all_items (used in BrowseDB, just returns html/images/albums.png)
-	elsif ( $path =~ m{^music/all_items} ) {
+	if ( $path =~ m{^music/all_items} ) {
 		# Poor choice of special names...
 		$spec =~ s{^items/[^_]+_}{};
 		$path = 'html/images/albums_' . $spec;
@@ -146,6 +140,17 @@ sub artworkRequest {
 	# or the old trackid format
 	elsif ( $path =~ m{^music/([^/]+)/} ) {
 		my $id = $1;
+		
+		# Special case:
+		# /music/current/cover.jpg (mentioned in CLI docs)
+		if ( $id eq 'current' && $client ) {
+			my $trackObj = Slim::Player::Playlist::song($client);
+			$id = $trackObj->coverid if $trackObj && blessed $trackObj;
+			
+			$path =~ s/current/$id/;
+
+			main::INFOLOG && $isInfo && $log->info("  Special path translated to $path");
+		}
 		
 		# Fetch the url and cover values
 		my $sth;
@@ -167,7 +172,7 @@ sub artworkRequest {
 				require Slim::Utils::GDResizer;
 
 				my @arrSpec = split(',', $spec);
-				my ($width, $height, $mode, $bgcolor, $ext) = $arrSpec[0] =~ /^(?:(\d+)x(\d+))?(?:_(\w))?(?:_([\da-fA-F]+))?(?:\.(\w+))?$/;
+				my ($width, $height, $mode, $bgcolor, $ext) = $arrSpec[0] =~ /^(?:([0-9X]+)x([0-9X]+))?(?:_(\w))?(?:_([\da-fA-F]+))?(?:\.(\w+))?$/;
 				my ($res, $format) = Slim::Utils::GDResizer->resize(
 					original => \$coverArtImage,
 					width    => $width,
@@ -204,6 +209,9 @@ sub artworkRequest {
 			$path =~ s/\.\w+//;
 			$path =~ s/_$//;
 			$path .= '.png';
+			
+			# our default artwork are PNG files
+			$spec =~ s/\.\w+$/.png/;
 			
 			# Don't allow browsers to cache this error image
 			$no_cache = 1;
@@ -264,14 +272,16 @@ sub artworkRequest {
 	
 	# Support pre-sized files already in place, this is used on SB Touch
 	# for app icons because it can't handle resizing so many icons at once
-	if ( $fullpath && $fullpath =~ /\.(?:jpg|png|gif)$/i ) {
-		# Add the spec back to the fullpath
+	if ( $fullpath && $fullpath =~ /(\.(?:jpg|png|gif))$/i ) {
+		my $ext = $1;
+		
+		# Add the spec back to the fullpath if there's more than the extension
 		my $fullpathspec = $fullpath;
 		
-		if ( $spec ) {
-			$fullpathspec =~ s/(\.\w+)$/_${spec}$1/;
+		if ( $spec && $spec ne $ext ) {
+			$fullpathspec =~ s/($ext)$/_${spec}$1/;
 		}
-		
+
 		if ( -e $fullpathspec ) {
 			main::INFOLOG && $isInfo && $log->info("  Using existing pre-cached file: $fullpathspec");
 		

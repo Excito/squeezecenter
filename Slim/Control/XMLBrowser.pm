@@ -147,7 +147,7 @@ sub cliQuery {
 			_cliQuery_done( $opml, \%args );
 		};
 		
-		my %args = (params => $request->getParamsCopy());
+		my %args = (params => $request->getParamsCopy(), isControl => 1);
 
 		# If we are getting an intermediate level, then we just need the one item
 		# If we are getting the last level then we need all items if we are doing playall of some kind
@@ -489,7 +489,7 @@ sub _cliQuery_done {
 					};
 					
 					my $pt = $subFeed->{passthrough} || [];
-					my %args = (params => $feed->{'query'});
+					my %args = (params => $feed->{'query'}, isControl => 1);
 					
 					if (defined $search && $subFeed->{type} && ($subFeed->{type} eq 'search' || defined $subFeed->{'searchParam'})) {
 						$args{'search'} = $search;
@@ -543,7 +543,8 @@ sub _cliQuery_done {
 					(
 						($subFeed->{'type'} && $subFeed->{'type'} eq 'audio') || 
 						$subFeed->{'enclosure'} ||
-						$subFeed->{'description'}	
+						# Bug 17385 - rss feeds include description at non leaf levels	
+						($subFeed->{'description'} && $subFeed->{'type'} ne 'rss')
 					)
 				) {
 				
@@ -991,6 +992,8 @@ sub _cliQuery_done {
 				$start -= $subFeed->{'offset'};
 				$end   -= $subFeed->{'offset'};
 				main::DEBUGLOG && $log->is_debug && $log->debug("Getting slice $start..$end: $totalCount; offset=", $subFeed->{'offset'}, ' quantity=', scalar @$items);
+		
+				my $search = $subFeed->{type} && $subFeed->{type} eq 'search';
 				
 				my $baseId = scalar @crumbIndex ? join('.', @crumbIndex, '') : '';
 				for my $item ( @$items[$start..$end] ) {
@@ -1002,7 +1005,7 @@ sub _cliQuery_done {
 					if ($name = $item->{name}) {
 						if (defined $item->{'label'}) {
 							$name = $request->string($item->{'label'}) . $request->string('COLON') . ' ' .  $name;
-						} elsif (($item->{'hasMetadata'} || '') eq 'track') {
+						} elsif (!$search && ($item->{'hasMetadata'} || '') eq 'track') {
 							$name = Slim::Music::TitleFormatter::infoFormat(undef, $format, 'TITLE', $item) || $name;
 						}
 					}

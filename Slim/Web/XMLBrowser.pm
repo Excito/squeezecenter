@@ -1,6 +1,6 @@
 package Slim::Web::XMLBrowser;
 
-# $Id: XMLBrowser.pm 32529 2011-06-18 12:24:32Z adrian $
+# $Id: XMLBrowser.pm 33083 2011-08-15 08:58:56Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -108,7 +108,7 @@ sub handleWebIndex {
 		
 		# XXX: maybe need to pass orderBy through
 		
-		return $feed->( $client, $callback, {wantMetadata => 1, wantIndex => 1, params => $asyncArgs->[1]}, @{$pt});
+		return $feed->( $client, $callback, {isWeb => 1, wantMetadata => 1, wantIndex => 1, params => $asyncArgs->[1]}, @{$pt});
 	}
 	
 	# Handle type = search at the top level, i.e. Radio Search
@@ -268,6 +268,7 @@ sub handleFeed {
 			push @crumbIndex, $i;
 			my $crumbText = join '.', @crumbIndex;
 			
+			$superFeed->{offset} ||= 0;
 			main::DEBUGLOG && $log->is_debug && $log->debug("Considering $i=$in ($crumbText) from ", $stash->{'index'}, ' offset=', $superFeed->{'offset'});
 			
 			my $crumbName = $subFeed->{'name'} || $subFeed->{'title'};
@@ -474,7 +475,7 @@ sub handleFeed {
 					}
 
 					# XXX: maybe need to pass orderBy through
-					my %args = (wantMetadata => 1, wantIndex => 1, search => $search, params => $stash->{'query'});
+					my %args = (isWeb => 1, wantMetadata => 1, wantIndex => 1, search => $search, params => $stash->{'query'});
 					my $index = $stash->{'start'};
 
 					if ($depth == $levels) {
@@ -754,7 +755,10 @@ sub handleFeed {
 		}
 		
 		my $item_index = $start;
-		my $format  = $prefs->get('titleFormat')->[ $prefs->get('titleFormatWeb') ];
+		my $format = $stash->{ajaxSearch} || $stash->{type} eq 'search'
+			? 'TRACKNUM. TITLE - ALBUM - ARTIST'
+			: $prefs->get('titleFormat')->[ $prefs->get('titleFormatWeb') ];
+
 		foreach (@{ $stash->{'items'} }) {
 			if ( !defined $stash->{'index'} ) {
 				$_->{'index'} = $item_index++;
@@ -1217,6 +1221,8 @@ sub _makeWebLink {
 
 sub _makePlayLink {
 	my ($feedActions, $item, $action) = @_;
+	
+	return undef if $item->{type} && $item->{type} eq 'text';
 	
 	my ($feedAction, $feedActions) = Slim::Control::XMLBrowser::findAction({actions => $feedActions}, $item, $action);
 	if ($feedAction) {

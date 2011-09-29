@@ -9,7 +9,7 @@ IF ajaxUpdate && ajaxUpdate >= 1;
 	container = 'dummycontainer';
 END;
 FOREACH item = items;
-	IF item.image;
+	IF item.image && (item.type != 'audio' || playlist_id);
 		hasArtwork = 1;
 		LAST;
 	END;	
@@ -315,7 +315,9 @@ useSpecialExt="-browse" %]
 						itemobj.id = loop.count _ (ajaxUpdate ? index : '');
 					END %]
 
-					[% IF item.image %]
+					[% IF !hasArtwork %]
+						[% # don't do anything as we consider this list a list without artwork, eg. tracks %]
+					[% ELSIF item.image %]
 						[% IF artwork == 0 %]
 							[% PROCESS itemIcon url=item.image size=50 class="browseItemDetail" %]
 						[% END %]
@@ -337,7 +339,21 @@ useSpecialExt="-browse" %]
 							[%- "COLON" | string %]
 						[% END %]	
 						[% WRAPPER weblink %]
-							[% (item.web.value || item.name || item.title) | html_line_break %]
+							[% title = (item.web.value || item.name || item.title) %]
+							[% title | html_line_break %]
+
+							[% IF item.hasMetadata == 'track' && !item.name2 %]
+							[%  # add the track artist if it's different from the album artist
+								artist = item.trackartist || item.artist;
+								IF !title.match(artist) && ( 
+									(item.albumartist && artist != item.albumartist)
+									|| artist != item.artist
+									|| itemobj.compilation
+								);
+									"BY" | string; " $artist";
+								END; 
+							%]
+							[% END %]
 						[% END %]
 						[% IF item.showYear && item.year %]
 							[% IF item.remote %]
@@ -345,9 +361,6 @@ useSpecialExt="-browse" %]
 							[% ELSE %]
 								[% artwork != 2 && !ajaxSearch ? '<br>' : '' %]<a [% PROCESS yearItemHRef %] class="browseItemLink">([% item.year %])</a>
 							[% END %]
-						[% END %]
-						[% IF item.hasMetadata == "track" && item.name2 %]
-							([% item.name2 %])
 						[% END %]
 						[% IF (item.showArtist && item.artist) || (item.hasMetadata == "album" && item.name2) %]
 							[% IF item.artist_id %]
@@ -358,7 +371,7 @@ useSpecialExt="-browse" %]
 						[% END %]
 					[% END %]
 
-					[% IF (item.icon && artwork != 1) || (item.image && artwork== 0) || (hasArtwork && artwork == 0) %]
+					[% IF !hasArtwork; ELSIF (item.icon && artwork != 1) || (item.image && artwork== 0) || (hasArtwork && artwork == 0) %]
 						</div>
 					[% END %]
 				[%- END %]
@@ -377,7 +390,7 @@ useSpecialExt="-browse" %]
 [% BLOCK itemIcon %]
 	[% WRAPPER weblink %]
 	<span class="browseCover">
-		<img src="[% url | resizeimage(size, size, 'f', webroot) %]" width="[% size %]">
+		<img src="[% url | resizeimage(size, size, 'f', webroot) %]" onLoad="resize(this, [%- size %])">
 	</span>
 	[% END %]
 	<div class="[% class %]">
@@ -395,11 +408,20 @@ useSpecialExt="-browse" %]
 		[% END %]
 	[% ELSIF !item.type.match('^text') %]
 		<a href="[% path %]?[% multiquery %][% searchquery | replace("'", "%27") | uri %]index=[% (item.index || index _ (start + loop.index)) | replace("'", "%27") | uri %]&amp;player=[% player | uri %]&amp;sess=[% sess %]" class="browseItemLink">
+	[% ELSIF item.type == "text" && item.image %]
+		<a href="[% item.image %]" target="_blank">
 	[% END %]
 	
 	[% content %]
 	
 	[% IF item.weblink || item.link || !item.type.match('^text') %]
+		</a>
+	[% ELSIF item.type == "text" && item.image;
+		details = [];
+		IF item.owner; details.push(item.owner); END;
+		IF item.date; details.push(item.date); END;
+		IF details.size && !content.match("img src"); "(" _ details.join(' - ') _ ")"; END;
+	 %]
 		</a>
 	[% END %]
 [% END %]

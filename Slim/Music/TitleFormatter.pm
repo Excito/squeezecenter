@@ -1,6 +1,6 @@
 package Slim::Music::TitleFormatter;
 
-# $Id: TitleFormatter.pm 32504 2011-06-07 12:16:25Z agrundman $
+# $Id: TitleFormatter.pm 33040 2011-08-11 03:49:51Z agrundman $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -278,12 +278,20 @@ sub init {
 
 	$parsedFormats{'FILE'} = sub {
 		
+		my $url;
 		if ( ref $_[0] eq 'HASH' ) {
-			return $_[0]->{file} || '';
+			if ( $_[0]->{url} ) {
+				$url = $_[0]->{url};
+			}
+			else {
+				return $_[0]->{file} || '';
+			}
+		}
+		else {
+			$url = $_[0]->get('url');
 		}
 
 		my $output = '';
-		my $url = $_[0]->get('url');
 
 		if ($url) {
 

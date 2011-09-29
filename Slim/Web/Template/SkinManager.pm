@@ -1,6 +1,6 @@
 package Slim::Web::Template::SkinManager;
 
-# $Id: SkinManager.pm 32504 2011-06-07 12:16:25Z agrundman $
+# $Id: SkinManager.pm 32975 2011-08-04 10:42:04Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -255,7 +255,7 @@ sub _resizeImage {
 		my $url = shift;
 
 		# don't use imageproxy on local network
-		if ( $url =~ m{^http://(?:192\.168\.|172\.16\.|10\.|127\.0|localhost)}i && !$ENV{SN_DEV} ) {
+		if ( $url =~ m{^http://(?:192\.168\.|172\.1[6-9]\.|172\.2\d\.|172\.3[01]\.|10\.|127\.0|localhost)}i && !$ENV{SN_DEV} ) {
 			# XXX - we might consider a local imageproxy handling local URLs and files
 			return $url;
 		}

@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w -ICPAN
+#!/usr/bin/perl -ICPAN
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -56,7 +56,7 @@ require Getopt::Long;
 require Slim::Utils::OSDetect;
 require Slim::Utils::Light;
 
-our $VERSION = '7.6.0';
+our $VERSION = '7.6.1';
 
 BEGIN {
 	if (ISWINDOWS) {

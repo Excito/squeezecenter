@@ -13,17 +13,6 @@ use Digest::MD5 ();
 use File::Spec::Functions qw(catfile);
 use Time::HiRes ();
 
-use constant DB_FILENAME => 'ArtworkCache.db';
-
-{
-	if ( $File::Spec::ISA[0] eq 'File::Spec::Unix' ) {
-		*fast_catfile = sub { join( "/", @_ ) };
-	}
-	else {
-		*fast_catfile = sub { catfile(@_) };
-	}
-}
-
 my $singleton;
 
 sub new {
@@ -63,12 +52,9 @@ sub wipe {
 	my $self = shift;
 	
 	if ( $self->{dbh} ) {
+		$self->{dbh}->do('DELETE FROM cache'); # truncate
 		$self->_close_db;
 	}
-	
-	my $dbfile = fast_catfile( $self->{root}, DB_FILENAME );
-	
-	unlink $dbfile if -e $dbfile;
 }
 
 sub set {
@@ -96,10 +82,6 @@ sub set {
 	
 	# Prepend the packed header to the original data
 	substr $$ref, 0, 0, $packed;
-	
-	# XXX: bug in DBD::SQLite, if utf-8 flag is on for the string
-	# the data is converted to UTF-8 even if it's in a SQL_BLOB field
-	utf8::downgrade($$ref);
 	
 	# Get a 60-bit unsigned int from MD5 (SQLite uses 64-bit signed ints for the key)
 	# Have to concat 2 values here so it works on a 32-bit machine
@@ -160,11 +142,26 @@ sub pragma {
 	}
 }
 
+sub close {
+	my $self = shift;
+	
+	$self->_close_db;
+}
+
 sub _init_db {
 	my $self = shift;
 	my $retry = shift;
 	
-	my $dbfile = fast_catfile( $self->{root}, DB_FILENAME );
+	my $dbfile    = catfile( $self->{root}, 'artwork.db' );
+	my $oldDBfile = catfile( $self->{root}, 'ArtworkCache.db' );
+	
+	if (!-f $dbfile && -r $oldDBfile) {
+		require File::Copy;
+		
+		if ( !File::Copy::move( $oldDBfile, $dbfile ) ) {
+			warn "Unable to rename $oldDBfile to $dbfile: $!. Please do so manually!";
+		}
+	}
 	
 	my $dbh;
 	
@@ -173,11 +170,12 @@ sub _init_db {
 			AutoCommit => 1,
 			PrintError => 0,
 			RaiseError => 1,
+			sqlite_use_immediate_transaction => 1,
 		} );
 		
-		$dbh->do('PRAGMA journal_mode = OFF');
 		$dbh->do('PRAGMA synchronous = OFF');
-		$dbh->do('PRAGMA locking_mode = EXCLUSIVE');
+		$dbh->do('PRAGMA journal_mode = WAL');
+		$dbh->do('PRAGMA wal_autocheckpoint = 200');
 	
 		# Create the table, note that using an integer primary key
 		# is much faster than any other kind of key, such as a char
@@ -209,9 +207,14 @@ sub _init_db {
 sub _close_db {
 	my $self = shift;
 	
-	$self->{dbh}->disconnect;
+	if ( $self->{dbh} ) {
+		$self->{set_sth}->finish;
+		$self->{get_sth}->finish;
+		
+		$self->{dbh}->disconnect;
 	
-	delete $self->{$_} for qw(set_sth get_sth dbh);
+		delete $self->{$_} for qw(set_sth get_sth dbh);
+	}
 }
 
 1;
