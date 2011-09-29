@@ -10,15 +10,15 @@ Removing the max version for Audio::Scan to solve this.
  1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/modules.conf b/modules.conf
-index 832e845..c1ebdc0 100644
+index 3a72fee..eb64c95 100644
 --- a/modules.conf
 +++ b/modules.conf
 @@ -5,7 +5,7 @@
  # <module> <min_version> [ <max_version> ]
  
  AnyEvent 5.202
--Audio::Scan 0.88 0.88
-+Audio::Scan 0.88
+-Audio::Scan 0.90 0.90
++Audio::Scan 0.90
  Cache::Cache 1.04
  CGI::Cookie 1.27
  Class::Data::Inheritable 0.04

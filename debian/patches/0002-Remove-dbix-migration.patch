@@ -10,7 +10,7 @@ decreasing performance and is to little use
  1 files changed, 1 insertions(+), 71 deletions(-)
 
 diff --git a/Slim/Schema.pm b/Slim/Schema.pm
-index 8dff35e..d19e580 100644
+index 7d8b568..5a028a0 100644
 --- a/Slim/Schema.pm
 +++ b/Slim/Schema.pm
 @@ -27,7 +27,6 @@ use strict;
