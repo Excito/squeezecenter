@@ -1,6 +1,6 @@
 package Slim::Utils::SQLiteHelper;
 
-# $Id: SQLiteHelper.pm 32483 2011-05-27 15:14:05Z mherger $
+# $Id: SQLiteHelper.pm 33066 2011-08-12 15:51:01Z agrundman $
 
 =head1 NAME
 
@@ -22,7 +22,6 @@ use strict;
 
 use Digest::MD5 qw(md5_hex);
 use File::Basename;
-use File::Copy ();
 use File::Path;
 use File::Slurp;
 use File::Spec::Functions qw(:ALL);
@@ -58,8 +57,8 @@ sub init {
 	my ( $class, $dbh ) = @_;
 	
 	# Make sure we're running the right version of DBD::SQLite
-	if ( $DBD::SQLite::VERSION lt 1.30 ) {
-		die "DBD::SQLite version 1.30 or higher required\n";
+	if ( $DBD::SQLite::VERSION lt 1.34 ) {
+		die "DBD::SQLite version 1.34 or higher required\n";
 	}
 	
 	if ( main::SLIM_SERVICE ) {
@@ -77,7 +76,8 @@ sub init {
 	}
 	
 	# Reset dbsource pref if it's not for SQLite
-	if ( $prefs->get('dbsource') !~ /^dbi:SQLite/ ) {
+	#                                              ... or if it's using the long filename Windows doesn't like
+	if ( $prefs->get('dbsource') !~ /^dbi:SQLite/ || $prefs->get('dbsource') !~ /library\.db/ ) {
 		$prefs->set( dbsource => default_dbsource() );
 		$prefs->set( dbsource => $class->source() );
 	}
@@ -88,12 +88,6 @@ sub init {
 			['scanner', 'notify', '_msg'],
 			[0, 0, 0, \&_notifyFromScanner]
 		);
-	}
-	
-	if ( main::SCANNER ) {
-		# At init time we need to notify the main process
-		# to unlock the database so we can access it
-		$class->updateProgress('unlock');
 	}
 }
 
@@ -109,7 +103,12 @@ sub source {
 		$source = "dbi:SQLite:dbname=$db";
 	}
 	else {
-		$source = sprintf( $prefs->get('dbsource'), catfile( $prefs->get('librarycachedir'), 'squeezebox.db' ) );
+		my $dbFile = catfile( $prefs->get('librarycachedir'), 'library.db' );
+
+		# we need to migrate long 7.6.0 file names to shorter 7.6.1 filenames: Perl/Windows can't handle the long version
+		_migrateDBFile(catfile( $prefs->get('librarycachedir'), 'squeezebox.db' ), $dbFile);
+		
+		$source = sprintf( $prefs->get('dbsource'), $dbFile );
 	}
 	
 	return $source;
@@ -120,9 +119,9 @@ sub on_connect_do {
 	
 	my $sql = [
 		'PRAGMA synchronous = OFF',
-		#'PRAGMA journal_mode = WAL', # XXX WAL mode needs more work
-		'PRAGMA journal_mode = MEMORY',
+		'PRAGMA journal_mode = WAL',
 		'PRAGMA foreign_keys = ON',
+		'PRAGMA wal_autocheckpoint = 200',
 	];
 	
 	# Wweak some memory-related pragmas if dbhighmem is enabled
@@ -137,19 +136,31 @@ sub on_connect_do {
 		push @{$sql}, 'PRAGMA temp_store = MEMORY';
 	}
 	
-	if ( !main::SCANNER ) {
-		# Use exclusive locking only in the main process
-		push @{$sql}, 'PRAGMA locking_mode = EXCLUSIVE';
-	}
-	
 	# We create this even if main::STATISTICS is not false so that the SQL always works
 	# Track Persistent data is in another file
-	my $persistentdb = $class->_dbFile('squeezebox-persistent.db');
+	my $persistentdb = $class->_dbFile('persist.db');
+
+	# we need to migrate long 7.6.0 file names to shorter 7.6.1 filenames: Windows can't handle the long version
+	_migrateDBFile($class->_dbFile('squeezebox-persistent.db'), $persistentdb);
+
 	push @{$sql}, "ATTACH '$persistentdb' AS persistentdb";
-	#push @{$sql}, 'PRAGMA persistentdb.journal_mode = WAL'; # XXX
-	push @{$sql}, 'PRAGMA persistentdb.journal_mode = MEMORY';
+	push @{$sql}, 'PRAGMA persistentdb.journal_mode = WAL';
 	
 	return $sql;
+}
+
+sub _migrateDBFile {
+	my ($src, $dst) = @_;
+	
+	return if -f $dst || !-r $src;
+	
+	require File::Copy;
+	
+	main::DEBUGLOG && $log->is_debug && $log->debug("trying to rename $src to $dst");
+	
+	if ( !File::Copy::move( $src, $dst ) ) {
+		$log->error("Unable to rename $src to $dst: $!. Please remove it manually.");
+	}
 }
 
 my $hasICU;
@@ -279,135 +290,22 @@ sub canCacheDBHandle {
 
 =head2 checkDataSource()
 
-Called to check the database, this is used to replace with a newer
-scanner database if available.
+Called to check the database.
 
 =cut
 
 sub checkDataSource {
-	my $class = shift;
-	
-	# XXX remove for WAL
-	my $scannerdb = $class->_dbFile('squeezebox-scanner.db');
-	
-	if ( -e $scannerdb ) {
-		my $dbh = Slim::Schema->dbh;
-		
-		logWarning('Scanner database found, checking for a newer scan...');
-		
-		eval {
-			$dbh->do( 'ATTACH ' . $dbh->quote($scannerdb) . ' AS scannerdb' );
-			
-			my ($isScanning)  = $dbh->selectrow_array("SELECT value FROM scannerdb.metainformation WHERE name = 'isScanning'");
-			my ($lastMain)    = $dbh->selectrow_array("SELECT value FROM metainformation WHERE name = 'lastRescanTime'");
-			my ($lastScanner) = $dbh->selectrow_array("SELECT value FROM scannerdb.metainformation WHERE name = 'lastRescanTime'");
-			
-			$lastMain ||= 0;
-			
-			$dbh->do( 'DETACH scannerdb' );
-			
-			if ( $isScanning ) {
-				logWarning('A scan is currently in progress or the scanner crashed, ignoring scanner database');
-				return;
-			}
-			
-			main::DEBUGLOG && $log->is_debug && $log->debug("Last main scan: $lastMain / last scannerdb scan: $lastScanner");
-			
-			if ( $lastScanner > $lastMain ) {
-				logWarning('Scanner database contains a newer scan, using it');
-				$class->replace_with('squeezebox-scanner.db');
-				return;
-			}
-			else {
-				logWarning('Scanner database is older, removing it');
-				unlink $scannerdb;
-			}
-		};
-		
-		if ( $@ ) {
-			logWarning("Scanner database corrupted ($@), ignoring");
-			
-			eval { $dbh->do('DETACH scannerdb') };
-		}
-	}
-	# XXX end WAL
-}
-
-=head2 replace_with( $from )
-
-Replace database with newly scanned file, and reconnect.
-
-=cut
-
-sub replace_with {
-	my ( $class, $from ) = @_;
-	
-	my $src = $class->_dbFile($from);
-	my $dst = $class->_dbFile();
-	
-	if ( -e $src ) {
-		Slim::Schema->disconnect;
-		
-		# XXX use sqlite_backup_from_file instead
-		
-		if ( !File::Copy::move( $src, $dst ) ) {
-			die "Unable to replace_with from $src to $dst: $!";
-		}
-	
-		main::INFOLOG && $log->is_info && $log->info("Database moved from $src to $dst");
-	
-		# Reconnect
-		Slim::Schema->init;
-	}
-	else {
-		die "Unable to replace_with: $src does not exist";
-	}
+	# No longer needed with WAL mode
 }
 
 =head2 beforeScan()
 
-Called before a scan is started.  We copy the database to a new file and switch our $dbh over to it.
+Called before a scan is started.
 
 =cut
 
 sub beforeScan {
-	my $class = shift;
-
-    # XXX remove for WAL
-	my $to = 'squeezebox-scanner.db';
-	
-	my ($driver, $source, $username, $password) = Slim::Schema->sourceInformation;
-	
-	my ($dbname) = $source =~ /dbname=([^;]+)/;
-	my $dbbase = File::Basename::basename($dbname);
-	
-	my $dest = $dbname;
-	$dest   =~ s/$dbbase/$to/;
-	$source =~ s/$dbbase/$to/;
-	
-	if ( -e $dbname ) {
-		Slim::Schema->disconnect;
-		
-		# XXX use sqlite_backup_to_file instead
-		
-		if ( !File::Copy::copy( $dbname, $dest ) ) {
-			die "Unable to copy_and_switch from $dbname to $dest: $!";
-		}
-		
-		# Inform slimserver process that we are about to begin scanning
-		# so it can switch into 'dirty' mode.  Doesn't bother to check if 
-		# SC is running, if it's not running this message doesn't matter.
-		$class->updateProgress('start');
-		
-		main::INFOLOG && $log->is_info && $log->info("Database copied from $dbname to $dest");
-		
-		# Reconnect to the new database
-		Slim::Schema->init( $source );
-	}
-	else {
-		die "Unable to copy_and_switch: $dbname does not exist";
-	}
-    # XXX end WAL
+	# No longer needed with WAL mode
 }
 
 =head2 afterScan()
@@ -418,9 +316,6 @@ Called after a scan is finished. Notifies main server to copy back the scanner f
 
 sub afterScan {
 	my $class = shift;
-	
-	# Checkpoint the database
-	#$class->pragma('wal_checkpoint'); # XXX
 	
 	$class->updateProgress('end');
 }
@@ -447,6 +342,9 @@ sub postConnect {
 	my ( $class, $dbh ) = @_;
 	
 	$dbh->func( 'MD5', 1, sub { md5_hex( $_[0] ) }, 'create_function' );
+	
+	# http://search.cpan.org/~adamk/DBD-SQLite-1.33/lib/DBD/SQLite.pm#Transaction_and_Database_Locking
+	$dbh->{sqlite_use_immediate_transaction} = 1;
 	
 	# Reset collation load state
 	$currentICU = '';
@@ -578,10 +476,6 @@ sub _notifyFromScanner {
 	
 	main::INFOLOG && $log->is_info && $log->info("Notify from scanner: $msg");
 	
-	if ( $msg eq 'unlock' ) {
-		$class->pragma('locking_mode = NORMAL');
-	}
-	
 	# If user aborted the scan, return an abort message
 	if ( Slim::Music::Import->hasAborted ) {
 		$request->addResult( abort => 1 );
@@ -609,7 +503,7 @@ sub _notifyFromScanner {
 		# assume scanner is dead.  This is hard to do, as scanner may block for an indefinite
 		# amount of time with slow network filesystems, or a large amount of files.
 	}
-	elsif ( $msg =~ /^progress:([^-]+)-([^-]+)-([^-]+)-([^-]*)-([^-]*)-([^-]+)?/ ) {
+	elsif ( $msg =~ /^progress:(.+?)\|\|(.+?)\|\|(.+?)\|\|(.*?)\|\|(.*?)\|\|(.+)?/ ) {
 		if ( $SCANNING  && Slim::Schema::hasLibrary() ) {
 			# update progress
 			my ($start, $type, $name, $done, $total, $finish) = ($1, $2, $3, $4, $5, $6);
@@ -646,30 +540,20 @@ sub _notifyFromScanner {
 		# Scanner is exiting.  If we get this without an 'end' message
 		# the scanner aborted and we should throw away the scanner database
 		
-		if ( $SCANNING ) {
-			# XXX remove for WAL
-			my $db = $class->_dbFile('squeezebox-scanner.db');
-			
-			if ( -e $db ) {
-				main::INFOLOG && $log->is_info && $log->info("Scanner aborted, removing $db");
-				unlink $db;
-			}
-			# XXX end WAL
-			
+		if ( $SCANNING ) {		
 			$SCANNING = 0;
 			
 			Slim::Music::Import->setIsScanning(0);
-			
-			# Reset locking mode
-			$class->pragma('locking_mode = EXCLUSIVE');
 		}
 		else {
-			# Replace our database with the scanner database. Note that the locking mode
-			# is set to exclusive when we reconnect to squeezebox.db.
-			# XXX remove next line for WAL
-			$class->replace_with('squeezebox-scanner.db') if Slim::Schema::hasLibrary();
-			
 			# XXX handle players with track objects that are now outdated?
+			
+			# Reconnect to the database to zero out WAL files
+			Slim::Schema->disconnect;
+			Slim::Schema->init;
+			
+			# Close ArtworkCache to zero out WAL file, it'll be reopened when needed
+			Slim::Utils::ArtworkCache->new->close;
 		
 			Slim::Music::Import->setIsScanning(0);
 			

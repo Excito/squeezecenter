@@ -1,6 +1,6 @@
 package Slim::Plugin::RadioTime::Metadata;
 
-# $Id: Metadata.pm 32799 2011-07-21 12:44:26Z mherger $
+# $Id: Metadata.pm 33046 2011-08-11 10:58:24Z mherger $
 
 use strict;
 
@@ -218,6 +218,10 @@ sub _gotMetadata {
 	if ( $meta->{cover} ) {
 		my $cache = Slim::Utils::Cache->new();
 		$cache->set( "remote_image_$url" => $meta->{cover}, 86400 * 7 );
+
+		if ( my $song = $client->playingSong() ) {
+			$song->pluginData( httpCover => $meta->{cover} );
+		}
 	}
 	
 	if ( main::DEBUGLOG && $log->is_debug ) {

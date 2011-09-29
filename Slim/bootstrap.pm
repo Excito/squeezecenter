@@ -1,6 +1,6 @@
 package Slim::bootstrap;
 
-# $Id: bootstrap.pm 31339 2010-09-15 13:37:15Z agrundman $
+# $Id: bootstrap.pm 32965 2011-08-04 04:06:23Z mherger $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or

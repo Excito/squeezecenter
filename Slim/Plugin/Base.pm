@@ -1,6 +1,6 @@
 package Slim::Plugin::Base;
 
-# $Id: Base.pm 32504 2011-06-07 12:16:25Z agrundman $
+# $Id: Base.pm 33029 2011-08-10 04:43:56Z mherger $
 
 # Base class for plugins. Implement some basics.
 
@@ -139,6 +139,11 @@ sub getFunctions {
 }
 
 sub getWeights { $WEIGHTS }
+
+sub addWeight {
+	my ($class, $name, $weight) = @_;
+	$WEIGHTS->{$name} = $weight if $name && $weight;
+}
 
 sub nonSNApps {
 	return !main::SLIM_SERVICE && $nonSNApps

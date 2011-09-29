@@ -1,6 +1,6 @@
 package Slim::Utils::Misc;
 
-# $Id: Misc.pm 32594 2011-07-01 07:59:37Z mherger $
+# $Id: Misc.pm 32931 2011-07-29 13:45:06Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -721,6 +721,7 @@ sub fileFilter {
 	my $item    = shift;
 	my $validRE = shift || Slim::Music::Info::validTypeExtensions();
 	my $hasStat = shift || 0;
+	my $showHidden = shift;		# optionally allow Windows to use hidden artwork, as eg. WMP is storing it as system files
 
 	if (my $filter = $_ignoredItems{$item}) {
 		
@@ -748,14 +749,13 @@ sub fileFilter {
 
 	# BUG 7111: don't catdir if the $item is already a full path.
 	my $fullpath = $dirname ? catdir($dirname, $item) : $item;
-	
-	# Don't display hidden/system files on Windows
-	if (main::ISWINDOWS) {
+
+	# Don't display hidden/system folders on Windows
+	if (main::ISWINDOWS && !$showHidden) {
 		my $attributes;
 		Win32::File::GetAttributes($fullpath, $attributes);
 		return 0 if ($attributes & Win32::File::HIDDEN()) || ($attributes & Win32::File::SYSTEM());
 	}
-
 
 	# We only want files, directories and symlinks Bug #441
 	# Otherwise we'll try and read them, and bad things will happen.

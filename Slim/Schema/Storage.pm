@@ -1,6 +1,6 @@
 package Slim::Schema::Storage;
 
-# $Id: Storage.pm 30446 2010-03-31 12:11:29Z agrundman $
+# $Id: Storage.pm 33065 2011-08-12 15:40:26Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -84,9 +84,9 @@ sub throw_exception {
 
 	} elsif ($msg =~ /SQLite.*(?:database disk image is malformed|is not a database)/i) {
 		
-		$msg =~ m|/(squeezebox(?:-persistent)?\.db)|i;
+		$msg =~ m{/((?:library|persist)\.db)}i;
 		
-		my $dbfile = $1 || 'squeezebox.db';
+		my $dbfile = $1 || 'library.db';
 
 		$dbfile = File::Spec->catfile( preferences('server')->get('librarycachedir'), $dbfile );
 

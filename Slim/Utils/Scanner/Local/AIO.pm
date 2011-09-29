@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner::Local::AIO;
 
-# $Id: AIO.pm 30855 2010-06-11 15:45:12Z agrundman $
+# $Id: AIO.pm 32969 2011-08-04 08:19:51Z mherger $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -38,7 +38,7 @@ sub find {
 	if ( $args->{progress} ) {
 		$progress = Slim::Utils::Progress->new( {
 			type  => 'importer',
-			name  => $args->{scanName} ? 'discovering_' . $args->{scanName} : 'discovering_files',
+			name  => $path . '|' . ($args->{scanName} ? 'discovering_' . $args->{scanName} : 'discovering_files'),
 		} );
 	}
 	

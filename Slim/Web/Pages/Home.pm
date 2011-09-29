@@ -1,6 +1,6 @@
 package Slim::Web::Pages::Home;
 
-# $Id: Home.pm 32504 2011-06-07 12:16:25Z agrundman $
+# $Id: Home.pm 33008 2011-08-08 05:06:26Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -139,14 +139,8 @@ sub home {
 		my @sorted = sort {
 			(
 				$menu !~ /(?:my_apps)/ &&
-				( $pluginWeights->{$a} || 0 ) <=>
-				( $pluginWeights->{$b} || 0 )
-			)
-			||
-			( 
-				$menu !~ /(?:my_apps)/ &&
-				( $prefs->get("rank-$b") || 0 ) <=> 
-				( $prefs->get("rank-$a") || 0 )
+				( $pluginWeights->{$a} || $prefs->get("rank-$a") || 0 ) <=>
+				( $pluginWeights->{$b} || $prefs->get("rank-$b") || 0 )
 			)
 			|| 
 			(

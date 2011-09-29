@@ -1,6 +1,6 @@
 package Slim::Schema::TrackPersistent;
 
-# $Id: TrackPersistent.pm 31255 2010-08-24 16:13:48Z agrundman $
+# $Id: TrackPersistent.pm 33103 2011-08-17 11:29:00Z mherger $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -87,10 +87,10 @@ sub findhash {
 		$sth = Slim::Schema->dbh->prepare_cached( qq{
 			SELECT *
 			FROM tracks_persistent
-			WHERE (	musicbrainz_id = ? OR urlmd5 = ? )
+			WHERE (	urlmd5 = ? OR musicbrainz_id = ? )
 		} );
 		
-		$sth->execute( $mbid, $urlmd5 );
+		$sth->execute( $urlmd5, $mbid );
 	}
 	else {
 		$sth = Slim::Schema->dbh->prepare_cached( qq{

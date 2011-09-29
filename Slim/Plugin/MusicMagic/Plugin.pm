@@ -30,6 +30,8 @@ use Slim::Plugin::MusicMagic::PlayerSettings;
 
 use Slim::Utils::Favorites;
 
+use constant MENU_WEIGHT => 95;
+
 my $initialized = 0;
 my $MMSport;
 my $canPowerSearch;
@@ -119,9 +121,9 @@ $prefs->setChange(
 			
 			my $interval = $prefs->get('scan_interval') || 3600;
 			
-			main::INFOLOG && $log->info("re-setting checker for $interval seconds from now.");
+			main::INFOLOG && $log->info("re-setting scaninterval to $interval seconds.");
 			
-			Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + $interval, \&Slim::Plugin::MusicMagic::Plugin::checker);
+			Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 120, \&Slim::Plugin::MusicMagic::Plugin::checker);
 	},
 'scan_interval');
 
@@ -386,6 +388,9 @@ sub initPlugin {
 					'MUSICMAGIC_MOODS' => "plugins/MusicMagic/musicmagic_moods.html"
 				});
 			}
+			
+			# set the weight of the moods menu
+			Slim::Plugin::Base->addWeight('MUSICMAGIC_MOODS', MENU_WEIGHT);
 	
 			Slim::Web::Pages->addPageLinks("icons", {
 				'MUSICMAGIC_MOODS' => "plugins/MusicMagic/html/images/icon.png"
@@ -393,7 +398,7 @@ sub initPlugin {
 			
 			Slim::Control::Jive::registerPluginMenu([{
 				stringToken    => 'MUSICMAGIC_MOODS',
-				weight         => 95,
+				weight         => MENU_WEIGHT,
 				id             => 'moods',
 				node           => 'myMusic',
 				actions => {
@@ -531,7 +536,10 @@ sub _statusOK {
 			return 0;
 		}
 
-		if ((time - $lastScanTime) > $scanInterval) {
+		my $timePassed = time() - $lastScanTime;
+		main::DEBUGLOG && $log->debug("Time passed since last scan: $timePassed   -   rescan interval: $scanInterval");
+
+		if ($timePassed > $scanInterval) {
 
 			Slim::Control::Request::executeRequest(undef, ['rescan']);
 		}
@@ -1405,28 +1413,28 @@ sub _prepare_mix {
 }
 
 sub trackInfoHandler {
-	my $return = _objectInfoHandler( @_, 'track' );
+	my $return = _objectInfoHandler( 'track', @_ );
 	return $return;
 }
 
 sub albumInfoHandler {
-	my $return = _objectInfoHandler( @_, 'album' );
+	my $return = _objectInfoHandler( 'album', @_ );
 	return $return;
 }
 
 sub artistInfoHandler {
-	my $return = _objectInfoHandler( @_, 'artist' );
+	my $return = _objectInfoHandler( 'artist', @_ );
 	return $return;
 }
 
 sub genreInfoHandler {
-	my $return = _objectInfoHandler( @_, 'genre' );
+	my $return = _objectInfoHandler( 'genre', @_ );
 	return $return;
 }
 
 sub _objectInfoHandler {
 	
-	my ( $client, $url, $obj, $remoteMeta, $tags, $objectType ) = @_;
+	my ( $objectType, $client, $url, $obj, $remoteMeta, $tags ) = @_;
 	$tags ||= {};
 
 	my $mixable = $obj->musicmagic_mixable;

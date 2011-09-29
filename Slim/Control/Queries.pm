@@ -437,7 +437,14 @@ sub albumsQuery {
 	if ( $tags =~ /a/ ) {
 		# If requesting artist data, join contributor
 		if ( $sql !~ /JOIN contributors/ ) {
-			$sql .= 'JOIN contributors ON contributors.id = albums.contributor ';
+			if ( $sql =~ /JOIN contributor_album/ ) {
+				# Bug 17364, if looking for an artist_id value, we need to join contributors via contributor_album
+				# or No Album will not be found properly
+				$sql .= 'JOIN contributors ON contributors.id = contributor_album.contributor ';
+			}
+			else {
+				$sql .= 'JOIN contributors ON contributors.id = albums.contributor ';
+			}
 		}
 		$c->{'contributors.name'} = 1;
 	}
@@ -1566,6 +1573,18 @@ sub musicfolderQuery {
 	my $url      = $request->getParam('url');
 	my $tags     = $request->getParam('tags') || '';
 	
+	# Bug 17436, don't allow BMF if a scan is running
+	if (Slim::Music::Import->stillScanning()) {
+		$request->addResult('rescan', 1);
+		$request->addResult('count', 1);
+		
+		$request->addResultLoop('folder_loop', 0, 'filename', $request->string('BROWSE_MUSIC_FOLDER_WHILE_SCANNING'));
+		$request->addResultLoop('folder_loop', 0, 'type', 'text');
+		
+		$request->setStatusDone();
+		return;
+	}
+	
 	# url overrides any folderId
 	my $params = ();
 	
@@ -1607,9 +1626,6 @@ sub musicfolderQuery {
 	my $topPath = $topLevelObj->path;
 
 	# now build the result
-	if (Slim::Music::Import->stillScanning()) {
-		$request->addResult("rescan", 1);
-	}
 
 	my ($valid, $start, $end) = $request->normalize(scalar($index), scalar($quantity), $count);
 
@@ -2351,11 +2367,17 @@ sub rescanprogressQuery {
 		my @steps;
 
 		for my $p (@progress) {
+			
+			my $name = $p->name;
+			if ($name =~ /(.*)\|(.*)/) {
+				$request->addResult('fullname', $request->string($2 . '_PROGRESS') . $request->string('COLON') . ' ' . $1);
+				$name = $2;
+			}
 
 			my $percComplete = $p->finish ? 100 : $p->total ? $p->done / $p->total * 100 : -1;
-			$request->addResult($p->name(), int($percComplete));
+			$request->addResult($name, int($percComplete));
 			
-			push @steps, $p->name();
+			push @steps, $name;
 
 			$total_time += ($p->finish || time()) - $p->start;
 			
@@ -2535,7 +2557,11 @@ sub serverstatusQuery {
 			$request->addResult('rescan', "1");
 			if (my $p = Slim::Schema->rs('Progress')->search({ 'type' => 'importer', 'active' => 1 })->first) {
 	
-				$request->addResult('progressname', $request->string($p->name."_PROGRESS"));
+				# remove leading path information from the progress name
+				my $name = $p->name;
+				$name =~ s/(.*)\|//;
+	
+				$request->addResult('progressname', $request->string($name . '_PROGRESS'));
 				$request->addResult('progressdone', $p->done);
 				$request->addResult('progresstotal', $p->total);
 			}
@@ -3141,7 +3167,7 @@ sub statusQuery {
 		
 		if ( $menuMode ) {
 			# Set required tags for menuMode
-			$tags = 'AalKNcx';
+			$tags = 'aAlKNcx';
 		}
 		else {
 			$tags = 'gald' if !defined $tags;
@@ -3215,6 +3241,10 @@ sub statusQuery {
 
 					# Use songData for track, if remote use the object directly
 					my $data = $_->remote ? $_ : $songData->{$_->id};
+
+					# 17352 - when the db is not fully populated yet, and a stored player playlist
+					# references a track not in the db yet, we can fail
+					next if !$data;
 
 					if ($menuMode) {
 						_addJiveSong($request, $loop, $count, $idx, $data);
@@ -3908,7 +3938,7 @@ sub _addJiveSong {
 	my $songData  = _songData(
 		$request,
 		$track,
-		'AalKNcx',			# tags needed for our entities
+		'aAlKNcx',			# tags needed for our entities
 	);
 	
 	my $isRemote = $songData->{remote};
@@ -3962,16 +3992,18 @@ sub _addJiveSong {
 	if ( defined($songData->{artwork_url}) ) {
 		$request->addResultLoop( $loop, $count, 'icon', $songData->{artwork_url} );
 	}
+	elsif ( main::SLIM_SERVICE ) {
+		# send radio placeholder art when on mysb.com
+		$request->addResultLoop($loop, $count, 'icon-id',
+			Slim::Networking::SqueezeNetwork->url('/static/images/icons/radio.png', 'external')
+		);
+	}
 	elsif ( defined $iconId ) {
 		$request->addResultLoop($loop, $count, 'icon-id', $iconId);
 	}
 	elsif ( $isRemote ) {
 		# send radio placeholder art for remote tracks with no art
-		my $radioicon = main::SLIM_SERVICE
-			? Slim::Networking::SqueezeNetwork->url('/static/images/icons/radio.png', 'external')
-			: '/html/images/radio.png';
-
-		$request->addResultLoop($loop, $count, 'icon-id', $radioicon);
+		$request->addResultLoop($loop, $count, 'icon-id', '/html/images/radio.png');
 	}
 
 	# split to three discrete elements for NP screen
@@ -4144,9 +4176,9 @@ sub _songDataFromHash {
 				}
 			}
 		}
-		else {					
-			my $map = $colMap{$tag};
-		
+		# eg. the web UI is requesting some tags which are only available for remote tracks,
+		# such as 'B' (custom button handler). They would return empty here - ignore them.
+		elsif ( my $map = $colMap{$tag} ) {
 			my $value = ref $map eq 'CODE' ? $map->($res) : $res->{$map};
 
 			if (defined $value && $value ne '') {
@@ -4447,8 +4479,12 @@ sub contextMenuQuery {
 	if (defined($menu)) {
 		# send the command to *info, where * is the param given to the menu command
 		my $command = $menu . 'info';
-		$proxiedRequest = Slim::Control::Request::executeRequest( $client, [ $command, 'items', $index, $quantity, @requestParams ] );
-		
+		$proxiedRequest = Slim::Control::Request->new( $client->id, [ $command, 'items', $index, $quantity, @requestParams ] );
+
+		# Bug 17357, propagate the connectionID as info handlers cache sessions based on this
+		$proxiedRequest->connectionID( $request->connectionID );
+		$proxiedRequest->execute();
+
 		# Bug 13744, wrap async requests
 		if ( $proxiedRequest->isStatusProcessing ) {			
 			$proxiedRequest->callbackFunction( sub {

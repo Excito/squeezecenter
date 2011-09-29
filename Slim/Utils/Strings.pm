@@ -1,6 +1,6 @@
 package Slim::Utils::Strings;
 
-# $Id: Strings.pm 31638 2010-12-14 17:00:46Z ayoung $
+# $Id: Strings.pm 33035 2011-08-10 19:19:27Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -383,7 +383,7 @@ sub storeString {
 
 	} elsif (defined $curString->{$failsafeLang}) {
 		$strings->{$currentLang}->{$name} = $curString->{$failsafeLang};
-		main::DEBUGLOG && $log->is_debug && $log->debug("Language $currentLang using $failsafeLang for $name in". defined $file ? $file : 'undefined');
+		main::DEBUGLOG && $log->is_debug && $log->debug("Language $currentLang using $failsafeLang for $name in". (defined $file ? $file : 'undefined'));
 	}
 
 	if ($args->{'storeFailsafe'} && defined $curString->{$failsafeLang}) {

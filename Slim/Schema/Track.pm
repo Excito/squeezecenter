@@ -1,6 +1,6 @@
 package Slim::Schema::Track;
 
-# $Id: Track.pm 32504 2011-06-07 12:16:25Z agrundman $
+# $Id: Track.pm 32989 2011-08-05 04:35:52Z mherger $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -253,7 +253,7 @@ sub genre {
 	
 	return if main::SLIM_SERVICE;
 
-	return $self->genres->single;
+	return $self->genres->first;
 }
 
 sub comment {

@@ -1,6 +1,6 @@
 package Slim::Utils::Scanner::Local::Async;
 
-# $Id: Async.pm 30585 2010-04-14 13:30:33Z mherger $
+# $Id: Async.pm 33020 2011-08-08 15:15:31Z agrundman $
 #
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -52,7 +52,7 @@ sub find {
 	if ( $args->{progress} ) {
 		$progress = Slim::Utils::Progress->new( {
 			type  => 'importer',
-			name  => $args->{scanName} ? 'discovering_' . $args->{scanName} : 'discovering_files',
+			name  => $path . '|' . ($args->{scanName} ? 'discovering_' . $args->{scanName} : 'discovering_files'),
 		} );
 	}
 	
@@ -145,6 +145,11 @@ sub find {
 		
 		$count++;
 		
+		# XXX Not sure why, but sometimes there is no cached stat data available?!
+		if ( !(stat _)[9] ) {
+			stat $file;
+		}
+		
 		$sth->execute(
 			Slim::Utils::Misc::fileURLFromPath($file),
 			(stat _)[9], # mtime
@@ -155,7 +160,10 @@ sub find {
 	};
 	
 	if ( $args->{no_async} ) {
-		while ( $walk->() ) {}
+		my $i = 0;
+		while ( $walk->() ) {
+			main::SCANNER && ++$i % 200 == 0 && Slim::Schema->forceCommit;
+		}
 	}
 	else {	
 		Slim::Utils::Scheduler::add_task( $walk );

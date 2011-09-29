@@ -1,6 +1,6 @@
 package Slim::Formats::Ogg;
 
-# $Id: Ogg.pm 31415 2010-10-07 11:51:43Z ayoung $
+# $Id: Ogg.pm 32923 2011-07-28 04:23:58Z mherger $
 
 # Squeezebox Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
@@ -49,6 +49,12 @@ my %tagMapping = (
 	'MUSICBRAINZ_TRACKID'       => 'MUSICBRAINZ_ID',
 	'MUSICBRAINZ_TRMID'         => 'MUSICBRAINZ_TRM_ID',
 	'DESCRIPTION'               => 'COMMENT',
+
+	# J.River once again.. can't these people use existing standards?
+	'REPLAY GAIN'               => 'REPLAYGAIN_TRACK_GAIN',
+	'PEAK LEVEL'                => 'REPLAYGAIN_TRACK_PEAK',
+	'DISC #'                    => 'DISC',
+	'ALBUM ARTIST'              => 'ALBUMARTIST',
 
 	# for dBpoweramp CD Ripper
 	'TOTALDISCS'                => 'DISCC',
