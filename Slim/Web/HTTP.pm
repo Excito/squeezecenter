@@ -1,8 +1,8 @@
 package Slim::Web::HTTP;
 
-# $Id: HTTP.pm 32722 2011-07-16 15:00:26Z agrundman $
+# $Id: HTTP.pm 33423 2011-09-12 19:16:43Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -350,7 +350,7 @@ sub processHTTP {
 
 	main::DEBUGLOG && $isDebug && $log->info("Reading request...");
 
-	my $request    = $httpClient->get_request();
+	my $request    = $httpClient->get_request(); # XXX this will hang on the rare case a client does not send a full HTTP request
 	# socket half-closed from client
 	if (!defined $request) {
 
@@ -384,10 +384,8 @@ sub processHTTP {
 	# this bundles up all our response headers and content
 	my $response = HTTP::Response->new();
 
-	# by default, respond in kind.
-	$response->protocol($request->protocol());
+	$response->protocol('HTTP/1.1');
 	$response->request($request);
-
 
 	# handle stuff we know about or abort
 	if ($request->method() eq 'GET' || $request->method() eq 'HEAD' || $request->method() eq 'POST') {
@@ -557,7 +555,7 @@ sub processHTTP {
 		# CSRF: make list of params passed by HTTP client
 		my %csrfReqParams;
 		
-		# XXX - unfortunately Squeezebox Server uses a query form
+		# XXX - unfortunately Logitech Media Server uses a query form
 		# that can have a key without a value, yet it's
 		# differnet from a key with an empty value. So we have
 		# to parse out like this.
@@ -645,7 +643,7 @@ sub processHTTP {
 
 			$path =~ s|^/+||;
 
-			if ( !main::WEBUI || $path =~ m{^(?:html|music|plugins|apps|settings|firmware|clixmlbrowser)/}i || Slim::Web::Pages->isRawDownload($path) ) {
+			if ( !main::WEBUI || $path =~ m{^(?:html|music|video|image|plugins|apps|settings|firmware|clixmlbrowser)/}i || Slim::Web::Pages->isRawDownload($path) ) {
 				# not a skin
 
 			} elsif ($path =~ m|^([a-zA-Z0-9]+)$| && $skinMgr->isaSkin($1)) {
@@ -983,7 +981,7 @@ sub generateHTTPResponse {
 		$contentType = 'application/octet-stream';
 	}
 	
-	if ( $path =~ /music\/\d+\/download/ ) {
+	if ( $path =~ /(?:music|video|image)\/[0-9a-f]+\/download/ ) {
 		# Avoid generating templates for download URLs
 		$contentType = 'application/octet-stream';
 	}
@@ -1043,7 +1041,7 @@ sub generateHTTPResponse {
 		$response->header('Cache-Control' => 'max-age=' . $max);
 	}
 
-	if ($contentType =~ /text/ && $path !~ /memoryusage/) {
+	if ($contentType =~ /text/ && $path !~ /(?:json|memoryusage)/) {
 
 		$params->{'params'} = {};
 
@@ -1063,7 +1061,7 @@ sub generateHTTPResponse {
 		$path = 'html/mypage.ico';
 		$isStatic = 1;
 	}
-	elsif ( $path =~ /\.css|\.js|robots\.txt/ ) {
+	elsif ( $path =~ /\.css|\.js(?!on)|robots\.txt/ ) {
 		$isStatic = 1;
 	}
 	elsif (    $path =~ m{html/} 
@@ -1160,7 +1158,7 @@ sub generateHTTPResponse {
 
 			return 0;
 
-		} elsif ($path =~ m{music/([^/]+)/(cover|thumb)} || 
+		} elsif ($path =~ m{(?:image|music|video)/([^/]+)/(cover|thumb)} || 
 			$path =~ m{^plugins/cache/icons} || 
 			$path =~ /\/\w+_(X|\d+)x(X|\d+)
 	                        (?:_([mpsSfFco]))?        # resizeMode, given by a single character
@@ -1222,17 +1220,42 @@ sub generateHTTPResponse {
 				$response,
 			);
 
-		} elsif ($path =~ /music\/(\d+)\/download/) {
+		} elsif ($path =~ /(?:music|video|image)\/([0-9a-f]+)\/download/) {
 			# Bug 10730
 			my $id = $1;
 			
-			main::INFOLOG && $log->is_info && $log->info("Disabling keep-alive for file download");
-			delete $keepAlives{$httpClient};
-			Slim::Utils::Timers::killTimers( $httpClient, \&closeHTTPSocket );
-			$response->header( Connection => 'close' );
+			if ( $path =~ /music|video/ ) {
+				main::INFOLOG && $log->is_info && $log->info("Disabling keep-alive for large file download");
+				delete $keepAlives{$httpClient};
+				Slim::Utils::Timers::killTimers( $httpClient, \&closeHTTPSocket );
+				$response->header( Connection => 'close' );
+			}
+			
+			# Reject bad getContentFeatures requests (DLNA 7.4.26.5)
+			if ( my $gcf = $response->request->header('getContentFeatures.dlna.org') ) {
+				if ( $gcf ne '1' ) {
+					$response->code(400);
+					$response->headers->remove_content_headers;
+					$httpClient->send_response($response);
+					closeHTTPSocket($httpClient);
+					return 0;
+				}
+			}
 
-			if ( downloadMusicFile($httpClient, $response, $id) ) {
-				return 0;
+			if ( $path =~ /music/ ) {
+				if ( downloadMusicFile($httpClient, $response, $id) ) {
+					return 0;
+				}
+			}
+			elsif ( $path =~ /video/ ) {
+				if ( downloadVideoFile($httpClient, $response, $id) ) {
+					return 0;
+				}
+			}
+			elsif ( $path =~ /image/ ) {
+				if ( downloadImageFile($httpClient, $response, $id) ) {
+					return 0;
+				}
 			}
 
 		} elsif ($path =~ /(server|scanner|perfmon|log)\.(?:log|txt)/) {
@@ -1320,6 +1343,10 @@ sub generateHTTPResponse {
 					$response,
 				);
 			}
+			
+		} elsif ( $path =~ /anyurl/ ) {
+			main::DEBUGLOG && $log->is_debug && $log->debug('anyurl - parameters processed, return dummy content to prevent 404');
+			$$body = 'anyurl processed';
 			
 		} else {
 			# who knows why we're here, we just know that something ain't right
@@ -1421,7 +1448,7 @@ sub generateHTTPResponse {
 }
 
 sub sendStreamingFile {
-	my ( $httpClient, $response, $contentType, $file ) = @_;
+	my ( $httpClient, $response, $contentType, $file, $objOrHash ) = @_;
 	
 	# Send the file down - and hint to the browser
 	# the correct filename to save it as.
@@ -1435,8 +1462,95 @@ sub sendStreamingFile {
 	
 	my $fh = FileHandle->new($file);
 	
+	# Range/TimeSeekRange
+	my $range   = $response->request->header('Range');
+	my $tsrange = $response->request->header('TimeSeekRange.dlna.org');
+	
+	# If a Range is already provided, ignore TimeSeekRange
+	my $isTSR;
+	if ( $tsrange && !$range ) {
+		# Translate TimeSeekRange into byte range
+		my $valid = 0;
+		
+		my $formatClass = blessed($objOrHash) ? Slim::Formats->classForFormat($objOrHash->content_type) : undef;
+		
+		# Ignore TimeSeekRange unless we have a valid format class (currently this only supports audio)
+		if ( $formatClass && Slim::Formats->loadTagFormatForType($objOrHash->content_type) && $formatClass->can('findFrameBoundaries') ) {
+			# Valid is: npt=(start time)-(end time)
+			# A time may be either a fractional seconds (sss.fff), or hhh:mm:ss.fff
+			# End is optional
+			if ( $tsrange =~ /^npt=([^-]+)-([^\s]*)$/ ) {
+				my $start = $1 || 0;
+				my $end   = $2;
+			
+				my $startbytes = 0;
+				my $endbytes = $size - 1;
+			
+				if ( $start =~ /:/ ) {
+					my ($h, $m, $s) = split /:/, $start;
+					$start = ($h * 3600) + ($m * 60) + $s;
+				}
+				
+				if ( $start > 0 ) {
+					$startbytes = $formatClass->findFrameBoundaries($fh, undef, $start);
+					main::DEBUGLOG && $log->is_debug && $log->debug("TimeSeekRange.dlna.org: Found start byte offset $startbytes for time $start");
+				}
+			
+				if ( $end ) {
+					if ( $end =~ /:/ ) {
+						my ($h, $m, $s) = split /:/, $end;
+						$end = ($h * 3600) + ($m * 60) + $s;
+					}
+					
+					$endbytes = $formatClass->findFrameBoundaries($fh, undef, $end);
+					main::DEBUGLOG && $log->is_debug && $log->debug("TimeSeekRange.dlna.org: Found end offset $endbytes for time $end");
+				}
+				
+				if ( $startbytes == -1 && $endbytes == -1 ) {
+					# DLNA 7.4.40.8, a valid time range syntax but out of range for the media
+					$response->code(416);
+				}
+				else {
+					# If only the end is -1, assume it was seeking too near the end, and set it to $size
+					if ($endbytes == -1) {
+						$endbytes = $size - 1;
+					}
+				}
+				
+				if ( $startbytes >= 0 && $endbytes >= 0 ) {
+					# Create a valid Range request, which will be handled by the below range code
+					$range = "bytes=${startbytes}-${endbytes}";
+					$isTSR = 1;
+					$valid = 1;
+					
+					my $duration = $objOrHash->secs;
+					$end ||= $duration;
+					$response->header( 'TimeSeekRange.dlna.org' => "npt=${start}-${end}/${duration} bytes=${startbytes}-${endbytes}/${size}" );
+					
+					# If npt is "0-" don't perform a range request
+					if ($start == 0 && $end == $duration) {
+						$range = undef;
+					}
+				}
+			}
+			else {
+				# DLNA 7.4.40.9, bad npt format is a 400 error
+				$response->code(400);
+			}
+		}
+		
+		if ( !$valid ) {
+			$log->warn("Invalid TimeSeekRange.dlna.org request: $tsrange");
+			$response->code(406) unless $response->code >= 400;
+			$response->headers->remove_content_headers;
+			$httpClient->send_response($response);
+			closeHTTPSocket($httpClient);
+			return;
+		}
+	}
+	
 	# Support Range requests
-	if ( my $range = $response->request->header('Range') ) {
+	if ( $range ) {
 		# Only support a single range request, and no support for suffix requests
 		if ( $range =~ m/^bytes=(\d+)-(\d+)?$/ ) {
 			my $first = $1 || 0;
@@ -1444,8 +1558,18 @@ sub sendStreamingFile {
 			my $total = $last - $first + 1;
 			
 			if ( $first > $size ) {
-				# invalid
+				# invalid (past end of file)
 				$response->code(416);
+				$response->headers->remove_content_headers;
+				$httpClient->send_response($response);
+				closeHTTPSocket($httpClient);
+				return;
+			}
+			
+			if ( $total < 1 ) {
+				# invalid (first > last)
+				$response->code(400);
+				$response->headers->remove_content_headers;
 				$httpClient->send_response($response);
 				closeHTTPSocket($httpClient);
 				return;
@@ -1459,14 +1583,24 @@ sub sendStreamingFile {
 		
 			seek $fh, $first, 0;
 		
-			$response->code( 206 );
-			$response->header( 'Content-Range' => "bytes $first-$last/$size" );
+			if ( $isTSR ) { # DLNA 7.4.40.7 A time seek uses 200 status and doesn't include Content-Range, ugh
+				$response->code(200);
+			}
+			else {
+				$response->code( 206 );
+				$response->header( 'Content-Range' => "bytes $first-$last/$size" );
+			}
 			$response->content_length( $total );
 		
 			# Save total value for use later in sendStreamingResponse
 			${*$fh}{rangeTotal}   = $total;
 			${*$fh}{rangeCounter} = 0;
 		}
+	}
+	
+	# Respond to realTimeInfo.dlna.org (DLNA 7.4.72)
+	if ( $response->request->header('realTimeInfo.dlna.org') ) {
+		$response->header( 'realTimeInfo.dlna.org' => 'DLNA.ORG_TLAG=*' );
 	}
 
 	my $headers = _stringifyHeaders($response) . $CRLF;
@@ -1664,7 +1798,7 @@ sub _stringifyHeaders {
 
 	$data .= sprintf("%s %s %s%s", $response->protocol(), $code, HTTP::Status::status_message($code) || "", $CRLF);
 
-	$data .= sprintf("Server: Squeezebox Server (%s - %s)%s", $::VERSION, $::REVISION, $CRLF);
+	$data .= sprintf("Server: Logitech Media Server (%s - %s)%s", $::VERSION, $::REVISION, $CRLF);
 
 	$data .= $response->headers_as_string($CRLF);
 
@@ -2484,6 +2618,19 @@ sub protect { if ( main::WEBUI ) {
 
 sub downloadMusicFile {
 	my ($httpClient, $response, $id) = @_;
+	
+	# Support transferMode.dlna.org (DLNA 7.4.49)
+	my $tm = $response->request->header('transferMode.dlna.org') || 'Streaming';
+	if ( $tm =~ /^(?:Streaming|Background)$/i ) {
+		$response->header( 'transferMode.dlna.org' => $tm );
+	}
+	else {
+		$response->code(406);
+		$response->headers->remove_content_headers;
+		$httpClient->send_response($response);
+		closeHTTPSocket($httpClient);
+		return;
+	}
 
 	my $obj = Slim::Schema->find('Track', $id);
 
@@ -2502,6 +2649,9 @@ sub downloadMusicFile {
 					my ($bitrate) = $uri =~ m{bitrate=(\d+)};
 					my ($quality) = $uri =~ m{quality=(\d)};
 					$quality = 9 unless $quality =~ /^[0-9]$/;
+					
+					# Use aif because DLNA specifies big-endian format
+					$outFormat = 'aif' if $outFormat =~ /^(?:aiff?|wav)$/;
 				
 					my ($transcoder, $error) = Slim::Player::TranscodingHelper::getConvertCommand2(
 						$obj,
@@ -2516,7 +2666,8 @@ sub downloadMusicFile {
 					if ( !$transcoder ) {
 						$log->error("Couldn't transcode " . $obj->url . " to $outFormat: $error");
 					
-						$response->code(400);					
+						$response->code(400);
+						$response->headers->remove_content_headers;				
 						addHTTPResponse($httpClient, $response, \'', 1, 0);
 						return 1;
 					}
@@ -2528,7 +2679,8 @@ sub downloadMusicFile {
 					if ( !$command ) {
 						$log->error("Couldn't create transcoder command-line for " . $obj->url . " to $outFormat");
 					
-						$response->code(400);					
+						$response->code(400);
+						$response->headers->remove_content_headers;					
 						addHTTPResponse($httpClient, $response, \'', 1, 0);
 						return 1;
 					}
@@ -2562,7 +2714,13 @@ sub downloadMusicFile {
 						Slim::Utils::Network::blocking($in, 0);
 					}
 				
-					$response->content_type( $Slim::Music::Info::types{$outFormat} );
+					if ($outFormat eq 'aif') {
+						# Construct special PCM content-type
+						$response->content_type( 'audio/L16;rate=' . $obj->samplerate . ';channels=' . $obj->channels );
+					}
+					else {
+						$response->content_type( $Slim::Music::Info::types{$outFormat} );
+					}
 				
 					# Tell client range requests are not supported
 					$response->header( 'Accept-Ranges' => 'none' );
@@ -2578,6 +2736,18 @@ sub downloadMusicFile {
 					if ($is11) {
 						# Use chunked TE for HTTP/1.1 clients
 						$response->header( 'Transfer-Encoding' => 'chunked' );
+					}
+					
+					# Add DLNA HTTP header, with ORG_CI to indicate transcoding, and lack of ORG_OP to indicate no seeking
+					my $dlna;
+					if ( $outFormat eq 'mp3' ) {
+						$dlna = 'DLNA.ORG_PN=MP3;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=01700000000000000000000000000000';
+					}
+					elsif ( $outFormat eq 'aif' ) {
+						$dlna = 'DLNA.ORG_PN=LPCM;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=01700000000000000000000000000000';
+					}
+					if ($dlna) {
+						$response->header( 'contentFeatures.dlna.org' => $dlna );
 					}
 				
 					my $headers = _stringifyHeaders($response) . $CRLF;
@@ -2619,6 +2789,9 @@ sub downloadMusicFile {
 									# Add last empty chunk
 									$out->push_write( '0' . $CRLF . $CRLF );
 								}
+								else {
+									$writer->(); # clean up & close
+								}
 							}
 							else {
 								if ($is11) {
@@ -2658,7 +2831,8 @@ sub downloadMusicFile {
 					# Transcoding is not enabled, return 400
 					$log->error("Transcoding is not enabled for " . $obj->url . " to $outFormat");
 				
-					$response->code(400);					
+					$response->code(400);	
+					$response->headers->remove_content_headers;				
 					addHTTPResponse($httpClient, $response, \'', 1, 0);
 					return 1;
 				}
@@ -2668,9 +2842,82 @@ sub downloadMusicFile {
 		main::INFOLOG && $log->is_info && $log->info("Opening $obj for download...");
 			
 		my $ct = $Slim::Music::Info::types{$obj->content_type()};
+		
+		# Add DLNA HTTP header
+		if ( my $pn = $obj->dlna_profile ) {
+			my $canseek = ($pn eq 'MP3' || $pn =~ /^WMA/);
+			my $dlna = "DLNA.ORG_PN=${pn};DLNA.ORG_OP=" . ($canseek ? '11' : '01') . ";DLNA.ORG_FLAGS=01700000000000000000000000000000";
+			$response->header( 'contentFeatures.dlna.org' => $dlna );
+		}
+		
+		Slim::Web::HTTP::sendStreamingFile( $httpClient, $response, $ct, Slim::Utils::Misc::pathFromFileURL($obj->url), $obj );
 			
-		Slim::Web::HTTP::sendStreamingFile( $httpClient, $response, $ct, Slim::Utils::Misc::pathFromFileURL($obj->url) );
-			
+		return 1;
+	}
+	
+	return;
+}
+
+sub downloadVideoFile {
+	my ($httpClient, $response, $id) = @_;
+
+	require Slim::Schema::Video;
+	my $video = Slim::Schema::Video->findhash($id);
+
+	if ($video) {
+		# Add DLNA HTTP header
+		if ( my $pn = $video->{dlna_profile} ) {
+			my $dlna = "DLNA.ORG_PN=${pn};DLNA.ORG_OP=01;DLNA.ORG_FLAGS=01700000000000000000000000000000";
+			$response->header( 'contentFeatures.dlna.org' => $dlna );
+		}
+		
+		# Support transferMode.dlna.org (DLNA 7.4.49)
+		my $tm = $response->request->header('transferMode.dlna.org') || 'Streaming';
+		if ( $tm =~ /^(?:Streaming|Background)$/i ) {
+			$response->header( 'transferMode.dlna.org' => $tm );
+		}
+		else {
+			$response->code(406);
+			$response->headers->remove_content_headers;
+			$httpClient->send_response($response);
+			closeHTTPSocket($httpClient);
+			return;
+		}
+				
+		Slim::Web::HTTP::sendStreamingFile( $httpClient, $response, $video->{mime_type}, Slim::Utils::Misc::pathFromFileURL($video->{url}), $video );
+		return 1;
+	}
+	
+	return;
+}
+
+sub downloadImageFile {
+	my ($httpClient, $response, $hash) = @_;
+
+	require Slim::Schema::Image;
+	my $image = Slim::Schema::Image->findhash($hash);
+
+	if ($image) {
+		# Add DLNA HTTP header
+		if ( my $pn = $image->{dlna_profile} ) {
+			my $dlna = "DLNA.ORG_PN=${pn};DLNA.ORG_OP=01;DLNA.ORG_FLAGS=00f00000000000000000000000000000";
+			$response->header( 'contentFeatures.dlna.org' => $dlna );
+		}
+		
+		# Support transferMode.dlna.org (DLNA 7.4.49)
+		my $tm = $response->request->header('transferMode.dlna.org') || 'Interactive';
+		if ( $tm =~ /^(?:Interactive|Background)$/i ) {
+			$response->header( 'transferMode.dlna.org' => $tm );
+		}
+		else {
+			$response->code(406);
+			$response->headers->remove_content_headers;
+			$httpClient->send_response($response);
+			closeHTTPSocket($httpClient);
+			return;
+		}
+				
+		Slim::Web::HTTP::sendStreamingFile( $httpClient, $response, $image->{mime_type}, Slim::Utils::Misc::pathFromFileURL($image->{url}), $image );
 		return 1;
 	}
 	

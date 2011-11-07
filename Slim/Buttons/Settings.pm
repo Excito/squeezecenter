@@ -1,6 +1,6 @@
 package Slim::Buttons::Settings;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -40,7 +40,7 @@ if ( main::SLIM_SERVICE ) {
 		SETUP_PLAYER_CODE
 	);
 	
-	require YAML::Syck;
+	require YAML::XS;
 }
 
 our %menuParams = ();
@@ -848,7 +848,7 @@ sub init {
 			},
 		};
 		
-		my $timezones = YAML::Syck::LoadFile( $main::SN_PATH . "/config/timezones.yml" );
+		my $timezones = YAML::XS::LoadFile( $main::SN_PATH . "/config/timezones.yml" );
 		
 		$menuParams{'SETTINGS'}->{'submenus'}->{'TIMEZONE'} = {
 			'useMode' => 'INPUT.Choice',

@@ -1,8 +1,8 @@
 package Slim::Schema;
 
-# $Id: Schema.pm 33041 2011-08-11 04:01:30Z agrundman $
+# $Id: Schema.pm 33540 2011-09-30 12:47:49Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -17,7 +17,7 @@ my $track = Slim::Schema->objectForUrl($url);
 
 =head1 DESCRIPTION
 
-L<Slim::Schema> is the main entry point for all interactions with Squeezebox Server's
+L<Slim::Schema> is the main entry point for all interactions with Logitech Media Server's
 database backend. It provides an ORM abstraction layer on top of L<DBI>,
 acting as a subclass of L<DBIx::Class::Schema>.
 
@@ -145,13 +145,21 @@ sub init {
 	eval {
 		local $dbh->{HandleError} = sub {};
 		$dbh->do('SELECT name FROM metainformation') || die $dbh->errstr;
+		
+		# when upgrading from SBS to LMS let's check the additional tables,
+		# as the schema numbers might be overlapping, not causing a re-build
+		$dbh->do('SELECT id FROM images LIMIT 1') || die $dbh->errstr;
+		$dbh->do('SELECT id FROM videos LIMIT 1') || die $dbh->errstr;
+
+		# always reset the isScanning flag upon restart
+		Slim::Utils::OSDetect::isSqueezeOS() && $dbh->do("UPDATE metainformation SET value = '0' WHERE name = 'isScanning'");
 	};
 
 	# If we couldn't select our new 'name' column, then drop the
 	# metainformation (and possibly dbix_migration, if the db is in a
 	# wierd state), so that the migrateDB call below will update the schema.
 	if ( $@ && !main::SLIM_SERVICE ) {
-		logWarning("Creating new database - empty database or database from 6.3.x found");
+		logWarning("Creating new database - empty, outdated or invalid database found");
 
 		eval {
 			$dbh->do('DROP TABLE IF EXISTS metainformation');
@@ -259,6 +267,13 @@ sub init {
 		}
 
 		$prefs->set('migratedMovCT' => 1);
+	}
+	
+	if ( !main::SLIM_SERVICE && !main::SCANNER ) {
+		# Wipe cached data after rescan
+		Slim::Control::Request::subscribe( sub {
+			$class->wipeCaches;
+		}, [['rescan'], ['done']] );
 	}
 
 	$initialized = 1;
@@ -490,7 +505,7 @@ sub migrateDB {
 
 	} else {
 
-		# this occurs if a user downgrades Squeezebox Server to a version with an older schema and which does not include
+		# this occurs if a user downgrades Logitech Media Server to a version with an older schema and which does not include
 		# the required downgrade sql scripts - attempt to drop and create the database at current schema version
 
 		if ( $log->is_warn ) {
@@ -906,13 +921,27 @@ sub _createOrUpdateAlbum {
 				title       => $noAlbum,
 				titlesort   => $sortkey,
 				titlesearch => Slim::Utils::Text::ignoreCaseArticles($sortkey, 1),
-				compilation => $isCompilation, # XXX why set compilation?
+				compilation => 0, # Will be set to 1 below, if needed
 				year        => 0,
+				contributor => $self->variousArtistsObject->id,
 			};
 			
 			$_unknownAlbumId = $self->_insertHash( albums => $albumHash );
 
 			main::DEBUGLOG && $isDebug && $log->debug(sprintf("-- Created NO ALBUM as id: [%d]", $_unknownAlbumId));
+		}
+		else {
+			# Bug 17370, detect if No Album is a "compilation" (more than 1 artist with No Album)
+			# We have to check the other tracks already on this album, and if the artists differ 
+			# from the current track's artists, we have a compilation
+			my $is_comp = $self->mergeSingleVAAlbum( $_unknownAlbumId, 1 );
+
+			if ( $is_comp ) {
+				$self->_updateHash( albums => {
+					id          => $_unknownAlbumId,
+					compilation => 1,
+				}, 'id' );
+			}
 		}
 
 		main::DEBUGLOG && $isDebug && $log->debug("-- Track has no album");
@@ -1544,6 +1573,11 @@ sub _newTrack {
 	if ($trackId) {
 		$columnValueHash{'id'} = $trackId;
 	}
+	
+	# Record time this track was added/updated
+	my $now = time();
+	$columnValueHash{added_time} = $now;
+	$columnValueHash{updated_time} = $now;
 
 	my $ct = $columnValueHash{'content_type'};
 	
@@ -1769,6 +1803,9 @@ sub updateOrCreateBase {
 			'url'        => $url,
 			'attributes' => $attributeHash,
 		});
+		
+		# Update timestamp
+		$attributeHash->{updated_time} = time();
 
 		while (my ($key, $val) = each %$attributeHash) {
 
@@ -2027,11 +2064,6 @@ sub wipeCaches {
 	$self->lastTrackURL('');
 	$self->lastTrack({});
 	
-	# Wipe cached data used for Jive, i.e. albums query data
-	if (!main::SCANNER) {	
-		Slim::Control::Queries::wipeCaches();
-	}
-	
 	main::INFOLOG && logger('scan.import')->info("Wiped all in-memory caches.");
 }
 
@@ -2190,6 +2222,8 @@ sub _retrieveTrack {
 	if (Slim::Music::Info::isRemoteURL($url)) {
 		return Slim::Schema::RemoteTrack->fetch($url, $playlist);
 	}
+	
+	return if main::SLIM_SERVICE; # if MySB gets past here, we have an invalid remote URL
 
 	# Keep the last track per dirname.
 	my $dirname = dirname($url);
@@ -2485,6 +2519,12 @@ sub _preCheckAttributes {
 	# own SQL server may have strict mode turned on.
 	for my $tag (qw(YEAR RATING)) {
 		$attributes->{$tag} ||= 0;
+	}
+	
+	# Bug 4803, ensure rating is an integer that fits into tinyint
+	if ( $attributes->{RATING} && ($attributes->{RATING} !~ /^\d+$/ || $attributes->{RATING} > 255) ) {
+		logWarning("Invalid RATING tag '" . $attributes->{RATING} . "' in " . Slim::Utils::Misc::pathFromFileURL($url));
+		$attributes->{RATING} = 0;
 	}
 
 	if (defined $attributes->{'TRACKNUM'}) {
@@ -2936,16 +2976,16 @@ sub lastError { $LAST_ERROR }
 sub totals {
 	my $class = shift;
 	
-	if ( !exists $TOTAL_CACHE{album} ) {
+	if ( !$TOTAL_CACHE{album} ) {
 		$TOTAL_CACHE{album} = $class->count('Album');
 	}
-	if ( !exists $TOTAL_CACHE{contributor} ) {
+	if ( !$TOTAL_CACHE{contributor} ) {
 		$TOTAL_CACHE{contributor} = $class->rs('Contributor')->countTotal;
 	}
-	if ( !exists $TOTAL_CACHE{genre} ) {
+	if ( !$TOTAL_CACHE{genre} ) {
 		$TOTAL_CACHE{genre} = $class->count('Genre');
 	}
-	if ( !exists $TOTAL_CACHE{track} ) {
+	if ( !$TOTAL_CACHE{track} ) {
 		# Bug 13215, this used to be $class->rs('Track')->browse->count but this generates a slow query
 		my $dbh = Slim::Schema->dbh;
 		my $sth = $dbh->prepare_cached('SELECT COUNT(*) FROM tracks WHERE audio = 1');

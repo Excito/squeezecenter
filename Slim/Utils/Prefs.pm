@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs;
 
-# $Id: Prefs.pm 32611 2011-07-04 09:23:01Z mherger $
+# $Id: Prefs.pm 33590 2011-10-10 14:24:24Z mherger $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -100,7 +100,7 @@ Slim::Utils::OSDetect->getOS()->migratePrefsFolder($path);
 my $prefs = preferences('server');
 
 # File paths need to be prepared in order to correctly read the file system
-$prefs->setFilepaths(qw(audiodir playlistdir cachedir librarycachedir coverArt));
+$prefs->setFilepaths(qw(mediadirs ignoreInAudioScan ignoreInVideoScan ignoreInImageScan playlistdir cachedir librarycachedir coverArt));
 
 
 =head2 preferences( $namespace )
@@ -159,7 +159,7 @@ sub init {
 		'rank-GAMES'                     => 20,
 		# Server Settings - Basic
 		'language'              => \&defaultLanguage,
-		'audiodir'              => \&defaultAudioDir,
+		'mediadirs'             => \&defaultMediaDirs,
 		'playlistdir'           => \&defaultPlaylistDir,
 		'autorescan'            => 0,
 		'autorescan_stat_interval' => 10,
@@ -189,8 +189,13 @@ sub init {
 		'ratingImplementation'  => 'LOCAL_RATING_STORAGE',
 		# Server Settings - FileTypes
 		'disabledextensionsaudio'    => '',
+		'disabledextensionsvideo'    => '',
+		'disabledextensionsimages'   => '',
 		'disabledextensionsplaylist' => '',
 		'disabledformats'       => [],
+		'ignoreInAudioScan'     => [],
+		'ignoreInVideoScan'     => [],
+		'ignoreInImageScan'     => [],
 		# Server Settings - Networking
 		'webproxy'              => \&Slim::Utils::OSDetect::getProxy,
 		'httpport'              => 9000,
@@ -701,7 +706,7 @@ sub init {
 	# set validation functions
 	$prefs->setValidate( 'num',   qw(displaytexttimeout browseagelimit remotestreamtimeout screensavertimeout 
 									 itemsPerPage refreshRate thumbSize httpport bufferSecs remotestreamtimeout) );
-	$prefs->setValidate( 'dir',   qw(cachedir librarycachedir playlistdir audiodir artfolder) );
+	$prefs->setValidate( 'dir',   qw(cachedir librarycachedir playlistdir artfolder) );
 	$prefs->setValidate( 'array', qw(guessFileFormats titleFormat disabledformats) );
 
 	# allow users to set a port below 1024 on windows which does not require admin for this
@@ -766,6 +771,26 @@ sub init {
 					}
 		}, 'coverArt',
 	);
+	
+	# mediadirs must be a list of unique, valid folders
+	$prefs->setValidate({
+		validator => sub {
+			my $new = $_[1];
+			return 0 if ref $new ne 'ARRAY';
+
+			# don't accept duplicate entries
+			my %seen;
+			return 0 if scalar ( grep { !$seen{$_}++ } @{$new} ) != scalar @$new;
+			
+			foreach (@{ $new }) {
+				if (! (-d $_ || (main::ISWINDOWS && -d Win32::GetANSIPathName($_)) || -d Slim::Utils::Unicode::encode_locale($_)) ) {
+					return 0;
+				}
+			}
+
+			return 1;
+		}
+	}, 'mediadirs', 'ignoreInAudioScan', 'ignoreInVideoScan', 'ignoreInImageScan');
 
 	# set on change functions
 	$prefs->setChange( \&Slim::Web::HTTP::adjustHTTPPort, 'httpport' );
@@ -793,10 +818,56 @@ sub init {
 
 	if ( !main::SCANNER ) {
 		$prefs->setChange( sub {
-			require Slim::Music::MusicFolderScan;
-			Slim::Music::MusicFolderScan->init;
-			Slim::Control::Request::executeRequest(undef, ['wipecache']);
-		}, 'audiodir');
+			my $newValues = $_[1];
+			my $oldValues = $_[3];
+			
+			my %new = map { $_ => 1 } @$newValues;
+	
+			# get old paths which no longer exist:
+			my @old = grep {
+				delete $new{$_} != 1;
+			} @$oldValues;
+			
+			# in order to get rid of stale entries trigger full rescan if path has been removed
+			if (scalar @old) {
+				main::INFOLOG && logger('scan.scanner')->info('removed folder from mediadirs - trigger wipecache: ' . Data::Dump::dump(@old));
+				Slim::Control::Request::executeRequest(undef, ['wipecache']);
+			}
+
+			# if only new paths were added, only scan those folders
+			else {
+				foreach (keys %new) {
+					main::INFOLOG && logger('scan.scanner')->info('added folder to mediadirs - trigger rescan of new folder only: ' . $_);
+					Slim::Control::Request::executeRequest( undef, [ 'rescan', 'full', Slim::Utils::Misc::fileURLFromPath($_) ] );
+				}
+			}
+		}, 'mediadirs');
+
+		$prefs->setChange( sub {
+			my $newValues = $_[1];
+			my $oldValues = $_[3];
+			
+			my %old = map { $_ => 1 } @$oldValues;
+	
+			# get new exclusion paths which did not exist previously:
+			my @new = grep {
+				delete $old{$_} != 1;
+			} @$newValues;
+
+			# in order to get rid of stale entries trigger full rescan if path has been added
+			if (scalar @new) {
+				main::INFOLOG && logger('scan.scanner')->info('added folder to exclusion list - trigger wipecache: ' . Data::Dump::dump(@new));
+				Slim::Control::Request::executeRequest(undef, ['wipecache']);
+			}
+
+			# if only new paths were added, only scan those folders
+			else {
+				foreach (keys %old) {
+					main::INFOLOG && logger('scan.scanner')->info('removed folder from exclusion list - trigger rescan of new folder only: ' . $_);
+					Slim::Control::Request::executeRequest( undef, [ 'rescan', 'full', Slim::Utils::Misc::fileURLFromPath($_) ] );
+				}
+			}
+		}, 'ignoreInAudioScan', 'ignoreInVideoScan', 'ignoreInImageScan');
 	}
 
 	$prefs->setChange( sub {
@@ -891,7 +962,7 @@ sub init {
 	
 	# Rebuild Jive cache if VA setting is changed
 	$prefs->setChange( sub {
-		Slim::Control::Queries::wipeCaches();
+		Slim::Schema->wipeCaches();
 	}, 'variousArtistAutoIdentification', 'composerInArtists', 'conductorInArtists', 'bandInArtists');
 
 	# Reset IR state if preference change
@@ -903,16 +974,13 @@ sub init {
 	if ( main::SLIM_SERVICE ) {
 		# Update players.name database field if name is changed
 		$prefs->setChange( sub {
-			my $name   = $_[1];
+			my $name   = $_[1] || return;
 			my $client = $_[2] || return;
+			
+			return if $name eq 'nil';
 			
 			$client->playerData->name( $name );
 			$client->playerData->update;
-				
-			# Also update the value in firmware
-			# This is handled by another setChange for playername,
-			# but the prefs code only allows one setChange action per pref
-			$client->setPlayerSetting( playername => $name );
 		}, 'playername' );
 	}
 }
@@ -956,9 +1024,9 @@ use File::Spec::Functions qw(:ALL);
 use Digest::MD5;
 
 sub makeSecuritySecret {
-	# each Squeezebox Server installation should have a unique,
+	# each Logitech Media Server installation should have a unique,
 	# strongly random value for securitySecret. This routine
-	# will be called by the first time Squeezebox Server is started
+	# will be called by the first time the server is started
 	# to "seed" the prefs file with a value for this installation
 
 	my $hash = new Digest::MD5;
@@ -980,14 +1048,58 @@ sub defaultLanguage {
 	return Slim::Utils::OSDetect->getOS->getSystemLanguage;
 }
 
-sub defaultAudioDir {
-	my $path = Slim::Utils::OSDetect::dirsFor('music');
+sub defaultMediaDirs {
+	my $audiodir = $prefs->get('audiodir');
 
-	if ($path && -d $path) {
-		return $path;
-	} else {
-		return '';
+	$prefs->remove('audiodir') if $audiodir;
+	
+	my @mediaDirs;
+	
+	# if an audiodir had been there before, configure LMS as we did in SBS: audio only
+	if ($audiodir) {
+		# set mediadirs to the former audiodir
+		push @mediaDirs, $audiodir;
+		
+		# add the audiodir to the list of sources to be ignored by the other scans
+		defaultMediaIgnoreFolders('music', $audiodir);
 	}
+	
+	# new LMS installation: default to all media folders
+	else {
+		# try to find the OS specific default folders for various media types
+		foreach my $medium ('music', 'videos', 'pictures') {
+			my $path = Slim::Utils::OSDetect::dirsFor($medium);
+			
+			main::DEBUGLOG && $log && $log->debug("Setting default path for medium '$medium' to '$path' if available.");
+			
+			if ($path && -d $path) {
+				push @mediaDirs, $path;
+				
+				# ignore media from other media's scan
+				defaultMediaIgnoreFolders($medium, $path);
+			}
+		}
+	}
+	
+	return \@mediaDirs;
+}
+
+# when using default folders for a given media type, exclude it from other media's scans
+sub defaultMediaIgnoreFolders {
+	my ($type, $dir) = @_;
+
+	my %ignoreDirs = (
+		music    => ['ignoreInVideoScan', 'ignoreInImageScan'],
+		videos   => ['ignoreInAudioScan', 'ignoreInImageScan'],
+		pictures => ['ignoreInVideoScan', 'ignoreInAudioScan'],
+	);
+
+	foreach ( @{ $ignoreDirs{$type} } ) {
+		my $ignoreDirs = $prefs->get($_) || [];
+		
+		push @$ignoreDirs, $dir;
+		$prefs->set($_, $ignoreDirs);
+	}				
 }
 
 sub defaultPlaylistDir {

@@ -1,8 +1,8 @@
 package Slim::Web::XMLBrowser;
 
-# $Id: XMLBrowser.pm 33083 2011-08-15 08:58:56Z mherger $
+# $Id: XMLBrowser.pm 33548 2011-10-03 08:56:23Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -277,6 +277,9 @@ sub handleFeed {
 			my $searchQuery;
 			
 			if ( $subFeed->{'type'} && $subFeed->{'type'} eq 'search' && defined $stash->{'q'} ) {
+				# bug 17373 - remove period from search expression, as it breaks our index (and is ignored during the search anyway)
+				$stash->{q} =~ s/\./ /g;
+
 				$crumbText .= '_' . uri_escape_utf8( $stash->{q}, "^A-Za-z0-9" );
 				$searchQuery = $stash->{'q'};
 			}
@@ -294,6 +297,10 @@ sub handleFeed {
 				'index' => $crumbText,
 			};
 
+			if ( $subFeed->{type} && $subFeed->{type} eq 'slideshow' ) {
+				$stash->{slideshow} = 1;
+			}
+
 			# Change type to audio if it's an action request and we have a play attribute
 			# and it's the last item
 			if ( 
@@ -309,7 +316,7 @@ sub handleFeed {
 			if ( 
 			       $subFeed->{'playlist'}
 				&& $depth == $levels
-				&& $stash->{'action'} =~ /^(?:playall|addall|insert)$/
+				&& $stash->{'action'} =~ /^(?:playall|addall|insert|remove)$/
 			) {
 				$subFeed->{'type'} = 'playlist';
 				$subFeed->{'url'}  = $subFeed->{'playlist'};
@@ -624,7 +631,7 @@ sub handleFeed {
 		}
 	}
 	# play all/add all
-	elsif ( $client && $action && $action =~ /^(playall|addall|insert)$/ ) {
+	elsif ( $client && $action && $action =~ /^(playall|addall|insert|remove)$/ ) {
 		$action =~ s/all$//;
 		
 		my @urls;
@@ -663,6 +670,8 @@ sub handleFeed {
 			}
 			if ($action eq 'insert') {
 				$client->execute([ 'playlist', 'inserttracks', 'listRef', \@urls ]);
+			} elsif ($action eq 'remove') {
+				$client->execute([ 'playlist', 'deletetracks', 'listRef', \@urls ]);
 			} else {
 				$client->execute([ 'playlist', $action, \@urls ]);
 			}
@@ -845,6 +854,14 @@ sub handleFeed {
 						}
 						$item->{'ignore'} = 1;
 						$item->{'type'} = 'redirect';
+					
+						# if this is a compilation, provide a link to the album with all artists
+						if ($label eq 'COMPILATION' && $stash->{artist_id}) {
+							$details->{album} = {
+								id   => $feed->{id},
+								title  => $feed->{name},
+							};
+						}
 					}
 				}
 
@@ -899,17 +916,35 @@ sub handleFeed {
 				}
 				delete $details->{'unfold'};
 			}
-			
+
+			$feed->{'favorites_url'} ||= $stash->{'playUrl'};
+
+			if ($feed->{'hasMetadata'} eq 'album' && $feed->{'albumInfo'}) {
+
+				my $morelink = _makeWebLink({ actions => $feed->{'albumInfo'} }, $feed, 'info', 
+											sprintf('%s (%s)', string('INFORMATION'), ($feed->{'album'} || '')));
+
+				$details->{'mixersLink'} = $morelink if $morelink;
+			}
+
 			if (scalar keys %$details) {
-				
 				# This is really just for Trackinfo
 				if ($stash->{'playUrl'}) {
 					$details->{'playLink'} = 'anyurl?p0=playlist&p1=play&p2=' . 
 						Slim::Utils::Misc::escape($stash->{'playUrl'});
 					$details->{'addLink'} = 'anyurl?p0=playlist&p1=add&p2=' . 
 						Slim::Utils::Misc::escape($stash->{'playUrl'});
+					$details->{'insertLink'} = 'anyurl?p0=playlist&p1=insert&p2=' . 
+						Slim::Utils::Misc::escape($stash->{'playUrl'});
+					$details->{'removeLink'} = 'anyurl?p0=playlist&p1=deleteitem&p2=' . 
+						Slim::Utils::Misc::escape($stash->{'playUrl'});
 				}
-	
+				
+				if ($feed->{'favorites_url'} && $favs) {
+					$details->{'favorites_url'} = $feed->{'favorites_url'};
+					$details->{'favorites'} = $favs->hasUrl($feed->{'favorites_url'}) ? 2 : 1;
+				}
+
 				$stash->{'songinfo'} = $details;
 			}
 		}
@@ -1071,7 +1106,7 @@ sub handleSubFeed {
 	# Pass-through forceRefresh flag
 	$subFeed->{forceRefresh} = 1 if $feed->{forceRefresh};
 	
-	foreach (qw(offset total actions image cover albumData orderByList indexList playlist_id playlistTitle)) {
+	foreach (qw(offset total actions image cover albumData albumInfo orderByList indexList playlist_id playlistTitle)) {
 		$subFeed->{$_} = $feed->{$_} if defined $feed->{$_};
 	}
 	
@@ -1127,7 +1162,7 @@ sub webLink {
 	my $allArgs = \@_;
 
 	# get parameters and construct CLI command
-	# Bug 17181: Unfortunately were un-escaping the request path parameter before we split it into separate parameters.
+	# Bug 17181: Unfortunately we're un-escaping the request path parameter before we split it into separate parameters.
 	# Which means any value with a & in it would be considered a distinct parameter. By using the
 	# raw path value from the request object and un-escaping after the splitting, we could fix this.
 	my ($params) = ($response->request->uri =~ m%clixmlbrowser/([^/]+)%);

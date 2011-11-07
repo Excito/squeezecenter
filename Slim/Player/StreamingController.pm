@@ -1,8 +1,8 @@
 package Slim::Player::StreamingController;
 
-# $Id: StreamingController.pm 32552 2011-06-24 13:52:40Z ayoung $
+# $Id: StreamingController.pm 33379 2011-09-09 11:34:33Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -1375,7 +1375,6 @@ sub _Start {		# start -> Playing
 
 		_Playing(@_);
 	} else {
-		# TODO maybe try synchronized resume
 		_Resume(@_);
 	}
 }
@@ -1459,7 +1458,7 @@ sub _syncStart {
 
 	my $startAt =
 	  Time::HiRes::time() +
-	  ( $playerStartDelay + ( $prefs->get('syncStartDelay') || 100 ) ) / 1000;
+	  ( $playerStartDelay + ( $prefs->get('syncStartDelay') || 200 ) ) / 1000;
 
 	foreach $player ( @{ $self->{'players'} } ) {
 		$player->startAt(
@@ -1572,14 +1571,33 @@ sub _JumpOrResume {			# resume -> Streaming, Playing
 
 sub _Resume {				# resume -> Playing
 	my ($self, $event, $params) = @_;
+	
+	my $song        = playingSong($self);
+	my $pausedAt    = ($self->{'resumeTime'} || 0) - ($song ? ($song->startOffset() || 0) : 0);
+	my $startAtBase = Time::HiRes::time() + ($prefs->get('syncStartDelay') || 200) / 1000;
 
 	_setPlayingState($self, PLAYING);
 	foreach my $player (@{$self->{'players'}})	{
 		# set volume to 0 to make sure fade works properly
 		$player->volume(0,1);
-		$player->resume();
+		if (@{$self->{'players'}} > 1 ) {
+			my ($playPoint, $delay);
+			my $startAt = $startAtBase;
+			if ( ($playPoint = $player->playPoint)
+				&& defined $playPoint->[2]
+				&& ($delay = ($playPoint->[2] - $pausedAt)) >= 0)
+			{
+				$startAt += $delay;
+			}
+			main::INFOLOG && $synclog->is_info && $synclog->info($player->id, ": startAt=$startAt");
+			$player->resume($startAt);
+		} else {
+			$player->resume();
+		}
 		$player->fade_volume($self->{'fadeIn'} ? $self->{'fadeIn'} : FADEVOLUME);
 	}
+	
+	$self->{'nextCheckSyncTime'} = $startAtBase + 2;
 
 	Slim::Control::Request::notifyFromArray( $self->master(), ['playlist', 'pause', 0] );
 	

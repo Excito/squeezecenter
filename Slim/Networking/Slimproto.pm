@@ -1,8 +1,8 @@
 package Slim::Networking::Slimproto;
 
-# $Id: Slimproto.pm 31851 2011-01-27 13:15:14Z agrundman $
+# $Id: Slimproto.pm 33379 2011-09-09 11:34:33Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -807,15 +807,6 @@ sub _stat_handler {
 		$stat->{'fullness'} = $fullnessB;
 	}
 	
-	# Use milliseconds for the song-elapsed-time if defined and have not suffered truncation
-	if (defined $stat->{'elapsed_milliseconds'}) {
-		my $songElapsed = $stat->{'elapsed_milliseconds'} / 1000;
-		if ($songElapsed < $stat->{'elapsed_seconds'}) {
-			$songElapsed = $stat->{'elapsed_seconds'};
-		}
-		$client->songElapsedSeconds($songElapsed);
-	}
-
 	if (defined($stat->{'output_buffer_fullness'})) {
 
 		$client->outputBufferFullness($stat->{'output_buffer_fullness'});
@@ -914,7 +905,7 @@ sub getLatency {
 
 sub getPlayPointData {
 	my $client = shift;
-	return ($status{$client}->{'jiffies'}, $status{$client}->{'elapsed_milliseconds'});
+	return ($status{$client}->{'jiffies'}, $status{$client}->{'elapsed_milliseconds'}, $status{$client}->{'elapsed_seconds'});
 }
 	
 sub _update_request_handler {
@@ -1002,7 +993,7 @@ sub _proxy_handler {
 
 sub _shut_handler {
 	my $client = shift;
-	slimproto_close($client->tcpsock);
+	slimproto_close($client->tcpsock) if $client->tcpsock;
 }
 
 my $warnNoSB1Support = 0;

@@ -1,6 +1,6 @@
 package Slim::Web::Pages::EditPlaylist;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -43,7 +43,6 @@ sub editplaylist {
 		return deletePlaylist(@_);
 	}
 
-	my $playlist_id = $params->{'playlist_id'};
 	# 0 base
 	my $itemPos = ($params->{'itempos'} || 0);
 

@@ -1,8 +1,8 @@
 package Slim::Formats;
 
-# $Id: Formats.pm 30446 2010-03-31 12:11:29Z agrundman $
+# $Id: Formats.pm 32982 2011-08-04 14:18:14Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -55,7 +55,6 @@ sub init {
 		'wma' => 'Slim::Formats::WMA',
 		'wmap' => 'Slim::Formats::WMA',
 		'wmal' => 'Slim::Formats::WMA',
-		'mov' => 'Slim::Formats::Movie',
 		'alc' => 'Slim::Formats::Movie',
 		'aac' => 'Slim::Formats::Movie',
 		'mp4' => 'Slim::Formats::Movie',

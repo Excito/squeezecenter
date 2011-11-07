@@ -1,8 +1,8 @@
 package Slim::Music::Artwork;
 
-# $Id: Artwork.pm 33040 2011-08-11 03:49:51Z agrundman $
+# $Id: Artwork.pm 33557 2011-10-04 17:08:53Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -504,27 +504,39 @@ sub precacheAllArtwork {
 				$sth_update_albums->execute( $coverid, $albumid );
 			}
 			
+			# Callback after resize is finished, needed for async resizing
+			my $finished = sub {			
+				if ($isEnabled) {
+					# Update the rest of the tracks on this album
+					# to use the same coverid and cover_cached status
+					$sth_update_tracks->execute( $coverid, $albumid, $cover );
+				}
+				
+				$progress->update( $album_title );
+
+				if ( ++$i % 50 == 0 ) {
+					Slim::Schema->forceCommit;
+				}
+				
+				Slim::Utils::Scheduler::unpause() if !main::SCANNER;
+			};
+			
 			# Do the actual pre-caching only if the pref for it is enabled
 			if ( $isEnabled ) {
-					
 				# Image to resize is either a cover path or the audio file
 				my $path = $cover =~ /^\d+$/
 					? Slim::Utils::Misc::pathFromFileURL($url)
 					: $cover;
 			
 				$isDebug && $importlog->debug( "Pre-caching artwork for " . $album_title . " from $path" );
+				
+				# have scheduler wait for the finished callback
+				Slim::Utils::Scheduler::pause() if !main::SCANNER;
 			
-				if ( Slim::Utils::ImageResizer->resize($path, "music/$coverid/cover_", join(',', @specs), undef) ) {				
-					# Update the rest of the tracks on this album
-					# to use the same coverid and cover_cached status
-					$sth_update_tracks->execute( $coverid, $albumid, $cover );
-				}
+				Slim::Utils::ImageResizer->resize($path, "music/$coverid/cover_", join(',', @specs), $finished);
 			}
-		
-			$progress->update( $album_title );
-		
-			if ( ++$i % 50 == 0 ) {
-				Slim::Schema->forceCommit;
+			else {
+				$finished->();
 			}
 			
 			return 1;
@@ -629,7 +641,7 @@ sub downloadArtwork {
 	
 	if ( main::SCANNER ) {
 		$ua = LWP::UserAgent->new(
-			agent   => 'Squeezebox Server/' . $::VERSION,
+			agent   => 'Logitech Media Server/' . $::VERSION,
 			timeout => 10,
 		);
 		$ua->default_header($authHeader->[0] => $authHeader->[1]);

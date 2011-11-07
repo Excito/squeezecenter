@@ -1,8 +1,8 @@
 package Slim::Formats::Playlists::M3U;
 
-# $Id: M3U.pm 31733 2011-01-12 17:56:45Z ayoung $
+# $Id: M3U.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -31,7 +31,7 @@ sub read {
 	my ($secs, $artist, $album, $title, $trackurl);
 	my $foundBOM = 0;
 	my $fh;
-	my $audiodir;
+	my $mediadirs;
 
 	if (defined $file && ref $file) {
 		$fh = $file;	# filehandle passed
@@ -152,21 +152,25 @@ sub read {
 		}
 		else {
 			# Check if the playlist entry is relative to audiodir
-			$audiodir ||= Slim::Utils::Misc::getAudioDir();
+			$mediadirs ||= Slim::Utils::Misc::getAudioDirs();
 			
-			$trackurl = Slim::Utils::Misc::fixPath($entry, $audiodir);
-			
-			if ($class->playlistEntryIsValid($trackurl, $url)) {
-
-				main::DEBUGLOG && $log->debug("    valid entry: $trackurl");
-
-				push @items, $class->_updateMetaData( $trackurl, {
-					'TITLE'  => $title,
-					'ALBUM'  => $album,
-					'ARTIST' => $artist,
-					'SECS'   => ( defined $secs && $secs > 0 ) ? $secs : undef,
-				} );
-
+			foreach my $audiodir (@$mediadirs) {
+				$trackurl = Slim::Utils::Misc::fixPath($entry, $audiodir);
+				
+				if ($class->playlistEntryIsValid($trackurl, $url)) {
+	
+					main::DEBUGLOG && $log->debug("    valid entry: $trackurl");
+	
+					push @items, $class->_updateMetaData( $trackurl, {
+						'TITLE'  => $title,
+						'ALBUM'  => $album,
+						'ARTIST' => $artist,
+						'SECS'   => ( defined $secs && $secs > 0 ) ? $secs : undef,
+					} );
+					
+					last;
+				}
+	
 				# reset the title
 				($secs, $artist, $album, $title, $trackurl) = ();
 			}

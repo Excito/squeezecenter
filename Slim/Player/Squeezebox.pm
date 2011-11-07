@@ -1,6 +1,6 @@
 package Slim::Player::Squeezebox;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -213,17 +213,6 @@ sub play {
 	$client->volume($client->volume(), defined($client->tempVolume()));
 
 	return $ret;
-}
-
-#
-# tell the client to unpause the decoder
-#
-sub resume {
-	my $client = shift;
-	
-	$client->stream('u');
-	$client->SUPER::resume();
-	return 1;
 }
 
 #
@@ -560,7 +549,7 @@ sub opened {
 #	u8_t threshold;		// [1]	Kb of input buffer data before we autostart or notify the server of buffer fullness
 #	u8_t spdif_enable;	// [1]  '0' = auto, '1' = on, '2' = off
 #	u8_t transition_period;	// [1]	seconds over which transition should happen
-#	u8_t transition_type;	// [1]	'0' = none, '1' = crossfade, '2' = fade in, '3' = fade out, '4' fade in & fade out
+#	u8_t transition_type;	// [1]	'0' = none, '1' = crossfade, '2' = fade in, '3' = fade out, '4' fade in & fade out, '5' = crossfade-immediate
 #	u8_t flags;	// [1]	0x80 - loop infinitely
 #               //      0x40 - stream without restarting decoder
 #               //      0x20 - Rtmp (SqueezePlay only)
@@ -659,8 +648,12 @@ sub stream_s {
 		if ( $track ) {
 			$pcmsamplesize = $client->pcm_sample_sizes($track);
 			$pcmsamplerate = $client->pcm_sample_rates($track);
-			$pcmendian     = $track->endian() == 1 ? 0 : 1;
 			$pcmchannels   = $track->channels() || '2';
+			
+			# Bug 16341, Don't adjust endian value if file is being transcoded to aif
+			if ( $track->content_type eq 'aif' ) {
+				$pcmendian = $track->endian() == 1 ? 0 : 1;
+			}
 		 }
 
 	} elsif ($format eq 'flc') {
@@ -931,6 +924,9 @@ sub stream_s {
 	if ($params->{'fadeIn'}) {
 		$transitionType = 2;
 		$transitionDuration = $params->{'fadeIn'};
+	} elsif ($params->{'crossFade'}) {
+		$transitionType = 5;
+		$transitionDuration = $params->{'crossFade'};
 	} else {
 		$transitionType = $prefs->client($master)->get('transitionType') || 0;
 		$transitionDuration = $prefs->client($master)->get('transitionDuration') || 0;
@@ -1047,7 +1043,7 @@ sub stream {
 		$replayGain = int($interval * 1000);
 	}
 	elsif ($command eq 'u') {
-		 $replayGain = $interval;
+		$replayGain = $interval;
 	}
 	elsif ($command eq 't') {
 		$replayGain = int(Time::HiRes::time() * 1000 % 0xffffffff);

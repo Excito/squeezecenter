@@ -1,8 +1,8 @@
 package Slim::Utils::Scanner::Local;
 
-# $Id: Local.pm 33079 2011-08-15 02:30:17Z agrundman $
+# $Id: Local.pm 33594 2011-10-11 01:07:04Z agrundman $
 #
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, version 2.
 
@@ -117,6 +117,11 @@ sub rescan {
 	# Wipe if requested
 	if ( $args->{wipe} ) {
 		Slim::Schema->wipeAllData;
+
+		# Wipe cached data used for Jive, i.e. albums query data
+		if (!main::SCANNER) {	
+			Slim::Control::Queries::wipeCaches();
+		}
 	}
 	
 	# Default to a recursive scan
@@ -163,7 +168,7 @@ sub rescan {
 		$pluginHandlers = Slim::Utils::Scanner::API->getHandlers();
 	}
 	
-	$log->error("Discovering files in $next");
+	$log->error("Discovering audio files in $next");
 	
 	# Keep track of the number of changes we've made so we can decide
 	# if we should optimize the database or not, and also so we know if
@@ -173,7 +178,10 @@ sub rescan {
 	# Get list of files within this path
 	Slim::Utils::Scanner::Local->find( $next, $args, sub {
 		my $count  = shift;
-		my $others = shift || []; # other dirs we need to scan (shortcuts/aliases)
+		
+		# Save any other dirs we need to scan (shortcuts/aliases)
+		my $others = shift || [];
+		push @{$paths}, @{$others};
 		
 		my $basedir = Slim::Utils::Misc::fileURLFromPath($next);
 		
@@ -243,7 +251,7 @@ sub rescan {
 			SELECT COUNT(*) FROM ( $changedOnlySQL ) AS t1
 		} );
 		
-		$log->error( "Removing deleted files ($inDBOnlyCount)" ) unless main::SCANNER && $main::progress;
+		$log->error( "Removing deleted audio files ($inDBOnlyCount)" ) unless main::SCANNER && $main::progress;
 		
 		if ( $inDBOnlyCount && !Slim::Music::Import->hasAborted() ) {
 			my $inDBOnlySth;
@@ -291,7 +299,10 @@ sub rescan {
 					my $more = 1;
 					
 					if ( !$inDBOnlySth->rows ) {
-						markDone( $next => PENDING_DELETE, $changes ) unless $args->{no_async};
+						if ( !$args->{no_async} ) {
+							$args->{paths} = $paths;
+							markDone( $next => PENDING_DELETE, $changes, $args );
+						}
 						
 						$progress && $progress->final;
 						$inDBOnlySth->finish;
@@ -318,7 +329,7 @@ sub rescan {
 			}
 		}
 		
-		$log->error( "Scanning new files ($onDiskOnlyCount)" ) unless main::SCANNER && $main::progress;
+		$log->error( "Scanning new audio files ($onDiskOnlyCount)" ) unless main::SCANNER && $main::progress;
 		
 		if ( $onDiskOnlyCount && !Slim::Music::Import->hasAborted() ) {
 			my $onDiskOnlySth;
@@ -366,7 +377,10 @@ sub rescan {
 					my $more = 1;
 					
 					if ( !$onDiskOnlySth->rows ) {
-						markDone( $next => PENDING_NEW, $changes ) unless $args->{no_async};
+						if ( !$args->{no_async} ) {
+							$args->{paths} = $paths;
+							markDone( $next => PENDING_NEW, $changes, $args );
+						}
 						
 						$progress && $progress->final;
 						$onDiskOnlySth->finish;
@@ -393,7 +407,7 @@ sub rescan {
 			}
 		}
 		
-		$log->error( "Rescanning changed files ($changedOnlyCount)" ) unless main::SCANNER && $main::progress;
+		$log->error( "Rescanning changed audio files ($changedOnlyCount)" ) unless main::SCANNER && $main::progress;
 		
 		if ( $changedOnlyCount && !Slim::Music::Import->hasAborted() ) {
 			my $changedOnlySth;
@@ -441,7 +455,10 @@ sub rescan {
 					my $more = 1;
 					
 					if ( !$changedOnlySth->rows ) {
-						markDone( $next => PENDING_CHANGED, $changes ) unless $args->{no_async};
+						if ( !$args->{no_async} ) {
+							$args->{paths} = $paths;
+							markDone( $next => PENDING_CHANGED, $changes, $args );
+						}
 						
 						$progress && $progress->final;
 						$changedOnlySth->finish;
@@ -471,47 +488,50 @@ sub rescan {
 		
 		if ( hasAborted() ) {
 			# nothing to do here - should be handled in hasAborted()
-		}
-		
-		# Scan other directories found via shortcuts or aliases
-		elsif ( scalar @{$others} ) {
-			if ( $args->{no_async} ) {
-				$class->rescan( $others, $args );
-			}
-			else {
-				Slim::Utils::Timers::setTimer( $class, AnyEvent->now, \&rescan, $others, $args );
-			}
-		}
-		
-		# If nothing changed, send a rescan done event
+		}		
 		elsif ( !$inDBOnlyCount && !$onDiskOnlyCount && !$changedOnlyCount ) {
 			if ( !main::SCANNER && !$args->{no_async} ) {
-				Slim::Music::Import->setIsScanning(0);
-				Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
+				# Nothing changed, but we may have more paths to scan
+				if ( scalar @{$paths} ) {
+					Slim::Utils::Timers::setTimer( $class, AnyEvent->now, \&rescan, $paths, $args );
+				}
+				
+				# No more paths to scan, notify API handlers and send a rescan done event
+				else {
+					Slim::Music::Import->setIsScanning(0);
+			
+					if ( my $handler = $pluginHandlers->{onFinishedHandler} ) {
+						$handler->(0);
+					}
+			
+					Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
+			
+					if ( $args->{onFinished} ) {
+						$args->{onFinished}->();
+					}
+				}
 			}
 		}
 	} );
 	
 	# Continue scanning if we had more paths
-	if ( @{$paths} && !Slim::Music::Import->hasAborted() ) {
-		if ( $args->{no_async} ) {
+	if ( $args->{no_async} ) {	
+		if ( @{$paths} && !Slim::Music::Import->hasAborted() ) {
 			$class->rescan( $paths, $args );
 		}
-		else {
-			Slim::Utils::Timers::setTimer( $class, AnyEvent->now, \&rescan, $paths, $args );
-		}
-	}
-	
-	if ( !main::SCANNER && $args->{no_async} ) {
-		hasAborted();
+			
+		if ( !main::SCANNER ) {
+			hasAborted();
 
-		# All done, send a done event
-		Slim::Music::Import->setIsScanning(0);
-		Slim::Schema->wipeCaches();
-		Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
+			# All done, send a done event
+			Slim::Music::Import->setIsScanning(0);
+			Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
+		}
+		
+		return $changes;
 	}
 	
-	return $changes;
+	return;
 }
 
 sub hasAborted {
@@ -542,7 +562,7 @@ sub deleted {
 	my $content_type = _content_type($url);
 	
 	if ( Slim::Music::Info::isSong($url, $content_type) ) {
-		$log->error("Handling deleted track $url") unless main::SCANNER && $main::progress;
+		$log->error("Handling deleted audio file $url") unless main::SCANNER && $main::progress;
 
 		# XXX no DBIC objects
 		my $track = Slim::Schema->rs('Track')->search( url => $url )->single;
@@ -723,6 +743,14 @@ sub deleted {
 			$sth->execute( $playlist->{id} );
 		};
 	}
+	else {
+		# Bug 17452, handle everything else by just deleting the record. This will be used for 'fec' and 'cur' types
+		$log->error("Handling deleted file $url") unless main::SCANNER && $main::progress;
+		
+		$dbh->do( qq{
+			DELETE FROM tracks WHERE url = ?
+		}, {}, $url );
+	}
 	
 	if ( $work ) {
 		if ( $dbh->{AutoCommit} ) {
@@ -742,7 +770,7 @@ sub new {
 	if ( Slim::Music::Info::isSong($url) ) {
 		
 		# This costs too much to do all the time, and it fills the log
-		main::INFOLOG && $log->is_info && !(main::SCANNER && $main::progress) && $log->info("Handling new track $url");
+		main::INFOLOG && $log->is_info && !(main::SCANNER && $main::progress) && $log->info("Handling new audio track $url");
 		
 		$work = sub {
 			# We need to make a quick check to make sure this track has not already
@@ -762,7 +790,7 @@ sub new {
 			} );
 			
 			if ( !defined $trackid ) {
-				$log->error( "ERROR SCANNING $url: " . Slim::Schema->lastError );
+				$log->error( "ERROR SCANNING audio file $url: " . Slim::Schema->lastError );
 				return;
 			}
 			
@@ -797,7 +825,7 @@ sub new {
 			} );
 		
 			if ( !defined $playlist ) {
-				$log->error( "ERROR SCANNING $url: " . Slim::Schema->lastError );
+				$log->error( "ERROR SCANNING playlist $url: " . Slim::Schema->lastError );
 				return;
 			}
 
@@ -833,7 +861,7 @@ sub changed {
 	my $content_type = _content_type($url);
 	
 	if ( Slim::Music::Info::isSong($url, $content_type) ) {
-		$log->error("Handling changed track $url") unless main::SCANNER && $main::progress;
+		$log->error("Handling changed audio track $url") unless main::SCANNER && $main::progress;
 		
 		my $work = sub {
 			# Fetch some original track, album, contributors, and genre information
@@ -878,7 +906,7 @@ sub changed {
 			} );
 			
 			if ( !defined $track ) {
-				$log->error( "ERROR SCANNING $url: " . Slim::Schema->lastError );
+				$log->error( "ERROR SCANNING audio file $url: " . Slim::Schema->lastError );
 				return;
 			}
 			
@@ -966,7 +994,7 @@ sub changed {
 
 # Check if we're done with all our rescan tasks
 sub markDone {
-	my ( $path, $type, $changes ) = @_;
+	my ( $path, $type, $changes, $args ) = @_;
 	
 	main::DEBUGLOG && $log->is_debug && $log->debug("Finished scan type $type for $path");
 	
@@ -977,6 +1005,13 @@ sub markDone {
 		if ( $pending{$task} > 0 ) {
 			return;
 		}
+	}
+	
+	# If more paths need to be scanned, we aren't done, schedule the next path scan
+	my $paths = delete $args->{paths};
+	if ( scalar @{$paths} ) {
+		Slim::Utils::Timers::setTimer( __PACKAGE__, AnyEvent->now, \&rescan, $paths, $args );
+		return;
 	}
 	
 	main::DEBUGLOG && $log->is_debug && $log->debug("All rescan tasks finished (total changes: $changes)");
@@ -1000,7 +1035,6 @@ sub markDone {
 				if ($changes) {
 					main::DEBUGLOG && $log->is_debug && $log->debug("Scanner made $changes changes, updating last rescan timestamp");
 					Slim::Music::Import->setLastScanTime();
-					Slim::Schema->wipeCaches();
 				}
 				
 				# Persist the count of "changes since last optimization"
@@ -1017,6 +1051,10 @@ sub markDone {
 				
 				Slim::Music::Import->setIsScanning(0);
 				Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
+				
+				if ( $args->{onFinished} ) {
+					$args->{onFinished}->();
+				}
 			} );
 	}
 	

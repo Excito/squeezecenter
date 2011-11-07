@@ -1,14 +1,14 @@
 package Slim::Networking::Async;
 
-# $Id: Async.pm 31354 2010-09-17 13:08:57Z agrundman $
+# $Id: Async.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2003-2009 Logitech.
+# Logitech Media Server Copyright 2003-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
 
 # This is a base class for all asynchronous network operations performed
-# by Squeezebox Server.
+# by Logitech Media Server.
 
 use strict;
 

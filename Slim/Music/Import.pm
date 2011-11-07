@@ -1,6 +1,6 @@
 package Slim::Music::Import;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -63,7 +63,7 @@ use Slim::Utils::Progress;
 {
 	my $class = __PACKAGE__;
 
-	for my $accessor (qw(cleanupDatabase scanPlaylistsOnly scanningProcess)) {
+	for my $accessor (qw(cleanupDatabase scanPlaylistsOnly scanningProcess doQueueScanTasks)) {
 
 		$class->mk_classdata($accessor);
 	}
@@ -76,6 +76,7 @@ our %Importers      = ();
 my $log             = logger('scan.import');
 my $prefs           = preferences('server');
 
+my %scanQueue;
 my $ABORT = 0;
 
 =head2 launchScan( \%args )
@@ -118,6 +119,9 @@ sub launchScan {
 	if (defined $::logdir && -d $::logdir) {
 		$args->{"logdir=$::logdir"} = 1;
 	}
+	
+	$args->{"noimage"} = 1 if !main::IMAGE;
+	$args->{"novideo"} = 1 if !main::VIDEO;
 
 	# Set scanner priority.  Use the current server priority unless 
 	# scannerPriority has been specified.
@@ -160,7 +164,7 @@ sub launchScan {
 		push @scanArgs, '--debug', $debugArgs;
 	}
 	
-	$class->setIsScanning('SETUP_WIPEDB');
+	$class->setIsScanning($args->{wipe} ? 'SETUP_WIPEDB' : 'SETUP_STANDARDRESCAN');
 	
 	$class->scanningProcess(
 		Proc::Background->new($command, @scanArgs)
@@ -183,13 +187,24 @@ sub abortScan {
 		# we get a progress update
 		$ABORT = 1;
 		
-		$class->setIsScanning(0);
+		$class->setIsScanning(0) if !$class->externalScannerRunning;
+		$class->clearScanQueue;
+		
+		Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
 	}
 }
 
 sub hasAborted { $ABORT }
 
 sub setAborted { shift; $ABORT = shift; }
+
+sub externalScannerRunning {
+	my $class = shift;
+	
+	return 1 if main::SCANNER;
+	
+	return (blessed($class->scanningProcess) && $class->scanningProcess->alive) ? 1 : 0;
+}
 
 =head2 lastScanTime()
 
@@ -300,7 +315,10 @@ sub runScan {
 			next;
 		}
 
-		$changes += $class->runImporter($importer);
+		# XXX tmp var is to avoid a strange "Can't coerce CODE to integer in addition (+)" error/bug
+		# even though there is no way this returns a coderef...
+		my $tmp = $class->runImporter($importer);
+		$changes += $tmp;
 	}
 
 	$class->scanPlaylistsOnly(0);
@@ -615,9 +633,14 @@ sub stillScanning {
 	return 0 if main::SLIM_SERVICE;
 	return 0 if !Slim::Schema::hasLibrary();
 	
+	# clean up progress etc. in case the external scanner crashed
 	if (blessed($class->scanningProcess) && !$class->scanningProcess->alive) {
 		$class->scanningProcess(undef);
 		$class->setIsScanning(0);
+		
+		Slim::Utils::Progress->cleanup('importer');
+		Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
+		
 		return 0;
 	}
 	
@@ -646,10 +669,99 @@ sub _checkLibraryStatus {
 	Slim::Control::Request::notifyFromArray(undef, ['library', 'changed', Slim::Schema::hasLibrary() ? 1 : 0]);
 }
 
+# create queue of scan tasks - trigger next queued scan once a scan has finished
+sub initScanQueue {
+	my $class = shift;
+
+	#$log->error("don't initialize queue - we're slimservice or scanner or already initialized:" . Data::Dump::dump(%scanQueue)) if %scanQueue || main::SLIM_SERVICE || main::SCANNER;
+	return if %scanQueue || main::SLIM_SERVICE || main::SCANNER;
+	
+	require Tie::IxHash;
+	
+	tie (%scanQueue, "Tie::IxHash");
+
+	main::DEBUGLOG && $log->debug("initialize scan queue");
+
+	Slim::Control::Request::subscribe( \&nextScanTask, [['rescan'], ['done']] );
+}
+
+sub nextScanTask {
+	return if main::SLIM_SERVICE || main::SCANNER || __PACKAGE__->stillScanning;
+	
+	#$log->error('scan done!');
+	my @keys = keys %scanQueue;
+	
+	my $k    = shift @keys;
+	my $next = delete $scanQueue{$k};
+	
+	main::DEBUGLOG && $log->debug('triggering next scan: ' . $k) if $k;
+	#$log->error('no more scan to run!') unless $k;
+
+	$next->execute() if $next;
+
+	main::DEBUGLOG && $log->debug('remaining scans in queue:' . Data::Dump::dump(%scanQueue));
+}
+
+sub queueScanTask {
+	my ($class, $request) = @_;
+	
+	#$log->error('do not add scan, we are slimservice or scanner or no request') if main::SLIM_SERVICE || main::SCANNER || !$request;
+	return if main::SLIM_SERVICE || main::SCANNER || !$request;
+
+	$class->initScanQueue();
+
+	#$log->error('existing queue:' . Data::Dump::dump(%scanQueue));
+
+	# no need to queue anything if a wipecache is already in the pipeline
+	main::DEBUGLOG && $log->debug('wipecache is in queue - nothing to do!') if $scanQueue{wipecache};
+	return if $scanQueue{wipecache};
+
+	if ( $request->isCommand([['rescan']]) ) {
+		#$log->error('rescan');
+
+		my $type      = 'rescan';
+		my $mode      = $request->getParam('_mode') || '';
+		my $singledir = $request->getParam('_singledir') || '';
+
+		# rescan of everything - remove existing scans
+		if ($mode eq '' && $singledir eq '') {
+			main::DEBUGLOG && $log->debug('full rescan requested, wipe queue');
+			$class->clearScanQueue;
+		}
+
+		my $k = "$type|$mode|$singledir";
+	
+		#$log->error("key for new request: $k");
+		
+		# no need to add duplicate scan
+		main::DEBUGLOG && $log->debug('scan is already in queue - skip it') if $scanQueue{$k};
+		return if $scanQueue{$k};
+
+		main::DEBUGLOG && $log->debug("adding scan $k to queue");
+		$scanQueue{$k} = $request->virginCopy();
+	}
+	elsif ( $request->isCommand([['wipecache']]) ) {
+		main::DEBUGLOG && $log->debug('full wipecache requested, wipe queue');
+
+		# wipecache removes all existing rescans from the queue
+		$class->clearScanQueue;
+
+		#$log->error("adding wipecache to queue");
+		$scanQueue{wipecache} = $request->virginCopy();
+	}
+	else {
+		main::DEBUGLOG && $log->debug('No scan request');
+	}
+}
+
+sub clearScanQueue {
+	main::DEBUGLOG && $log->debug('clearing queue:' . Data::Dump::dump(%scanQueue));
+	%scanQueue = () if %scanQueue;
+}
 
 =head1 SEE ALSO
 
-L<Slim::Music::MusicFolderScan>
+L<Slim::Media::MediaFolderScan>
 
 L<Slim::Music::PlaylistFolderScan>
 

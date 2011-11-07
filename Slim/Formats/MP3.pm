@@ -1,8 +1,8 @@
 package Slim::Formats::MP3;
 
-# $Id: MP3.pm 33070 2011-08-12 16:33:32Z agrundman $
+# $Id: MP3.pm 33405 2011-09-10 15:35:09Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -125,15 +125,16 @@ sub getTag {
 	$class->doTagMapping($tags);
 	
 	# Map info into tags
-	$tags->{TAGVERSION} = $info->{id3_version};
-	$tags->{OFFSET}     = $info->{audio_offset};
-	$tags->{SIZE}       = $info->{audio_size};
-	$tags->{SECS}       = $info->{song_length_ms} / 1000;
-	$tags->{BITRATE}    = $info->{bitrate};
-	$tags->{STEREO}     = $info->{stereo};
-	$tags->{CHANNELS}   = $info->{stereo} ? 2 : 1;
-	$tags->{RATE}       = $info->{samplerate};
-	$tags->{LAYER_ID}   = $info->{layer}; # 2 = mp2, 1 = mp3
+	$tags->{TAGVERSION}   = $info->{id3_version};
+	$tags->{OFFSET}       = $info->{audio_offset};
+	$tags->{SIZE}         = $info->{audio_size};
+	$tags->{SECS}         = $info->{song_length_ms} / 1000;
+	$tags->{BITRATE}      = $info->{bitrate};
+	$tags->{STEREO}       = $info->{stereo};
+	$tags->{CHANNELS}     = $info->{stereo} ? 2 : 1;
+	$tags->{RATE}         = $info->{samplerate};
+	$tags->{LAYER_ID}     = $info->{layer}; # 2 = mp2, 1 = mp3
+	$tags->{DLNA_PROFILE} = $info->{dlna_profile} || undef;
 	
 	if ( $info->{vbr} ) {
 		$tags->{VBR_SCALE} = 1;

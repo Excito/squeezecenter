@@ -1,6 +1,6 @@
 package Slim::Plugin::LastFM::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 31101 2010-07-23 08:26:26Z mherger $
+# $Id: ProtocolHandler.pm 33278 2011-08-31 16:11:38Z agrundman $
 
 # Handler for lastfm:// URLs
 
@@ -317,7 +317,7 @@ sub getMetadataFor {
 	my ( $class, $client, $url, $forceCurrent ) = @_;
 	
 	my $song = $forceCurrent ? $client->streamingSong() : $client->playingSong();
-	return unless $song;
+	return {} unless $song;
 	
 	my $icon = $class->getIcon();
 	my $name = $client->string('PLUGIN_LFM_MODULE_NAME');

@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Namespace;
 
-# $Id: Namespace.pm 31878 2011-02-04 19:05:54Z agrundman $
+# $Id: Namespace.pm 33499 2011-09-21 17:28:08Z agrundman $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -23,14 +23,12 @@ use strict;
 use base qw(Slim::Utils::Prefs::Base);
 
 use File::Spec::Functions qw(:ALL);
-use YAML::Syck;
+use YAML::XS;
 
 use Slim::Utils::OSDetect;
 use Slim::Utils::Prefs::Client;
 use Slim::Utils::Log;
 use Slim::Utils::Unicode;
-
-$YAML::Syck::ImplicitUnicode = 1;
 
 my $log = logger('prefs');
 
@@ -191,7 +189,12 @@ sub setFilepaths {
 		}
 
 		if ( $class->{'prefs'}->{ $pref } ) {
-			$class->{'prefs'}->{ $pref } = Win32::GetANSIPathName($class->{'prefs'}->{ $pref });
+			if ( ref $class->{'prefs'}->{ $pref } eq 'ARRAY' ) {
+				$class->{'prefs'}->{ $pref } = [ map { Win32::GetANSIPathName($_) } @{ $class->{'prefs'}->{ $pref } } ]
+			}
+			else {
+				$class->{'prefs'}->{ $pref } = Win32::GetANSIPathName($class->{'prefs'}->{ $pref });
+			}
 		}
 
 		$class->{'filepathPrefs'}->{ $pref } = 1;
@@ -257,10 +260,11 @@ sub _load {
 
 	if (-r $class->{'file'}) {
 
-		$prefs = eval { LoadFile($class->{'file'}) };
+		$prefs = eval { YAML::XS::LoadFile($class->{'file'}) };
 
 		if ($@) {
-			main::INFOLOG && $log->info("can't read $class->{'file'} : $@");
+			# log4perl is not yet initialized
+			warn("Unable to read prefs from $class->{'file'} : $@\n");
 		}
 
 		$class->setFilepaths(keys %{$class->{'filepathPrefs'}});
@@ -321,8 +325,8 @@ sub savenow {
 	eval {
 		my $path = $class->{'file'} . '.tmp';
 
-		open(OUT,'>:utf8', $path) or die "$!";
-		print OUT Dump($class->{'prefs'});
+		open OUT, '>', $path or die "$!";
+		print OUT YAML::XS::Dump($class->{'prefs'});
 		close OUT;
 
 		if (-w $path) {

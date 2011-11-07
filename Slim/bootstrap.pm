@@ -1,8 +1,8 @@
 package Slim::bootstrap;
 
-# $Id: bootstrap.pm 32965 2011-08-04 04:06:23Z mherger $
+# $Id: bootstrap.pm 33566 2011-10-06 12:28:59Z agrundman $
 #
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, version 2
 
@@ -38,7 +38,7 @@ use Slim::Utils::OSDetect;
 # same, Dynaloader fails.
 #
 # The workaround is to munge @INC and eval'ing the known modules that
-# we include with Squeezebox Server, first checking our CPAN path, then if
+# we include with Logitech Media Server, first checking our CPAN path, then if
 # there are any modules that couldn't be loaded, splicing CPAN/ out,
 # and attempting to load the system version of the module. When we are
 # done, put our CPAN/ path back in @INC.
@@ -52,7 +52,7 @@ use Slim::Utils::OSDetect;
 
 # Here's what we want to try and load. This will need to be updated
 # when a new XS based module is added to our CPAN tree.
-my @default_required_modules = qw(version Time::HiRes DBI EV XML::Parser::Expat HTML::Parser JSON::XS Digest::SHA1 YAML::Syck Sub::Name);
+my @default_required_modules = qw(version Time::HiRes DBI EV XML::Parser::Expat HTML::Parser JSON::XS Digest::SHA1 YAML::XS Sub::Name);
 my @default_optional_modules = ();
 
 my $d_startup                = (grep { /d_startup/ } @ARGV) ? 1 : 0;
@@ -108,16 +108,21 @@ sub loadModules {
 	   $arch =~ s/^i[3456]86-/i386-/;
 	   $arch =~ s/gnu-//;
 	
+	# Check for use64bitint Perls
+	my $is64bitint = $arch =~ /64int/;
+	
 	# Some ARM platforms use different arch strings, just assume any arm*linux system
 	# can run our binaries, this will fail for some people running invalid versions of Perl
 	# but that's OK, they'd be broken anyway.
 	if ( $arch =~ /^arm.*linux/ ) {
 		$arch = 'arm-linux-gnueabi-thread-multi';
+		$arch .= '-64int' if $is64bitint;
 	}
 	
 	# Same thing with PPC
 	if ( $arch =~ /^(?:ppc|powerpc).*linux/ ) {
 		$arch = 'powerpc-linux-thread-multi';
+		$arch .= '-64int' if $is64bitint;
 	}
 
 	my $perlmajorversion = $Config{'version'};
@@ -186,8 +191,8 @@ sub loadModules {
 		print "The following modules failed to load: $failed\n\n";
 		
 		if ( main::ISWINDOWS ) {
-			print "To run from source on Windows, please install ActivePerl 5.10.  ActivePerl 5.8.8 is no longer supported.\n";
-			print "http://www.activestate.com/activeperl/\n\n";
+			print "To run from source on Windows, please install ActivePerl 5.14.1.  ActivePerl 5.10.0 is no longer supported.\n";
+			print "http://downloads.activestate.com/ActivePerl/releases/5.14.1.1401/ActivePerl-5.14.1.1401-MSWin32-x86-294969.msi\n\n";
 		}
 		else {
 			print qq{
@@ -204,7 +209,7 @@ If 7.6 is outdated by the time you read this, Replace "7.6" with the major versi
 You should never need to do this if you're on Windows or Mac OSX. If the installers
 don't work for you, ask for help and/or report a bug.
 
-of Squeezebox Server you are running.
+of Logitech Media Server you are running.
 
 *******
 
@@ -223,7 +228,7 @@ of Squeezebox Server you are running.
 	my $failed = check_valid_versions();
 	if ( scalar keys %{$failed} ) {
 	
-		print "The following CPAN modules were found but cannot work with Squeezebox Server:\n";
+		print "The following CPAN modules were found but cannot work with Logitech Media Server:\n";
 		
 		for my $module ( sort keys %{$failed} ) {
 			if ( $failed->{$module}->{loaded} eq $failed->{$module}->{need} && $failed->{$module}->{msg} ) {
@@ -238,7 +243,7 @@ of Squeezebox Server you are running.
 		print "To fix this problem you have several options:\n";
 		print "1. Install the latest version of the module(s) using CPAN: sudo cpan Some::Module\n";
 		print "2. Update the module's package using apt-get, yum, etc.\n";
-		print "3. Run the .tar.gz version of Squeezebox Server which includes all required CPAN modules.\n";
+		print "3. Run the .tar.gz version of Logitech Media Server which includes all required CPAN modules.\n";
 		print "\n";
 		
 		exit;
@@ -275,15 +280,6 @@ sub tryModuleLoad {
 		local $^W = 0;
 
 		eval "use $module ()";
-
-		# NB: YAML::Syck has a local $@; in it's BEGIN, so if XSLoader
-		# or Dynaloader fails, the module still appears to load. Try
-		# to run a function to see if it's really been loaded.
-		if ($module eq 'YAML::Syck') {
-
-			eval { no warnings; YAML::Syck::Dump({}) };
-		}
-
 		if ($@) {
 
 			if ($d_startup || $warnOnFail) {
@@ -294,8 +290,8 @@ sub tryModuleLoad {
 			# NB: More FC5 / SELinux - in case the above chcon doesn't work.
 			if ($@ =~ /cannot restore segment prot after reloc/) {
 
-				print STDERR "** Squeezebox Server Error:\n";
-				print STDERR "** SELinux settings prevented Squeezebox Server from starting.\n";
+				print STDERR "** Logitech Media Server Error:\n";
+				print STDERR "** SELinux settings prevented Logitech Media Server from starting.\n";
 				print STDERR "** See http://wiki.slimdevices.com/index.cgi?RPM for more information.\n\n";
 				exit;
 			}
@@ -435,7 +431,7 @@ sub sigquit {
 	exit();
 }
 
-# Aliased to END in Squeezebox Server & scanner, as Log::Log4perl installs an END
+# Aliased to END in the server & scanner, as Log::Log4perl installs an END
 # handler, which needs to run last.
 sub theEND {
 

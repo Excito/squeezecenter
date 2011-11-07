@@ -1,6 +1,6 @@
-# $Id: my-highmem.tt 31300 2010-09-09 12:31:41Z agrundman $
+# $Id: my-highmem.tt 32887 2011-07-26 21:44:25Z agrundman $
 # 
-# Squeezebox Server specific MySQL Server config.
+# Logitech Media Server specific MySQL Server config.
 # High-memory configuration by Moonbase
 # http://forums.slimdevices.com/showthread.php?t=60682
 

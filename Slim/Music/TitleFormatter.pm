@@ -1,8 +1,8 @@
 package Slim::Music::TitleFormatter;
 
-# $Id: TitleFormatter.pm 33040 2011-08-11 03:49:51Z agrundman $
+# $Id: TitleFormatter.pm 33047 2011-08-11 11:16:13Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -385,7 +385,7 @@ sub init {
 	return 1;
 }
 
-# This does not currently have any callers in the Squeezebox Server tree.
+# This does not currently have any callers in the Logitech Media Server tree.
 sub addFormat {
 	my $format = shift;
 	my $formatSubRef = shift;

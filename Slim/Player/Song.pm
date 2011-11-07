@@ -1,8 +1,8 @@
 package Slim::Player::Song;
 
-# $Id: Song.pm 32476 2011-05-27 04:29:35Z mherger $
+# $Id: Song.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.

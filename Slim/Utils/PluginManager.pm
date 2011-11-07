@@ -1,11 +1,11 @@
 package Slim::Utils::PluginManager;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 #
-# $Id: PluginManager.pm 31746 2011-01-14 02:25:47Z agrundman $
+# $Id: PluginManager.pm 33195 2011-08-25 14:46:54Z agrundman $
 
 use strict;
 
@@ -16,7 +16,7 @@ use File::Path;
 use FindBin qw($Bin);
 use Path::Class qw(dir);
 use XML::Simple;
-use YAML::Syck;
+use YAML::XS;
 use Config;
 
 use Slim::Utils::Log;
@@ -312,7 +312,8 @@ sub load {
 			Slim::Utils::Misc::addFindBinPaths( catdir($binDir, Slim::Utils::OSDetect::details()->{'binArch'}), $binDir );
 		}
 
-		if ( main::WEBUI ) {
+		# add skin folders even in noweb mode: we'll need them for the icons
+		if ( !main::SLIM_SERVICE && !main::SCANNER ) {
 			# Add any available HTML to TT's INCLUDE_PATH
 			my $htmlDir = catdir($baseDir, 'HTML');
 
@@ -522,7 +523,7 @@ sub _writePluginCache {
 	# add the cacheinfo data
 	$plugins->{'__cacheinfo'} = $cacheInfo;
 
-	YAML::Syck::DumpFile($class->_pluginCacheFile, $plugins);
+	YAML::XS::DumpFile($class->_pluginCacheFile, $plugins);
 
 	delete $plugins->{'__cacheinfo'};
 }
@@ -544,7 +545,7 @@ sub _loadPluginCache {
 
 	main::INFOLOG && $log->info("Loading plugin cache file.");
 
-	$plugins = YAML::Syck::LoadFile($file);
+	$plugins = YAML::XS::LoadFile($file);
 
 	$cacheInfo = delete $plugins->{'__cacheinfo'} || { 
 		'version' => -1,

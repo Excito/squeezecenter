@@ -1,6 +1,6 @@
 package Slim::Player::SB1SliMP3Sync;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -10,7 +10,7 @@ package Slim::Player::SB1SliMP3Sync;
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# $Id: SB1SliMP3Sync.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: SB1SliMP3Sync.pm 32887 2011-07-26 21:44:25Z agrundman $
 #
 
 use strict;

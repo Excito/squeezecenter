@@ -1,8 +1,8 @@
 package Slim::Buttons::Power;
 
-# $Id: Power.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Power.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -13,7 +13,7 @@ Slim::Buttons::Power
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Power> is a Squeezebox Server module to add an 'off' mode.
+L<Slim::Buttons::Power> is a Logitech Media Server module to add an 'off' mode.
 The players are never truly off, instead entering and leaving this 
 mode in reaction to the power button.
 

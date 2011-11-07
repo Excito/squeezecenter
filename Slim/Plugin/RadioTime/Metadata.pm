@@ -1,6 +1,6 @@
 package Slim::Plugin::RadioTime::Metadata;
 
-# $Id: Metadata.pm 33046 2011-08-11 10:58:24Z mherger $
+# $Id: Metadata.pm 33047 2011-08-11 11:16:13Z mherger $
 
 use strict;
 

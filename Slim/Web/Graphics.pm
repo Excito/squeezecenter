@@ -52,9 +52,9 @@ sub _cached {
 	if ( my $cached = $cache->get($path) ) {
 		if ( my $orig = $cached->{original_path} ) {
 			# Check mtime of original artwork has not changed,
-			# unless it's a /music path, where we don't care if
+			# unless it's a /music|/video|/image path, where we don't care if
 			# it has changed.  The scanner should deal with changes there.
-			if ( $path !~ /^music/ && -r $orig ) {
+			if ( $path !~ m{^(?:music|image|video)/} && -r $orig ) {
 				my $mtime = (stat _)[9];
 				if ( $cached->{mtime} != $mtime ) {
 					main::INFOLOG && $isInfo && $log->info( "  current mtime $mtime != cached mtime " . $cached->{mtime} );
@@ -102,7 +102,7 @@ sub artworkRequest {
 		$response->content_type($ct);
 		
 		# Cache music URLs for 1 year, others for 1 day
-		my $exptime = $path =~ /^music/ ? ONE_YEAR : ONE_DAY;
+		my $exptime = $path =~ /^(?:music|image|video)/ ? ONE_YEAR : ONE_DAY;
 		
 		$response->header( 'Cache-Control' => 'max-age=' . $exptime );
 		$response->expires( time() + $exptime );
@@ -138,8 +138,8 @@ sub artworkRequest {
 	
 	# If path begins with "music" it's a cover path using either coverid
 	# or the old trackid format
-	elsif ( $path =~ m{^music/([^/]+)/} ) {
-		my $id = $1;
+	elsif ( $path =~ m{^(music)/([^/]+)/} || $path =~ m{^(image|video)/([0-9a-f]{8})/} ) {
+		my ($type, $id) = ($1, $2);
 		
 		# Special case:
 		# /music/current/cover.jpg (mentioned in CLI docs)
@@ -156,7 +156,16 @@ sub artworkRequest {
 		my $sth;
 		my ($url, $cover);
 		
-		if ( $id =~ /^[0-9a-f]{8}$/ ) {
+		if ( $type eq 'image' ) {
+			$sth = Slim::Schema->dbh->prepare_cached( qq{
+				SELECT url, hash FROM images WHERE hash = ?
+			} );
+		}
+		elsif ( $type eq 'video' ) {
+			# do nothing here - just don't follow the other routes
+			# XXX support resizing video on demand
+		}
+		elsif ( $id =~ /^[0-9a-f]{8}$/ ) {
 			# ID is a coverid
 			$sth = Slim::Schema->dbh->prepare_cached( qq{
 				SELECT url, cover FROM tracks WHERE coverid = ?
@@ -204,7 +213,19 @@ sub artworkRequest {
 		
 		if ( !$url || !$cover ) {
 			# Invalid ID or no cover available, use generic CD image
-			$path = $id =~ /^-/ ? 'html/images/radio_' : 'html/images/cover_';
+			if ($type eq 'image') {
+				$path = "html/images/icon_photo_";			
+			}
+			elsif ($type eq 'video') {
+				$path = "html/images/icon_video_";			
+			}
+			elsif ($id =~ /^-/) {
+				$path = 'html/images/radio_';	
+			}
+			else {
+				$path = 'html/images/cover_';
+			}
+			
 			$path .= $spec;
 			$path =~ s/\.\w+//;
 			$path =~ s/_$//;
@@ -237,7 +258,7 @@ sub artworkRequest {
 		else {
 			# Image to resize is either a cover path or the audio file if cover is
 			# a number (length of embedded art)
-			$fullpath = $cover =~ /^\d+$/
+			$fullpath = ($cover =~ /^\d+$/ || $type eq 'image')
 				? Slim::Utils::Misc::pathFromFileURL($url)
 				: $cover;
 		}
@@ -264,7 +285,7 @@ sub artworkRequest {
 	
 	# Resolve full path if it's not already a full path (checks Unix and Windows path prefixes)
 	# Bug 16814: We also need to check for UNC prefix
-	if ( $fullpath !~ m{^/} && $fullpath !~ /^[a-z]:\\/i && $fullpath !~ /^\\\\/i ) {
+	if ( $fullpath !~ m{^/} && $fullpath !~ /^[a-z]:[\\\/]/i && $fullpath !~ /^\\\\/i ) {
 		my $skin = $params->{skinOverride} || $prefs->get('skin');
 		main::INFOLOG && $isInfo && $log->info("  Looking for: $fullpath in skin $skin");	
 		$fullpath = $skinMgr->fixHttpPath($skin, $fullpath);
@@ -272,7 +293,8 @@ sub artworkRequest {
 	
 	# Support pre-sized files already in place, this is used on SB Touch
 	# for app icons because it can't handle resizing so many icons at once
-	if ( $fullpath && $fullpath =~ /(\.(?:jpg|png|gif))$/i ) {
+	# It is also used for requests for /cover (the original file)
+	if ( $fullpath && $fullpath =~ /(\.(?:jpe?g|jpe|png|gif|bmp))$/i ) {
 		my $ext = $1;
 		
 		# Add the spec back to the fullpath if there's more than the extension
@@ -287,7 +309,7 @@ sub artworkRequest {
 		
 			my ($ext) = $fullpathspec =~ /\.(\w+)$/;
 			my $ct = 'image/' . $ext;
-			$ct =~ s/jpg/jpeg/;
+			$ct =~ s/(?:jpg|jpe)/jpeg/;
 			$response->content_type($ct);
 		
 			my $exptime = ONE_DAY;

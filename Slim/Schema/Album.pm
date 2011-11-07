@@ -1,6 +1,6 @@
 package Slim::Schema::Album;
 
-# $Id: Album.pm 32504 2011-06-07 12:16:25Z agrundman $
+# $Id: Album.pm 32887 2011-07-26 21:44:25Z agrundman $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -96,7 +96,7 @@ sub title {
 	);
 }
 
-# return the raw title untainted by Squeezebox Server logic
+# return the raw title untainted by Logitech Media Server logic
 sub rawtitle {
 	my $self = shift;
 	

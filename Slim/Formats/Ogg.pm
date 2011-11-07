@@ -1,8 +1,8 @@
 package Slim::Formats::Ogg;
 
-# $Id: Ogg.pm 32923 2011-07-28 04:23:58Z mherger $
+# $Id: Ogg.pm 32926 2011-07-29 07:58:50Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.

@@ -1,1 +1,4 @@
--- empty placeholder to skip schema versions defined in 7.7/trunk
+
+DROP TABLE IF EXISTS videos;
+
+DROP TABLE IF EXISTS images;

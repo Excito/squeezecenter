@@ -2,7 +2,7 @@ package Slim::Web::Cometd;
 
 # $Id$
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -398,7 +398,7 @@ sub handler {
 			}
 		}
 		elsif ( $obj->{channel} eq '/slim/subscribe' ) {
-			# A request to execute & subscribe to some Squeezebox Server event
+			# A request to execute & subscribe to some Logitech Media Server event
 			
 			# A valid /slim/subscribe message looks like this:
 			# {
@@ -434,11 +434,25 @@ sub handler {
 				} ); 
 				
 				if ( $result->{error} ) {
-					push @errors, {
+					
+					my %error = {
 						channel => '/slim/subscribe', 
 						error   => $result->{error},
 						id      => $id,
 					};
+					
+					if ($result->{'errorNeedClient'}) {
+						# Force reconnect because client not connected.
+						# We should not need to force a new handshake, just a reconect.
+						# Any successful subscribes will have the acknowledgements in the $events queue
+						# and others will be retried by the client unpon reconnect.
+						# Let the client pick the interval to give SlimProto a chance to reconnect.
+						$error{'advice'} = {
+							reconnect => 'retry',
+						};
+					}
+						
+					push @errors, \%error;
 				}
 				else {
 					push @{$events}, {
@@ -453,7 +467,7 @@ sub handler {
 					
 					# If the request was not async, tell the manager to deliver the results to all subscribers
 					if ( exists $result->{data} ) {
-						if ( $conn->[HTTP_CLIENT]->transport eq 'long-polling' ) {
+						if ( $conn->[HTTP_CLIENT]->transport && $conn->[HTTP_CLIENT]->transport eq 'long-polling' ) {
 							push @{$events}, $result;
 							
 							# We might be in delayed response mode, but we don't want to delay
@@ -482,7 +496,7 @@ sub handler {
 			}
 		}
 		elsif ( $obj->{channel} eq '/slim/unsubscribe' ) {
-			# A request to unsubscribe from a Squeezebox Server event, this is not the same as /meta/unsubscribe
+			# A request to unsubscribe from a Logitech Media Server event, this is not the same as /meta/unsubscribe
 			
 			# A valid /slim/unsubscribe message looks like this:
 			# {
@@ -515,7 +529,7 @@ sub handler {
 			};
 		}
 		elsif ( $obj->{channel} eq '/slim/request' ) {
-			# A request to execute a one-time Squeezebox Server event
+			# A request to execute a one-time Logitech Media Server event
 			
 			# A valid /slim/request message looks like this:
 			# {
@@ -571,7 +585,7 @@ sub handler {
 					
 						# If the request was not async, tell the manager to deliver the results to all subscribers
 						if ( exists $result->{data} ) {
-							if ( $conn->[HTTP_CLIENT]->transport eq 'long-polling' ) {
+							if ( $conn->[HTTP_CLIENT]->transport && $conn->[HTTP_CLIENT]->transport eq 'long-polling' ) {
 								push @{$events}, $result;
 							}
 							else {
@@ -643,7 +657,7 @@ sub sendResponse {
 	}
 	
 	if ($httpResponse) {
-		if ( $httpClient->transport eq 'long-polling' ) {
+		if ( $httpClient->transport && $httpClient->transport eq 'long-polling' ) {
 			# Finish a long-poll cycle by sending all pending events and removing the timer			
 			Slim::Utils::Timers::killTimers($httpClient, \&sendResponse);
 		}
@@ -669,7 +683,7 @@ sub sendHTTPResponse {
 	$httpResponse->header( 'Cache-Control' => 'no-cache' );
 	$httpResponse->header( 'Content-Type' => 'application/json' );
 	
-	if ( $httpClient->transport eq 'long-polling' ) {
+	if ( $httpClient->transport && $httpClient->transport eq 'long-polling' ) {
 		# Remove the active connection info from manager until
 		# the client makes a new /meta/(re)?connect request
 		$manager->remove_connection( $httpClient->clid );
@@ -906,7 +920,10 @@ sub handleRequest {
 		};
 	}
 	else {
-		return { error => 'invalid request: ' . $request->getStatusText };
+		return {
+			error           => 'invalid request: ' . $request->getStatusText,
+			errorNeedClient => $request->isStatusNeedsClient(),
+		};
 	}
 }
 

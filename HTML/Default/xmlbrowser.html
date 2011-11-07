@@ -28,6 +28,15 @@ IF hasArtwork && !(ajaxUpdate && ajaxUpdate >= 1);
 	titleRight = BLOCK %]
 		<div id="viewSelect"></div>
 	[% END; 
+ELSIF hasArtwork && ajaxSearch;
+	artwork = 2;
+END;
+
+USE Prefs;
+includeArtist = !Prefs.preferences('server').get('titleFormat').${Prefs.preferences('server').get('titleFormatWeb')}.match('ARTIST');
+
+IF slideshow;
+	slideshowHelpers = 'class="slideImage" onClick="return false;"';
 END;
 
 useSpecialExt="-browse" %]
@@ -54,6 +63,11 @@ useSpecialExt="-browse" %]
 		</script>
 
 	[% ELSE %]
+	
+		[% IF slideshowTest %]
+		<link rel="stylesheet" type="text/css" href="[% webroot %]html/lightbox/lightbox.css?r=[% revision %]" />
+		<script type="text/javascript" src="[% webroot %]html/lightbox/lightbox.js?r=[% revision %]"></script>
+		[% END %]
 
 		<script type="text/javascript">
 			var orderByList;
@@ -104,6 +118,7 @@ useSpecialExt="-browse" %]
 		[% WRAPPER playlink %]onclick="Browse.XMLBrowser.playLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% streaminfo.index %]', '[% sess %]');"[% END %]
 		[% IF allLinks; WRAPPER insertlink %]onclick="Browse.XMLBrowser.insertLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% streaminfo.index %]', '[% sess %]');"[% END; END %]
 		[% WRAPPER addlink %]onclick="Browse.XMLBrowser.addLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% streaminfo.index %]', '[% sess %]');"[% END %]
+		[% IF allLinks; WRAPPER removelink %]onclick="Browse.XMLBrowser.removeLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% streaminfo.index %]', '[% sess %]');"[% END; END %]
 	</div>
 	[% END; END %]
 
@@ -154,11 +169,19 @@ useSpecialExt="-browse" %]
 
 		[% IF item.favorites == 1 %]
 			[% WRAPPER favaddlink noTarget=1 %]
+				[% IF songinfo.favorites %]
+				onclick="SqueezeJS.Utils.toggleFavorite(this, '[% songinfo.favorites_url | replace("'", "%27") | uri %]', '[% crumb.values.-1 | html %]');"
+				[% ELSE %]
 				onclick="Browse.XMLBrowser.toggleFavorite(this, '[% (item.index || index _ (start + loop.index)) | replace("'", "%27") | uri %]', '[% pageinfo.startitem %]', '[% sess %]');"
+				[% END %]
 			[% END %]
 		[% ELSIF item.favorites == 2 %]
 			[% WRAPPER favdellink noTarget=1 %]
+				[% IF songinfo.favorites %]
+				onclick="SqueezeJS.Utils.toggleFavorite(this, '[% songinfo.favorites_url | replace("'", "%27") | uri %]', '[% crumb.values.-1 | html %]');"
+				[% ELSE %]
 				onclick="Browse.XMLBrowser.toggleFavorite(this, '[% (item.index || index _ (start + loop.index)) | replace("'", "%27") | uri %]', '[% pageinfo.startitem %]', '[% sess %]');"
+				[% END %]
 			[% END %]
 		[% END %]
 
@@ -177,15 +200,30 @@ useSpecialExt="-browse" %]
 		[% END %]
 			
 		[% IF item.mixersLink; WRAPPER cmdlink cmdimage='b_mmmix.gif' cmdtitle='MORE' %]
-			href="[% webroot %][% item.mixersLink %]&player=[% playerURI %]" [% IF browserTarget %]target="[% browserTarget %]"[% END %]
+			href="[% webroot %][% item.mixersLink %]?player=[% playerURI %]" [% IF browserTarget %]target="[% browserTarget %]"[% END %]
 		[% END; END %]
 
 	[% END %]
 
 	[%- BLOCK allcontrol -%]
+		[% IF songinfo.favorites == 1 %]
+			[% WRAPPER favaddlink noTarget=1 %]
+				onclick="SqueezeJS.Utils.toggleFavorite(this, '[% songinfo.favorites_url | replace("'", "%27") | uri %]', '[% crumb.values.-1 | html %]');"
+			[% END %]
+		[% ELSIF songinfo.favorites == 2 %]
+			[% WRAPPER favdellink noTarget=1 %]
+				onclick="SqueezeJS.Utils.toggleFavorite(this, '[% songinfo.favorites_url | replace("'", "%27") | uri %]', '[% crumb.values.-1 | html %]');"
+			[% END %]
+		[% END %]
+		
 		[% WRAPPER playlink %]onclick="Browse.XMLBrowser.playAllLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% currentIndex %]', '[% sess %]');"[% END %]
-		[% WRAPPER insertlink %]onclick="Browse.XMLBrowser.insertLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% currentIndex %]', '[% sess %]');"[% END %]
+		[% IF allLinks; WRAPPER insertlink %]onclick="Browse.XMLBrowser.insertLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% currentIndex %]', '[% sess %]');"[% END; END %]
 		[% WRAPPER addlink %]onclick="Browse.XMLBrowser.addAllLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% currentIndex %]', '[% sess %]');"[% END %]
+		[% IF allLinks; WRAPPER removelink %]onclick="Browse.XMLBrowser.removeLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% currentIndex %]', '[% sess %]');"[% END; END %]
+			
+		[% IF songinfo.mixersLink; WRAPPER cmdlink cmdimage='b_mmmix.gif' cmdtitle='MORE' %]
+			href="[% webroot %][% songinfo.mixersLink %]?player=[% playerURI %]" [% IF browserTarget %]target="[% browserTarget %]"[% END %]
+		[% END; END %]
 	[%- END %]
 
 	[% BLOCK editcmd %]
@@ -197,7 +235,7 @@ useSpecialExt="-browse" %]
 			<input type="hidden" name="player" value=[% playerURI %]>
 			<input type="hidden" name="itempos" value=[% item.play_index %]>				
 			<input type="hidden" name="playlist_id" value=[% playlist_id %]>
-			[%- IF item.remote %]<input style="display: inline; width: 35%;" type="text" class="stdedit" name="form_title" value="[% item.title %]">[% END %]
+			[%- IF item.remote %]<input style="display: inline; width: 35%;" type="text" class="stdedit" name="form_title" value="[% item.title | html %]">[% END %]
 			<input style="display: inline; width: 35%;" type="text" class="stdedit" name="form_url" value="[% item.url %]">
 			<input type="submit" style="display: inline; width: 10%;" class="stdclick" name="save" value=[% "SAVE" | string %]>
 			<input type="submit" style="display: inline; width: 10%;" class="stdclick" name="cancel" value=[% "CANCEL" | string %]>
@@ -264,11 +302,6 @@ useSpecialExt="-browse" %]
 		[% END %]
 		
 		[% IF itemsHaveAudio && !songinfo && useAllControl %]
-			[%- BLOCK allcontrol -%]
-				[% WRAPPER playlink %]onclick="Browse.XMLBrowser.playAllLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% currentIndex %]', '[% sess %]');"[% END %]
-				[% IF allLinks; WRAPPER insertlink %]onclick="Browse.XMLBrowser.insertLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% currentIndex %]', '[% sess %]');"[% END; END %]
-				[% WRAPPER addlink %]onclick="Browse.XMLBrowser.addAllLink('[% multiquery %][% searchquery | replace("'", "%27") | uri %]', '[% currentIndex %]', '[% sess %]');"[% END %]
-			[%- END %]
 			[% useAllIcon = hasArtwork && artwork == 0 %]
 			[%- WRAPPER contentitem controls = 'allcontrol' lineclass = (useAllIcon ? 'browsedbListItem itemWithCover' : 'browsedbListItem' )%]
 				[% IF useAllIcon %]
@@ -315,8 +348,8 @@ useSpecialExt="-browse" %]
 						itemobj.id = loop.count _ (ajaxUpdate ? index : '');
 					END %]
 
-					[% IF !hasArtwork %]
-						[% # don't do anything as we consider this list a list without artwork, eg. tracks %]
+					[% IF !hasArtwork || artwork == 2 %]
+						[% # don't do anything as we consider this list a list without artwork, eg. tracks, or if we're in text only mode %]
 					[% ELSIF item.image %]
 						[% IF artwork == 0 %]
 							[% PROCESS itemIcon url=item.image size=50 class="browseItemDetail" %]
@@ -345,7 +378,8 @@ useSpecialExt="-browse" %]
 							[% IF item.hasMetadata == 'track' && !item.name2 %]
 							[%  # add the track artist if it's different from the album artist
 								artist = item.trackartist || item.artist;
-								IF !title.match(artist) && ( 
+
+								IF includeArtist && ( 
 									(item.albumartist && artist != item.albumartist)
 									|| artist != item.artist
 									|| itemobj.compilation
@@ -371,7 +405,7 @@ useSpecialExt="-browse" %]
 						[% END %]
 					[% END %]
 
-					[% IF !hasArtwork; ELSIF (item.icon && artwork != 1) || (item.image && artwork== 0) || (hasArtwork && artwork == 0) %]
+					[% IF !hasArtwork || artwork == 2; ELSIF (item.icon && artwork != 1) || (item.image && artwork== 0) || (hasArtwork && artwork == 0) %]
 						</div>
 					[% END %]
 				[%- END %]
@@ -390,7 +424,7 @@ useSpecialExt="-browse" %]
 [% BLOCK itemIcon %]
 	[% WRAPPER weblink %]
 	<span class="browseCover">
-		<img src="[% url | resizeimage(size, size, 'f', webroot) %]" onLoad="resize(this, [%- size %])">
+		<img src="[% url | resizeimage(size, size, 'o', webroot) %]" onLoad="resize(this, [%- size %])">
 	</span>
 	[% END %]
 	<div class="[% class %]">
@@ -398,7 +432,7 @@ useSpecialExt="-browse" %]
 
 [% BLOCK weblink %]
 	[% IF item.weblink %]
-		<a href="[% item.weblink %]" target="_blank">
+		<a href="[% item.weblink %]" target="_blank" [% slideshowHelpers %]>
 	[% ELSIF item.link %]
 		<a href="[% webroot %][% item.link %]&amp;player=[% player | uri %]" target="_blank">
 	[% ELSIF item.type == 'redirect' %]
@@ -409,7 +443,7 @@ useSpecialExt="-browse" %]
 	[% ELSIF !item.type.match('^text') %]
 		<a href="[% path %]?[% multiquery %][% searchquery | replace("'", "%27") | uri %]index=[% (item.index || index _ (start + loop.index)) | replace("'", "%27") | uri %]&amp;player=[% player | uri %]&amp;sess=[% sess %]" class="browseItemLink">
 	[% ELSIF item.type == "text" && item.image %]
-		<a href="[% item.image %]" target="_blank">
+		<a href="[% item.image %]" target="_blank" [% slideshowHelpers %]>
 	[% END %]
 	
 	[% content %]

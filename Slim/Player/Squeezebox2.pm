@@ -1,8 +1,8 @@
 package Slim::Player::Squeezebox2;
 
-# $Id: Squeezebox2.pm 31864 2011-01-28 11:56:54Z ayoung $
+# $Id: Squeezebox2.pm 33379 2011-09-09 11:34:33Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -391,7 +391,6 @@ sub stop {
 	# to 0, since we rely on them for time display and may
 	# have to wait to get a status message with the correct
 	# values.
-	$client->songElapsedSeconds(0);
 	$client->outputBufferFullness(0);
 
 	if ( scalar keys %{ $client->pendingPrefChanges() } ) {
@@ -416,14 +415,30 @@ sub stop {
 
 sub songElapsedSeconds {
 	my $client = shift;
+	
+	return 0 if $client->isStopped() || defined $_[0];
 
-	# Ignore values sent by the client if we're in the stopped
-	# state, since they may be out of sync.
-	if (defined($_[0]) && $client->isStopped()) {
-		return $client->SUPER::songElapsedSeconds(0);
+	my ($jiffies, $elapsedMilliseconds, $elapsedSeconds) = Slim::Networking::Slimproto::getPlayPointData($client);
+
+	return 0 unless $elapsedMilliseconds || $elapsedSeconds;
+	
+	# Use milliseconds for the song-elapsed-time if has not suffered truncation
+	my $songElapsed;
+	if (defined $elapsedMilliseconds) {
+		$songElapsed = $elapsedMilliseconds / 1000;
+		if ($songElapsed < $elapsedSeconds) {
+			$songElapsed = $elapsedSeconds + ($elapsedMilliseconds % 1000) / 1000;
+		}
+	} else {
+		$songElapsed = $elapsedSeconds;
 	}
-
-	return $client->SUPER::songElapsedSeconds(@_);
+	
+	if ($client->isPlaying(1)) {
+		my $timeDiff = Time::HiRes::time() - $client->jiffiesToTimestamp($jiffies);
+		$songElapsed += $timeDiff if ($timeDiff > 0);
+	}
+	
+	return $songElapsed;
 }
 
 sub canDirectStream {
@@ -862,7 +877,7 @@ sub audio_outputs_enable {
 }
 
 
-# The following settings are sync'd between the player firmware and Squeezebox Server
+# The following settings are sync'd between the player firmware and Logitech Media Server
 our $pref_settings = {
 	'playername' => {
 		firmwareid => 0,
@@ -949,7 +964,7 @@ sub setPlayerSetting {
 	}
 }
 
-# Allow the firmware to update a pref in Squeezebox Server
+# Allow the firmware to update a pref in Logitech Media Server
 sub playerSettingsFrame {
 	my $client   = shift;
 	my $data_ref = shift;
@@ -1029,17 +1044,22 @@ sub pcm_sample_rates {
 sub playPoint {
 	my $client = shift;
 
-	my ($jiffies, $elapsedMilliseconds) = Slim::Networking::Slimproto::getPlayPointData($client);
+	my ($jiffies, $elapsedMilliseconds, $elapsedSeconds) = Slim::Networking::Slimproto::getPlayPointData($client);
 
 	return unless $elapsedMilliseconds;
 
 	my $statusTime = $client->jiffiesToTimestamp($jiffies);
 	my $apparentStreamStartTime = $statusTime - ($elapsedMilliseconds / 1000);
 
+	my $songElapsed = $elapsedMilliseconds / 1000;
+	if ($songElapsed < $elapsedSeconds) {
+		$songElapsed = $elapsedSeconds + ($elapsedMilliseconds % 1000) / 1000;
+	}
+
 	0 && logger('player.sync')->debug($client->id() . " playPoint: jiffies=$jiffies, epoch="
 		. ($client->jiffiesEpoch) . ", statusTime=$statusTime, elapsedMilliseconds=$elapsedMilliseconds");
 
-	return [$statusTime, $apparentStreamStartTime];
+	return [$statusTime, $apparentStreamStartTime, $songElapsed];
 }
 
 sub startAt {
@@ -1048,6 +1068,14 @@ sub startAt {
 	main::DEBUGLOG && $synclog->is_debug && $synclog->debug( $client->id, ' startAt: ' . int(($at - $client->jiffiesEpoch()) * 1000) );
 
 	$client->stream( 'u', { 'interval' => int(($at - $client->jiffiesEpoch()) * 1000) } );
+	return 1;
+}
+
+sub resume {
+	my ($client, $at) = @_;
+	
+	$client->stream('u', ($at ? { 'interval' => int(($at - $client->jiffiesEpoch()) * 1000) } : undef));
+	$client->SUPER::resume();
 	return 1;
 }
 
