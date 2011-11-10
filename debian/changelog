@@ -1,3 +1,9 @@
+squeezecenter (7.6.1.dfsg1-2) vincent hugo; urgency=low
+
+  * Remove DBIx::Class modified files
+
+ -- Carl Fürstenberg <azatoth@gmail.com>  Thu, 10 Nov 2011 14:16:28 +0100
+
 squeezecenter (7.6.1.dfsg1-1) vincent hugo; urgency=low
 
   * Imported Upstream version 7.6.1.dfsg1

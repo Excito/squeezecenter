@@ -1,3 +1,4 @@
 0001-Custom-OS-detection.patch
 0002-Remove-dbix-migration.patch
 0003-Remove-max-Audio-Scan-version.patch
+0004-remove-DBIx-Class-modified-files.patch
