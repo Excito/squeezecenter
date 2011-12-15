@@ -1,3 +1,9 @@
+logitechmediaserver (7.7.1-0) vincent hugo; urgency=low
+
+  * new name
+
+ -- Carl Fürstenberg <azatoth@gmail.com>  Thu, 15 Dec 2011 16:14:04 +0100
+
 squeezecenter (7.6.1.dfsg1-2) vincent hugo; urgency=low
 
   * Remove DBIx::Class modified files

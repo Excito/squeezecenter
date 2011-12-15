@@ -1,14 +1,14 @@
-Source: squeezecenter
+Source: logitechmediaserver
 Section: sound
 Priority: optional
 Maintainer: Carl Fürstenberg <carl@excito.com>
 Build-Depends: debhelper (>= 7.2), html2text
 Standards-Version: 3.9.1
 
-Package: squeezecenter
+Package: logitechmediaserver
 Architecture: all
-Conflicts: slimp3, slimserver, squeezecenter-softsqueeze, squeezecenter-skins
-Replaces: slimp3, slimserver, squeezecenter-softsqueeze, squeezecenter-skins
+Conflicts: slimp3, slimserver, squeezecenter, squeezeboxserver
+Replaces: slimp3, slimserver, squeezecenter, squeezeboxserver
 Depends: ${perl:Depends}, ${misc:Depends}, lsb-base (>= 3.2-14),
  dbconfig-common,
  ttf-dejavu | ttf-bitstream-vera,
