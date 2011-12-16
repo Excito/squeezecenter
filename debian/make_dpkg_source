@@ -11,7 +11,7 @@ tar -zxf $path/$filename;
 rm -f */Graphics/CODE2000.*;
 rm -f */Graphics/FreeSans.ttf;
 #rm -rf */CPAN;
-rm -rf */Bin;
+#rm -rf */Bin;
 rm -rf */Firmware/*.bin;
 find * -regex '.*\.\(png\|gif\|html\)$$' -exec chmod -x '{}' ';';
 tar --create --gzip --file logitechmediaserver-$version.dfsg1.tar.gz *;
