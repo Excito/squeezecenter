@@ -1,6 +1,6 @@
 package Slim::Schema::Track;
 
-# $Id: Track.pm 32989 2011-08-05 04:35:52Z mherger $
+# $Id: Track.pm 33638 2011-11-02 06:09:04Z mherger $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -22,9 +22,9 @@ my $log = logger('database.info');
 
 our @allColumns = (qw(
 	id urlmd5 url content_type title titlesort titlesearch album primary_artist tracknum
-	timestamp filesize disc remote audio audio_size audio_offset year secs
+	timestamp added_time updated_time filesize disc remote audio audio_size audio_offset year secs
 	cover cover_cached vbr_scale bitrate samplerate samplesize channels block_alignment endian
-	bpm tagversion drm musicmagic_mixable
+	bpm tagversion drm musicmagic_mixable dlna_profile
 	musicbrainz_id lossless lyrics replay_gain replay_peak extid virtual
 ));
 
@@ -289,6 +289,18 @@ sub modificationTime {
 	return $self->buildModificationTime( $self->timestamp );
 }
 
+sub addedTime {
+	my $self = shift;
+
+	return $self->buildModificationTime( $self->added_time );
+}
+
+sub lastUpdated {
+	my $self = shift;
+
+	return $self->buildModificationTime( $self->updated_time );
+}
+
 sub buildModificationTime {
 	my ( $self, $time ) = @_;
 	
@@ -492,7 +504,7 @@ sub displayAsHTML {
 	my $format = $prefs->get('titleFormat')->[ $prefs->get('titleFormatWeb') ];
 
 	# Go directly to infoFormat, as standardTitle is more client oriented.
-	$form->{'text'}     = Slim::Music::TitleFormatter::infoFormat($self, $format, 'TITLE');
+	$form->{'text'}     = Slim::Music::TitleFormatter::infoFormat($self, $format, 'TITLE', $form->{'plugin_meta'});
 	$form->{'item'}     = $self->id;
 	$form->{'itemobj'}  = $self;
 
@@ -517,6 +529,9 @@ sub displayAsHTML {
 			}
 
 			$form->{'artistsWithAttributes'} = \@info;
+		}
+		elsif ($form->{'plugin_meta'} && $form->{'plugin_meta'}->{'artist'}) {
+			$form->{'includeArtist'} = 1;
 		}
 	}
 

@@ -1,11 +1,11 @@
 package Slim::Utils::AutoRescan::Stat;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id: Stat.pm 30446 2010-03-31 12:11:29Z agrundman $
+# $Id: Stat.pm 32887 2011-07-26 21:44:25Z agrundman $
 
 use strict;
 

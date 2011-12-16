@@ -1,6 +1,6 @@
 package Slim::Control::Jive;
 
-# Squeezebox Server Copyright 2001-2009 Logitech
+# Logitech Media Server Copyright 2001-2011 Logitech
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -112,9 +112,6 @@ sub init {
 
 	Slim::Control::Request::addDispatch(['jiveplayertextsettings', '_whatFont', '_index', '_quantity'],
 		[1, 1, 0, \&playerTextMenu]);
-
-	Slim::Control::Request::addDispatch(['jiveunmixable'],
-		[1, 1, 1, \&jiveUnmixableMessage]);
 
 	Slim::Control::Request::addDispatch(['jivealbumsortsettings'],
 		[1, 0, 1, \&albumSortSettingsMenu]);
@@ -2444,32 +2441,6 @@ sub jivePlaylistsCommand {
 
 }
 
-sub jiveUnmixableMessage {
-	my $request = shift;
-	my $service = $request->getParam('contextToken');
-	my $serviceString = $request->string($service);
-
-       my @menu = (
-               {
-                       text    => $request->string('OK'),
-                       actions => {
-                               go => {
-                                       player => 0,
-                                       cmd    => [ 'jiveblankcommand' ],
-                               },
-                       },
-                       nextWindow => 'parent',
-               }
-       );
-
-       $request->addResult('offset', 0);
-       $request->addResult('count', 1);
-       $request->addResult('item_loop', \@menu);
-       $request->addResult('window', { textarea => $request->string('UNMIXABLE', $serviceString), });
-
-        $request->setStatusDone();
-}
-
 sub jiveAlarmCommand {
 	main::INFOLOG && $log->info("Begin function");
 
@@ -3063,14 +3034,14 @@ sub _localizeMenuItemText {
 	my $clone = Storable::dclone($item);
 	
 	if ( $clone->{stringToken} ) {
-		if ( $clone->{stringToken} eq uc( $clone->{stringToken} ) ) {
+		if ( $clone->{stringToken} eq uc( $clone->{stringToken} ) && Slim::Utils::Strings::stringExists( $clone->{stringToken} ) ) {
 			$clone->{text} = $client->string( delete $clone->{stringToken} );
 		}
 		else {
 			$clone->{text} = delete $clone->{stringToken};
 		}
 	}
-	elsif ( $clone->{text} && $clone->{text} eq uc( $clone->{text} ) ) {
+	elsif ( $clone->{text} && $clone->{text} eq uc( $clone->{text} ) && Slim::Utils::Strings::stringExists( $clone->{text} ) ) {
 		$clone->{text} = $client->string( $clone->{text} );
 	}
 	

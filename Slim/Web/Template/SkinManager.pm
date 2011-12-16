@@ -1,8 +1,8 @@
 package Slim::Web::Template::SkinManager;
 
-# $Id: SkinManager.pm 32975 2011-08-04 10:42:04Z mherger $
+# $Id: SkinManager.pm 33418 2011-09-12 10:33:43Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -13,7 +13,7 @@ use strict;
 use File::Spec::Functions qw(:ALL);
 use Template;
 use URI::Escape qw(uri_escape);
-use YAML::Syck qw(LoadFile);
+use YAML::XS;
 
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
@@ -137,7 +137,7 @@ sub addSkinTemplate {
 
 		if (-r $skinConfig) {
 
-			$skinSettings = eval { LoadFile($skinConfig) };
+			$skinSettings = eval { YAML::XS::LoadFile($skinConfig) };
 
 			if ($@) {
 				logError("Could not load skin configuration file: $skinConfig\n$!");
@@ -270,6 +270,11 @@ sub _resizeImage {
 			return Slim::Networking::SqueezeNetwork->url(
 				"/public/imageproxy?w=$width&h=$height&u=$url"
 			);
+		}
+		
+		# $url comes with resizing parameters
+		elsif ( $url =~ /_((?:[0-9X]+x[0-9X]+)(?:_\w)?(?:_[\da-fA-F]+)?(?:\.\w+)?)$/ ) {
+			return $url;
 		}
 		
 		# sometimes we'll need to prepend the webroot to our url

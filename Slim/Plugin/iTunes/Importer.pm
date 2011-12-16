@@ -1,6 +1,6 @@
 package Slim::Plugin::iTunes::Importer;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -317,7 +317,9 @@ sub handleTrack {
 		
 		if ( !$file || !-r $file ) {
 
-			$log->warn("File not found: $file");
+			# Use Data::Dump to log exactly what the wrong file path is, avoiding UTF-8 output issues
+			require Data::Dump;
+			$log->warn("File not found: " . Data::Dump::dump($file));
 
 			# Tell the database to cleanup.
 			Slim::Schema->search('Track', { 'url' => $url })->delete;

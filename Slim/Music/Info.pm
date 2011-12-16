@@ -1,8 +1,8 @@
 package Slim::Music::Info;
 
-# $Id: Info.pm 32504 2011-06-07 12:16:25Z agrundman $
+# $Id: Info.pm 33350 2011-09-08 08:25:00Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -1306,21 +1306,31 @@ sub validTypeExtensions {
 	my @extensions = ();
 	my $disabled   = disabledExtensions($findTypes);
 
-	while (my ($ext, $type) = each %slimTypes) {
-
-		next unless $type;
-		next unless $type =~ /$findTypes/;
-
-		while (my ($suffix, $value) = each %suffixes) {
-
-			# Don't add extensions that are disabled.
-			if ($disabled->{$suffix}) {
-				next;
-			}
-
-			# Don't return values for 'internal' or iTunes type playlists.
-			if ($ext eq $value && $suffix !~ /:/) {
-				push @extensions, $suffix;
+	# XXX - these should be read from a shared source with Media::Scan
+	if ($findTypes eq 'image') {
+		@extensions = grep { !$disabled->{$_} } qw(jpg png gif bmp jpeg) if main::IMAGE;
+	}
+	elsif ($findTypes eq 'video') {
+		@extensions = grep { !$disabled->{$_} } qw(asf avi divx flv hdmov m1v m2p m2t m2ts m2v m4v mkv mov mpg mpeg mpe mp2p mp2t mp4 mts pes ps ts vob webm wmv xvid 3gp 3g2 3gp2 3gpp mjpg) if main::VIDEO;
+	}
+	# audio files, playlists
+	else {
+		while (my ($ext, $type) = each %slimTypes) {
+	
+			next unless $type;
+			next unless $type =~ /$findTypes/;
+	
+			while (my ($suffix, $value) = each %suffixes) {
+	
+				# Don't add extensions that are disabled.
+				if ($disabled->{$suffix}) {
+					next;
+				}
+	
+				# Don't return values for 'internal' or iTunes type playlists.
+				if ($ext eq $value && $suffix !~ /:/) {
+					push @extensions, $suffix;
+				}
 			}
 		}
 	}
@@ -1359,6 +1369,14 @@ sub disabledExtensions {
 	} elsif ($findTypes eq 'list') {
 
 		@disabled = @playlist;
+
+	} elsif ($findTypes eq 'video') {
+
+		@disabled = split(/\s*,\s*/, $prefs->get('disabledextensionsvideo'));
+
+	} elsif ($findTypes eq 'image') {
+
+		@disabled = split(/\s*,\s*/, $prefs->get('disabledextensionsimages'));
 
 	} else {
 

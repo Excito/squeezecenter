@@ -1,6 +1,6 @@
 package Slim::Player::Squeezebox;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -179,6 +179,12 @@ sub play {
 
 	# Calculate the correct buffer threshold for remote URLs
 	if ( $handler->isRemote() ) {
+		my $bufferSecs = $prefs->get('bufferSecs') || 3;
+		if ( main::SLIM_SERVICE ) {
+			# Per-client buffer secs pref on SN
+			$bufferSecs = $prefs->client($client)->get('bufferSecs') || 3;
+		}
+			
 		# begin playback once we have this much data in the decode buffer (in KB)
 		$params->{bufferThreshold} = 20;
 		
@@ -189,12 +195,6 @@ sub play {
 
 		# If we know the bitrate of the stream, we instead buffer a certain number of seconds of audio
 		elsif ( my $bitrate = $controller->song()->streambitrate() ) {
-			my $bufferSecs = $prefs->get('bufferSecs') || 3;
-			
-			if ( main::SLIM_SERVICE ) {
-				# Per-client buffer secs pref on SN
-				$bufferSecs = $prefs->client($client)->get('bufferSecs') || 3;
-			}
 			
 			$params->{bufferThreshold} = ( int($bitrate / 8) * $bufferSecs ) / 1000;
 			
@@ -202,7 +202,7 @@ sub play {
 			$params->{bufferThreshold} = 255 if $params->{bufferThreshold} > 255;
 		}
 		
-		$client->buffering($params->{bufferThreshold} * 1024);
+		$client->buffering($params->{bufferThreshold} * 1024, $bufferSecs * 44100 * 2 * 4);
 	}
 
 	$client->bufferReady(0);
@@ -213,17 +213,6 @@ sub play {
 	$client->volume($client->volume(), defined($client->tempVolume()));
 
 	return $ret;
-}
-
-#
-# tell the client to unpause the decoder
-#
-sub resume {
-	my $client = shift;
-	
-	$client->stream('u');
-	$client->SUPER::resume();
-	return 1;
 }
 
 #
@@ -560,7 +549,7 @@ sub opened {
 #	u8_t threshold;		// [1]	Kb of input buffer data before we autostart or notify the server of buffer fullness
 #	u8_t spdif_enable;	// [1]  '0' = auto, '1' = on, '2' = off
 #	u8_t transition_period;	// [1]	seconds over which transition should happen
-#	u8_t transition_type;	// [1]	'0' = none, '1' = crossfade, '2' = fade in, '3' = fade out, '4' fade in & fade out
+#	u8_t transition_type;	// [1]	'0' = none, '1' = crossfade, '2' = fade in, '3' = fade out, '4' fade in & fade out, '5' = crossfade-immediate
 #	u8_t flags;	// [1]	0x80 - loop infinitely
 #               //      0x40 - stream without restarting decoder
 #               //      0x20 - Rtmp (SqueezePlay only)
@@ -571,7 +560,7 @@ sub opened {
 #               //      0x01 - polarity inversion left
 #				
 #	u8_t output_threshold`;	// [1]	Amount of output buffer data before playback starts in tenths of second.
-#	u8_t reserved;		// [1]	reserved
+#	u8_t slaves;		// [1]	number of proxy stream connections to serve
 #	u32_t replay_gain;	// [4]	replay gain in 16.16 fixed point, 0 means none
 #	u16_t server_port;	// [2]	server's port
 #	u32_t server_ip;	// [4]	server's IP
@@ -659,8 +648,12 @@ sub stream_s {
 		if ( $track ) {
 			$pcmsamplesize = $client->pcm_sample_sizes($track);
 			$pcmsamplerate = $client->pcm_sample_rates($track);
-			$pcmendian     = $track->endian() == 1 ? 0 : 1;
 			$pcmchannels   = $track->channels() || '2';
+			
+			# Bug 16341, Don't adjust endian value if file is being transcoded to aif
+			if ( $track->content_type eq 'aif' ) {
+				$pcmendian = $track->endian() == 1 ? 0 : 1;
+			}
 		 }
 
 	} elsif ($format eq 'flc') {
@@ -805,6 +798,14 @@ sub stream_s {
 		$request_string = $handler->requestString($client, $url, undef, $params->{'seekdata'});  
 		$autostart += 2; # will be 2 for direct streaming with no autostart, or 3 for direct with autostart
 
+	} elsif (my $proxy = $params->{'proxyStream'}) {
+
+		$request_string = ' ';	# need at least a byte to keep ip3k happy
+		my ($pserver, $pport) = split (/:/, $proxy);
+		$server_port = $pport;
+		$server_ip = Slim::Utils::Network::intip($pserver);
+		$autostart += 2; # will be 2 for direct streaming with no autostart, or 3 for direct with autostart
+
 	} elsif ($isDirect) {
 
 		# Logger for direct streaming
@@ -931,6 +932,9 @@ sub stream_s {
 	if ($params->{'fadeIn'}) {
 		$transitionType = 2;
 		$transitionDuration = $params->{'fadeIn'};
+	} elsif ($params->{'crossFade'}) {
+		$transitionType = 5;
+		$transitionDuration = $params->{'crossFade'};
 	} else {
 		$transitionType = $prefs->client($master)->get('transitionType') || 0;
 		$transitionDuration = $prefs->client($master)->get('transitionDuration') || 0;
@@ -1002,7 +1006,7 @@ sub stream_s {
 		$transitionType,
 		$flags,		# flags	     
 		$outputThreshold,
-		0,		# reserved
+		($params->{'slaveStreams'} || 0),
 		$replayGain,	
 		$server_port || $prefs->get('httpport'),  # use slim server's IP
 		$server_ip || 0,
@@ -1047,10 +1051,10 @@ sub stream {
 		$replayGain = int($interval * 1000);
 	}
 	elsif ($command eq 'u') {
-		 $replayGain = $interval;
+		$replayGain = $interval;
 	}
 	elsif ($command eq 't') {
-		$replayGain = int(Time::HiRes::time() * 1000 % 0xffffffff);
+		$replayGain = 0;	# stop using this method to track latency - it is too unreliable
 	}
 	else {
 		$replayGain = $client->canDoReplayGain($params->{replay_gain});

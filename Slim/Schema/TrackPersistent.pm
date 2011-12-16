@@ -1,6 +1,6 @@
 package Slim::Schema::TrackPersistent;
 
-# $Id: TrackPersistent.pm 33103 2011-08-17 11:29:00Z mherger $
+# $Id: TrackPersistent.pm 33107 2011-08-17 15:39:08Z mherger $
 
 use strict;
 use base 'Slim::Schema::DBI';

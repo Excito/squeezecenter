@@ -2,7 +2,7 @@ package Slim::Menu::SystemInfo;
 
 # $Id: $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -218,40 +218,44 @@ sub infoLibrary {
 		};
 	}
 	
-	return Slim::Music::Import->stillScanning 
-	? {
-		name => cstring($client, 'RESCANNING_SHORT'),
-
-		web  => {
-			hide => 1,
-		},
-	} 
-	: {
+	elsif (Slim::Music::Import->stillScanning) {
+		return {
+			name => cstring($client, 'RESCANNING_SHORT'),
+	
+			web  => {
+				hide => 1,
+			},
+		} 
+	}
+	
+	my $totals = Slim::Schema->totals;
+	
+	my $items = {
 		name => cstring($client, 'INFORMATION_MENU_LIBRARY'),
 
 		items => [
 			{
 				type => 'text',
 				name => cstring($client, 'INFORMATION_TRACKS') . cstring($client, 'COLON') . ' '
-							. Slim::Utils::Misc::delimitThousands(Slim::Schema->count('Track', { 'me.audio' => 1 })),
+							. Slim::Utils::Misc::delimitThousands($totals->{track}),
 			},
 
 			{
 				type => 'text',
 				name => cstring($client, 'INFORMATION_ALBUMS') . cstring($client, 'COLON') . ' '
-							. Slim::Utils::Misc::delimitThousands(Slim::Schema->count('Album')),
+							. Slim::Utils::Misc::delimitThousands($totals->{album}),
 			},
 
 			{
 				type => 'text',
 				name => cstring($client, 'INFORMATION_ARTISTS') . cstring($client, 'COLON') . ' '
-							. Slim::Utils::Misc::delimitThousands(Slim::Schema->totals()->{'contributor'}),
+							. Slim::Utils::Misc::delimitThousands($totals->{'contributor'}),
 			},
 
 			{
 				type => 'text',
 				name => cstring($client, 'INFORMATION_GENRES') . cstring($client, 'COLON') . ' '
-							. Slim::Utils::Misc::delimitThousands(Slim::Schema->count('Genre')),
+							. Slim::Utils::Misc::delimitThousands($totals->{genre}),
 			},
 
 			{
@@ -265,8 +269,34 @@ sub infoLibrary {
 			group  => 'library',
 			unfold => 1,
 		},
-
 	};
+
+	my ($request, $results);
+	
+	# XXX - no simple access to result sets for images/videos yet?
+	if (main::VIDEO) {
+		$request = Slim::Control::Request::executeRequest( $client, ['video_titles', 0, 0] );
+		$results = $request->getResults();
+	
+		unshift @{ $items->{items} }, {
+			type => 'text',
+			name => cstring($client, 'INFORMATION_VIDEOS') . cstring($client, 'COLON') . ' '
+				. ($results && $results->{count} ? Slim::Utils::Misc::delimitThousands($results->{count}) : 0),
+		};
+	}
+
+	if (main::IMAGE) {
+		$request = Slim::Control::Request::executeRequest( $client, ['image_titles', 0, 0] );
+		$results = $request->getResults();
+	
+		unshift @{ $items->{items} }, {
+			type => 'text',
+			name => cstring($client, 'INFORMATION_IMAGES') . cstring($client, 'COLON') . ' '
+				. ($results && $results->{count} ? Slim::Utils::Misc::delimitThousands($results->{count}) : 0),
+		};
+	}
+	
+	return $items;
 }
 
 sub infoServer {
@@ -280,7 +310,7 @@ sub infoServer {
 	my $items = [
 		{
 			type => 'text',
-			name => sprintf("%s%s %s - %s @ %s",
+			name => sprintf("Logitech Media Server %s%s %s - %s @ %s",
 						cstring($client, 'INFORMATION_VERSION'),
 						cstring($client, 'COLON'),
 						$::VERSION,

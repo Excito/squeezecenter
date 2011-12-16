@@ -1,13 +1,13 @@
 package Slim::Networking::UPnP::ControlPoint;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
 # An asynchronous UPnP Control Point 
 
-# $Id: ControlPoint.pm 30446 2010-03-31 12:11:29Z agrundman $
+# $Id: ControlPoint.pm 32887 2011-07-26 21:44:25Z agrundman $
 
 use strict;
 
@@ -79,7 +79,7 @@ MX: $mx
 	$sock->set( args => $args );
 	
 	# This socket will continue to live and receive events as
-	# long as Squeezebox Server is running
+	# long as the server is running
 	Slim::Networking::Select::addRead( $sock, \&_readResult );
 	
 	# send the search query

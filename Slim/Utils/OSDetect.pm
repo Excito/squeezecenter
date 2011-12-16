@@ -1,8 +1,8 @@
 package Slim::Utils::OSDetect;
 
-# $Id: OSDetect.pm 28215 2009-08-18 17:05:11Z mwise $
+# $Id: OSDetect.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -30,7 +30,7 @@ my ($os, $isWindows, $isMac, $isLinux);
 
 =head2 OS( )
 
-returns a string to indicate the detected operating system currently running Squeezebox Server.
+returns a string to indicate the detected operating system currently running Logitech Media Server.
 
 =cut
 

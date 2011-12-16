@@ -1,8 +1,8 @@
 package Slim::Buttons::Search;
 
-# $Id: Search.pm 29579 2009-12-09 12:01:59Z michael $
+# $Id: Search.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,7 +13,7 @@ Slim::Buttons::Search
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Search> is a Squeezebox Server module to create a UI for searching
+L<Slim::Buttons::Search> is a Logitech Media Server module to create a UI for searching
 the user track database.  Seach by ARTIST, ALBUM and SONGS is added to the home 
 menu structure as well as options for adding to the top level.  Search input uses the 
 INPUT.Text mode.

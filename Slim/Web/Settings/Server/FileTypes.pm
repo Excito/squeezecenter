@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::FileTypes;
 
-# $Id: FileTypes.pm 32359 2011-04-26 20:34:02Z adrian $
+# $Id: FileTypes.pm 33456 2011-09-15 08:19:43Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -31,8 +31,10 @@ sub handler {
 	if ($paramRef->{'saveSettings'}) {
 
 		$prefs->set('disabledextensionsaudio',    $paramRef->{'disabledextensionsaudio'});
+		$prefs->set('disabledextensionsvideo',    $paramRef->{'disabledextensionsvideo'});
+		$prefs->set('disabledextensionsimages',   $paramRef->{'disabledextensionsimages'});
 		$prefs->set('disabledextensionsplaylist', $paramRef->{'disabledextensionsplaylist'});
-
+		
 		my %disabledformats = map { $_ => 1 } @{ $prefs->get('disabledformats') };
 
 		my @disabled = ();
@@ -117,7 +119,12 @@ sub handler {
 	$paramRef->{'formats'} = \@formats;
 
 	$paramRef->{'disabledextensionsaudio'}  = $prefs->get('disabledextensionsaudio');
+	$paramRef->{'disabledextensionsvideo'}  = $prefs->get('disabledextensionsvideo');
+	$paramRef->{'disabledextensionsimages'} = $prefs->get('disabledextensionsimages');
 	$paramRef->{'disabledextensionsplaylist'} = $prefs->get('disabledextensionsplaylist');
+
+	$paramRef->{'noimage'} = 1 if !main::IMAGE;
+	$paramRef->{'novideo'} = 1 if !main::VIDEO;
 
 	return $class->SUPER::handler($client, $paramRef, $pageSetup);
 }

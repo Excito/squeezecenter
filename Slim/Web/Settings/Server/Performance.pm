@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::Performance;
 
-# $Id: Performance.pm 32239 2011-04-07 14:26:58Z ayoung $
+# $Id: Performance.pm 33446 2011-09-14 13:52:08Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -25,7 +25,7 @@ sub page {
 sub prefs {
 	my @prefs = ( $prefs, qw(dbhighmem disableStatistics serverPriority scannerPriority 
  				precacheArtwork maxPlaylistLength) );
- 	push @prefs, qw(autorescan autorescan_stat_interval) unless main::ISWINDOWS;
+ 	push @prefs, qw(autorescan autorescan_stat_interval) if Slim::Utils::OSDetect::getOS->canAutoRescan;
  	return @prefs;
 }
 

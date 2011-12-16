@@ -1,6 +1,6 @@
 package Slim::Buttons::Information;
 
-#	$Id: Information.pm 26931 2009-06-07 03:53:36Z michael $
+#	$Id: Information.pm 32887 2011-07-26 21:44:25Z agrundman $
 #
 #	Author: Kevin Walsh <kevin@cursor.biz>
 #	Copyright (c) 2003-2009 Logitech, Cursor Software Limited.
@@ -28,10 +28,10 @@ Slim::Buttons::Information
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Information> is a Squeezebox Server module to display player library
+L<Slim::Buttons::Information> is a Logitech Media Server module to display player library
 and module information.
 
-Displays various bits of information relating to the Squeezebox Server,
+Displays various bits of information relating to the Logitech Media Server,
 the current player, the music library and the installed plug-in
 modules.
 

@@ -1,6 +1,6 @@
 package Slim::Utils::OS::SlimService;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -71,7 +71,7 @@ sub skipPlugins {
 	my $class = shift;
 	
 	return (
-		qw(JiveExtras MusicMagic MyRadio PreventStandby RS232 RandomPlay Rescan SavePlaylist SlimTris Snow SN iTunes xPL NetTest),
+		qw(JiveExtras MusicMagic MyRadio PreventStandby RS232 RandomPlay Rescan SavePlaylist SlimTris Snow SN iTunes xPL NetTest UPnP),
 		$class->SUPER::skipPlugins(),
 	);
 }

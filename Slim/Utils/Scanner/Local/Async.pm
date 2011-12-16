@@ -1,8 +1,8 @@
 package Slim::Utils::Scanner::Local::Async;
 
-# $Id: Async.pm 33020 2011-08-08 15:15:31Z agrundman $
+# $Id: Async.pm 33030 2011-08-10 05:28:23Z mherger $
 #
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, version 2.
 #

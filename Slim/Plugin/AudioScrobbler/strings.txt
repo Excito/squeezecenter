@@ -41,7 +41,7 @@ SETUP_PLUGIN_AUDIOSCROBBLER_ACCOUNTS_DESC
 	NO	Angi brukernavn og passord for Last.fm. Du kan angi flere kontoer hvis du vil sende spor fra ulike spillere til ulike kontoer.
 	PL	Wprowadź nazwę użytkownika i hasło w usłudze Last.fm. W celu przesłania informacji o utworach z różnych odtwarzaczy na różne konta można wprowadzić dane z kilku kont.
 	RU	Введите имя пользователя и пароль Last.fm. Можно указать несколько учетных записей, чтобы передавать дорожки с разных плееров в разные учетные записи.
-	SV	Ange användarnamn och lösenord för Last.fm.  Du kan ange flera konton för att skicka spår från olika spelare till olika konton.
+	SV	Ange användarnamn och lösenord för Last.fm. Du kan ange flera konton för att skicka spår från olika spelare till olika konton.
 
 SETUP_PLUGIN_AUDIOSCROBBLER_ACCOUNTS_DELETE
 	CS	Pro vymazání existujícího účtu zaškrtněte rámeček vedle účtu.
@@ -134,19 +134,19 @@ SETUP_PLUGIN_AUDIOSCROBBLER_ENABLE_SCROBBLE_NO
 	SV	Nej, rapportera inte spelade spår till Last.fm.
 
 PLUGIN_AUDIOSCROBBLER_BANNED
-	CS	Tato verze Squeezebox Server byla zakázána prostřednictvím Last.fm, aktualizujte laskavě na novější verzi.
-	DA	Denne version af Squeezebox Server ser ud til at være udelukket af Last.fm. Du bør opgradere til en nyere version.
-	DE	Last.fm scheint diese Version von Squeezebox Server nicht zuzulassen. Aktualisieren Sie auf eine neuere Version.
-	EN	This version of Squeezebox Server appears to have been banned by Last.fm, please upgrade to a newer version.
-	ES	Parece que Last.fm ha prohibido esta versión de Squeezebox Server. Actualícela a una versión más reciente.
-	FI	Last.fm tuntuu kieltäneen Squeezebox Serverin tämän version. Päivitä uudempaan versioon.
-	FR	Cette version du Squeezebox Server semble avoir été bannie par Last.fm. Veuillez effectuer une mise à niveau vers une version plus récente.
-	IT	È possibile che questa versione di Squeezebox Server non sia supportata in Last.fm. Eseguire l'aggiornamento a una versione successiva.
-	NL	Deze versie van Squeezebox Server wordt blijkbaar niet meer door Last.fm ondersteund. Upgrade naar een nieuwere versie.
-	NO	Det ser ut til at Last.fm har blokkert denne versjonen av Squeezebox Server. Du bør oppgradere til en nyere versjon.
-	PL	Ta wersja programu Squeezebox Server jest blokowana przez usługę Last.fm; uaktualnij go do nowszej wersji.
-	RU	По-видимому, эта версия Squeezebox Server запрещена на Last.fm. Обновите версию.
-	SV	Den här versionen av Squeezebox Server verkar ha spärrats av Last.fm. Uppgradera till senare version.
+	CS	Tato verze Logitech Media Server byla zakázána prostřednictvím Last.fm, aktualizujte laskavě na novější verzi.
+	DA	Denne version af Logitech Media Server ser ud til at være udelukket af Last.fm. Du bør opgradere til en nyere version.
+	DE	Last.fm scheint diese Version von Logitech Media Server nicht zuzulassen. Aktualisieren Sie auf eine neuere Version.
+	EN	This version of Logitech Media Server appears to have been banned by Last.fm, please upgrade to a newer version.
+	ES	Parece que Last.fm ha prohibido esta versión de Logitech Media Server. Actualícela a una versión más reciente.
+	FI	Last.fm tuntuu kieltäneen Logitech Media Serverin tämän version. Päivitä uudempaan versioon.
+	FR	Cette version du Logitech Media Server semble avoir été bannie par Last.fm. Veuillez effectuer une mise à niveau vers une version plus récente.
+	IT	È possibile che questa versione di Logitech Media Server non sia supportata in Last.fm. Eseguire l'aggiornamento a una versione successiva.
+	NL	Deze versie van Logitech Media Server wordt blijkbaar niet meer door Last.fm ondersteund. Upgrade naar een nieuwere versie.
+	NO	Det ser ut til at Last.fm har blokkert denne versjonen av Logitech Media Server. Du bør oppgradere til en nyere versjon.
+	PL	Ta wersja programu Logitech Media Server jest blokowana przez usługę Last.fm; uaktualnij go do nowszej wersji.
+	RU	По-видимому, эта версия Logitech Media Server запрещена на Last.fm. Обновите версию.
+	SV	Den här versionen av Logitech Media Server verkar ha spärrats av Last.fm. Uppgradera till senare version.
 
 PLUGIN_AUDIOSCROBBLER_BADAUTH
 	CS	Neplatné přihlašovací jméno nebo heslo k Last.fm
@@ -251,7 +251,7 @@ SETUP_PLUGIN_AUDIOSCROBBLER_WARNING_SCROBBLE_DISABLED
 	NO	Advarsel: Innsending av spor er deaktivert i hele systemet. Hvis du vil sende informasjon om avspilte spor fra denne spilleren, må du aktivere innstillingen Send alle spor under Avansert -> Last.fm Audioscrobbler.
 	PL	Ostrzeżenie: wysyłanie informacji o wszystkich utworach jest globalnie wyłączone. Aby przesyłać informacje do tego odtwarzacza, włącz ustawienie przesyłania informacji o wszystkich utworach, wybierając opcję Zaawansowane -> Last.fm Audioscrobbler.
 	RU	Предупреждение. Параметр "Передавать все дорожки" глобально отключен. Чтобы передавать информацию о дорожках для этого плеера, перейдите на "Дополнительно" -> "Last.fm Аудиоскробблер" и включите "Передавать все дорожки".
-	SV	Varning! Rapporteringen är globalt avaktiverad.  Om du vill rapportera spårinformation från den här spelaren aktiverar du inställningen under Avancerat > Last.fm Audioscrobbler.
+	SV	Varning! Rapporteringen är globalt avaktiverad. Om du vill rapportera spårinformation från den här spelaren aktiverar du inställningen under Avancerat > Last.fm Audioscrobbler.
 
 SETUP_PLUGIN_AUDIOSCROBBLER_PLAYER_NOTE
 	CS	Poznámka: Musíte také povolit Audioscrobbler pro každý přehrávač. Klikněte na záložku přehrávače a poté zvolte položku Last.fm Audioscrobbler pro každý přehrávač, který chcete převést.
@@ -266,7 +266,7 @@ SETUP_PLUGIN_AUDIOSCROBBLER_PLAYER_NOTE
 	NO	Merk: Du må også aktivere Audioscrobbler for hver spiller. Klikk på kategorien Spiller, og velg Last.fm Audioscrobbler-elementet for hver spiller du vil bruke med Audioscrobbler.
 	PL	Uwaga: Funkcję Audioscrobbler należy włączyć dla każdego odtwarzacza. Kliknij kartę Odtwarzacz, a następnie wybierz pozycję Last.fm Audioscrobbler dla każdego odtwarzacza, z którego chcesz wysłać informacje.
 	RU	Примечание. Нужно также включить скробблер для каждого плеера. Щелкните вкладку "Плеер" и выберите элемент "Скробблер Last.fm" для каждого плеера, который необходимо скробблить.
-	SV	Obs! Du måste också aktivera Audioscrobbler för varje spelare.  Klicka på fliken Spelare och markera sedan Last.fm Audioscrobbler för varje spelare du vill skrobbla från.
+	SV	Obs! Du måste också aktivera Audioscrobbler för varje spelare. Klicka på fliken Spelare och markera sedan Last.fm Audioscrobbler för varje spelare du vill skrobbla från.
 
 SETUP_PLUGIN_AUDIOSCROBBLER_LOGIN_ERROR
 	CS	Chyba při ověřování vašeho účtu u Last.fm. Zkuste znovu později. (%s)
@@ -294,7 +294,7 @@ SETUP_PLUGIN_AUDIOSCROBBLER_OVERVIEW
 	IT	Last.fm è un servizio di musica che crea un profilo musicale personale tenendo traccia della musica che si ascolta. Last.fm si basa sui gusti personali e fornisce suggerimenti personalizzati su stazioni radio, musica ed eventi, download gratuiti e altro ancora. Iscriviti gratuitamente all'indirizzo <a href="http://www.last.fm/join" target="_blank">www.last.fm/join</a> o, per saperne di più, visita il sito Web <a href="http://www.last.fm/tour" target="_blank">www.last.fm/tour</a>.
 	NL	Last.fm: een muziekservice die je persoonlijke muziekprofiel opbouwt door bij te houden naar welke muziek je luistert. Last.fm biedt gepersonaliseerde radiostations, muziek- en evenemententips, gratis downloads en nog meer op basis van je muzieksmaak. Meld je gratis aan op <a href="http://www.last.fm/join" target="_blank">www.last.fm/join</a> of kom meer te weten op <a href="http://www.last.fm/tour" target="_blank">www.last.fm/tour</a>.
 	NO	Last.fm er en musikktjeneste som bygger opp en personlig musikkprofil for deg ved å spore musikken du spiller. Ut fra dine valg lager Last.fm tilpassede radiostasjoner, spiller utvalgt musikk og viser relevante arrangementsanbefalinger. Du kan registrere deg gratis på <a href="http://www.last.fm/join" target="_blank">www.last.fm/join</a>, eller finne ut mer på <a href="http://www.last.fm/tour" target="_blank">www.last.fm/tour</a>.
-	PL	Usługa muzyczna Last.fm tworzy osobisty profil muzyczny użytkownika, śledząc informacje o słuchanej muzyce. Opierając się na upodobaniach użytkownika, usługa Last.fm udostępnia dostosowane stacje radiowe, rekomendacje muzyki i imprez, bezpłatne pliki do pobrania i nie tylko. Dołącz bezpłatnie pod adresem <a href="http://www.last.fm/join" target="_blank">www.last.fm/join</a> lub uzyskaj więcej informacji pod adresem <a href="http://www.last.fm/tour" target="_blank">.
+	PL	Usługa muzyczna Last.fm tworzy osobisty profil muzyczny użytkownika, śledząc informacje o słuchanej muzyce. Opierając się na upodobaniach użytkownika, usługa Last.fm udostępnia dostosowane stacje radiowe, rekomendacje muzyki i imprez, bezpłatne pliki do pobrania i nie tylko. Dołącz bezpłatnie pod adresem <a href="http://www.last.fm/join" target="_blank">www.last.fm/join</a> lub uzyskaj więcej informacji pod adresem <a href="http://www.last.fm/tour" target="_blank">www.last.fm/tour</a>.
 	RU	Last.fm — музыкальная служба, отслеживающая музыку, которую вы слушаете, и определяющая ваш личный музыкальный профиль. На основании ваших вкусов Last.fm создает персональные радиостанции, рекомендации по музыке и мероприятиям, бесплатные загрузки и многое другое. Подключитесь к Last.fm бесплатно на сайте <a href="http://www.last.fm/join" target="_blank">www.last.fm/join</a> или посетите <a href="http://www.last.fm/tour" target="_blank">www.last.fm/tour</a>, чтобы получить дополнительную информацию.
 	SV	Last.fm är en musiktjänst som skapar en personlig musikprofil för dig genom att registrera vad du lyssnar på. Du får rekommendationer och kan lyssna på anpassade radiostationer och musik som passar just dig. Det kostar ingenting att registrera sig via <a href="http://www.last.fm/join" target="_blank">www.last.fm/join</a>. Gå in på <a href="http://www.last.fm/tour" target="_blank">www.last.fm/tour</a> om du vill veta mer om hur det fungerar.
 

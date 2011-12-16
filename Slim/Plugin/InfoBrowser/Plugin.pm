@@ -1,11 +1,11 @@
 package Slim::Plugin::InfoBrowser::Plugin;
 
-# InfoBrowser - an extensible information parser for Squeezebox Server 7.0
+# InfoBrowser - an extensible information parser for Logitech Media Server 7.0
 #
-# $Id: Plugin.pm 31564 2010-12-01 09:12:52Z ayoung $
+# $Id: Plugin.pm 32887 2011-07-26 21:44:25Z agrundman $
 #
 # InfoBrowser provides a framework to use Squeezebox Server's xmlbrowser to fetch remote content and convert it into a format
-# which can be displayed via the Squeezebox Server web interface, cli for jive or another cli client or via the player display.
+# which can be displayed via the server web interface, cli for jive or another cli client or via the player display.
 #
 # The top level menu is defined by an opml file stored in playlistdir or cachedir.  It is created dynamically from any opml
 # files found in the plugin dir (Slim/Plugin/InfoBrowser) and the Addon dir (Plugins/InfoBrowserAddons) and any of their subdirs.

@@ -25,9 +25,11 @@ my $versionFile;
 
 sub checkVersion {
 	# clean up old download location
-	Slim::Utils::Misc::deleteFiles($prefs->get('cachedir'), qr/^(?:Squeezebox|SqueezeCenter).*\.(dmg|exe)(\.tmp)?$/i);			
+	Slim::Utils::Misc::deleteFiles($prefs->get('cachedir'), qr/^(?:Squeezebox|SqueezeCenter|LogitechMediaServer).*\.(dmg|exe)(\.tmp)?$/i);			
 
 	return unless $prefs->get('checkVersion');
+	
+	return if $::REVISION eq 'TRUNK';
 
 	$versionFile = catdir( scalar($os->dirsFor('updates')), 'server.version' );
 
@@ -66,7 +68,7 @@ sub checkVersion {
 
 	main::INFOLOG && $log->info("Checking version now.");
 
-	my $url  = Slim::Networking::SqueezeNetwork->url(
+	my $url = Slim::Networking::SqueezeNetwork->url(
 		sprintf(
 			"/update/?version=%s&revision=%s&lang=%s&geturl=%s&os=%s&uuid=%s", 
 			$::VERSION, 
@@ -77,7 +79,7 @@ sub checkVersion {
 			$prefs->get('server_uuid'),
 		)
 	);
-		
+	
 	main::DEBUGLOG && $log->debug("Using URL: $url");
 	
 	my $http = Slim::Networking::SqueezeNetwork->new(\&checkVersionCB, \&checkVersionError);
@@ -99,7 +101,7 @@ sub checkVersionCB {
 		my $version = Slim::Utils::Unicode::utf8decode( $http->content() );
 		chomp($version);
 		
-		main::DEBUGLOG && $log->debug($version || 'No new Squeezebox Server version available');
+		main::DEBUGLOG && $log->debug($version || 'No new Logitech Media Server version available');
 
 		# reset the update flag
 		setUpdateInstaller();
@@ -107,7 +109,7 @@ sub checkVersionCB {
 		# trigger download of the installer if available
 		if ($version && $prefs->get('autoDownloadUpdate')) {
 			
-			main::INFOLOG && $log->info('Triggering automatic Squeezebox Server update download...');
+			main::INFOLOG && $log->info('Triggering automatic Logitech Media Server update download...');
 			getUpdate($version);
 		}
 		
@@ -207,12 +209,12 @@ sub downloadAsyncDone {
 	
 	# make sure we got the file
 	if (!-e $tmpFile) {
-		$log->warn("Squeezebox Server installer download failed: file '$tmpFile' not stored on disk?!?");
+		$log->warn("Logitech Media Server installer download failed: file '$tmpFile' not stored on disk?!?");
 		return;
 	}
 
 	if (-s _ != $http->headers->content_length()) {
-		$log->warn( sprintf("Squeezebox Server installer file size mismatch: expected size %s bytes, actual size %s bytes", $http->headers->content_length(), -s _) );
+		$log->warn( sprintf("Logitech Media Server installer file size mismatch: expected size %s bytes, actual size %s bytes", $http->headers->content_length(), -s _) );
 		unlink $tmpFile;
 		return;
 	}
@@ -281,7 +283,7 @@ sub getUpdateInstaller {
 
 		chomp;
 		
-		if (/(?:Squeezebox|SqueezeCenter).*/) {
+		if (/(?:LogitechMediaServer|Squeezebox|SqueezeCenter).*/) {
 			$updateInstaller = $_;
 			last;
 		}
@@ -302,7 +304,6 @@ sub installerIsUpToDate {
 
 	return ( $::REVISION eq 'TRUNK'											# we'll consider TRUNK to always be up to date
 		|| ($installer =~ /$::REVISION/ && $installer =~ /$::VERSION/) )	# same revision and revision
-	
 }
 
 sub cleanup {
@@ -310,7 +311,7 @@ sub cleanup {
 
 	my $ext = $os->installerExtension() . ($additionalExt ? "\.$additionalExt" : '');
 
-	Slim::Utils::Misc::deleteFiles($path, qr/^(?:Squeezebox|SqueezeCenter).*\.$ext$/i);
+	Slim::Utils::Misc::deleteFiles($path, qr/^(?:LogitechMediaServer|Squeezebox|SqueezeCenter).*\.$ext$/i);
 }
 
 1;

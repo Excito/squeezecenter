@@ -1,8 +1,8 @@
 package Slim::Buttons::RemoteTrackInfo;
 
-# $Id: RemoteTrackInfo.pm 28492 2009-09-11 08:50:22Z michael $
+# $Id: RemoteTrackInfo.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -13,7 +13,7 @@ Slim::Buttons::RemoteTrackInfo
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::RemoteTrackInfo> is a Squeezebox Server module to create a UI for viewing information 
+L<Slim::Buttons::RemoteTrackInfo> is a Logitech Media Server module to create a UI for viewing information 
 about remote tracks.
 
 =cut

@@ -1,8 +1,8 @@
 package Slim::Buttons::Input::List;
 
-# $Id: List.pm 32504 2011-06-07 12:16:25Z agrundman $
+# $Id: List.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -38,7 +38,7 @@ Slim::Buttons::Input::List
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Input::List> is a reusable Squeezebox Server module, creating a 
+L<Slim::Buttons::Input::List> is a reusable Logitech Media Server module, creating a 
 generic framework UI for navigating through a List of items, with configurable
 display parameters and entry/leave points.
 

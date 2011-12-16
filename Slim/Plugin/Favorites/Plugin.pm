@@ -1,6 +1,6 @@
 package Slim::Plugin::Favorites::Plugin;
 
-# $Id: Plugin.pm 32528 2011-06-18 11:56:43Z adrian $
+# $Id: Plugin.pm 33224 2011-08-26 16:33:48Z mherger $
 
 # A Favorites implementation which stores favorites as opml files and allows
 # the favorites list to be edited from the web interface
@@ -9,7 +9,7 @@ package Slim::Plugin::Favorites::Plugin;
 
 # This code is derived from code with the following copyright message:
 #
-# Squeezebox Server Copyright 2005-2009 Logitech.
+# Logitech Media Server Copyright 2005-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -97,6 +97,11 @@ sub initPlugin {
 	Slim::Menu::ArtistInfo->registerInfoProvider( favorites => (
 		after => 'playitem',
 		func  => \&artistInfoHandler,
+	) );
+	# Playlist Info handler
+	Slim::Menu::PlaylistInfo->registerInfoProvider( favorites => (
+		after => 'playitem',
+		func  => \&playlistInfoHandler,
 	) );
 }
 
@@ -1012,6 +1017,11 @@ sub albumInfoHandler {
 
 sub artistInfoHandler {
 	my $return = _objectInfoHandler( @_, 'artist');
+	return $return;
+}
+
+sub playlistInfoHandler {
+	my $return = _objectInfoHandler( @_, 'playlist');
 	return $return;
 }
 

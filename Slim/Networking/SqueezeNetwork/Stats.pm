@@ -1,6 +1,6 @@
 package Slim::Networking::SqueezeNetwork::Stats;
 
-# $Id: Stats.pm 31771 2011-01-18 20:24:15Z agrundman $
+# $Id: Stats.pm 33717 2011-11-17 13:38:09Z ayoung $
 
 # Report radio stats to SN if enabled.
 
@@ -84,9 +84,6 @@ sub newsongCallback {
 	
 	my $url = Slim::Player::Playlist::url($client);
 	
-	# Make sure the URL matches what we want to report
-	return unless $url =~ $REPORT_RE;
-	
 	my $track = Slim::Schema->objectForUrl( { url => $url } );
 	
 	my $secs = $track->secs || 0;
@@ -96,6 +93,19 @@ sub newsongCallback {
 	if ( !$secs && !defined $request->getParam('_p3') ) {
 		main::DEBUGLOG && $log->debug( 'Ignoring radio station newsong metadata notification' );
 		return;
+	}
+	
+	if (!Slim::Music::Info::isRemoteURL($url)) {
+		my $id = $track->id;
+		
+		if ($id > 0) {
+			# Make sure the URL matches what we want to report
+			$url = 'local://trackId=' . $id;
+		} else {
+			return;
+		}
+	} else {
+		return unless $url =~ $REPORT_RE;
 	}
 		
 	if ( $secs > 0 ) {

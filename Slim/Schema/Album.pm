@@ -1,6 +1,6 @@
 package Slim::Schema::Album;
 
-# $Id: Album.pm 32504 2011-06-07 12:16:25Z agrundman $
+# $Id: Album.pm 33687 2011-11-10 17:17:57Z agrundman $
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -96,7 +96,7 @@ sub title {
 	);
 }
 
-# return the raw title untainted by Squeezebox Server logic
+# return the raw title untainted by Logitech Media Server logic
 sub rawtitle {
 	my $self = shift;
 	
@@ -284,6 +284,9 @@ sub rescan {
 		if ( !$count ) {
 			main::DEBUGLOG && $slog->is_debug && $slog->debug("Removing unused album: $id");	
 			$dbh->do( "DELETE FROM albums WHERE id = ?", undef, $id );
+			
+			# Bug 17283, this removed album may be cached as lastAlbum in Schema
+			Slim::Schema->wipeLastAlbumCache($id);
 		}
 	}
 }

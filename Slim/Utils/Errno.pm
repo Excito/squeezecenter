@@ -1,8 +1,8 @@
 package Slim::Utils::Errno;
 
-# $Id: Errno.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Errno.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
