@@ -1,0 +1,33 @@
+/var/log/squeezeboxserver/server.log {
+  weekly
+  rotate 5
+  size 200k
+  compress
+  missingok
+  prerotate
+    invoke-rc.d squeezeboxserver stop || true
+  endscript
+
+  postrotate
+    # Only starts Logitech Media Server if it is supposed to
+    # run in the current run-level
+    invoke-rc.d squeezeboxserver start || true
+  endscript
+}
+
+/var/log/squeezeboxserver/scanner.log {
+  weekly
+  rotate 5
+  size 200k
+  compress
+  missingok
+  prerotate
+    invoke-rc.d squeezeboxserver stop || true
+  endscript
+
+  postrotate
+    # Only starts Logitech Media Server if it is supposed to
+    # run in the current run-level
+    invoke-rc.d squeezeboxserver start || true
+  endscript
+}

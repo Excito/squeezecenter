@@ -1,6 +1,6 @@
 #! /bin/sh
 ### BEGIN INIT INFO
-# Provides:          squeezecenter
+# Provides:          squeezeboxserver
 # Required-Start:    $local_fs $remote_fs $network mysql
 # Required-Stop:     $local_fs $remote_fs
 # Default-Start:     2 3 4 5
@@ -15,8 +15,8 @@
 # Do NOT "set -e"
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DESC="SqueezeCenter Audio Server"
-NAME=squeezecenter
+DESC="Logitech Media Server"
+NAME=squeezeboxserver
 DAEMON=/usr/sbin/$NAME-server
 DAEMON_SAFE=/usr/sbin/${NAME}_safe
 PIDFILE=/var/run/$NAME.pid
@@ -84,7 +84,7 @@ do_stop()
 	#   1 if daemon was already stopped
 	#   2 if daemon could not be stopped
 	#   other if a failure occurred
-	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --pidfile $PIDFILE --name squeezecenter_s
+	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --pidfile $PIDFILE --name squeezeboxserver_s
 	RETVAL="$?"
 	[ "$RETVAL" = 2 ] && return 2
 	# Wait for children to finish too if this is a daemon that forks

@@ -2,35 +2,33 @@ From: =?UTF-8?q?Carl=20F=C3=BCrstenberg?= <carl@excito.com>
 Date: Mon, 21 Mar 2011 13:30:00 +0100
 Subject: Custom OS detection
 
-Adding custom OS detection for the Bubba platform
-
-===================================================================
+Adding custom OS detection for the Excito server platforms
 ---
- Slim/Utils/OS/Custom.pm |  138 +++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 138 insertions(+), 0 deletions(-)
+ Slim/Utils/OS/Custom.pm |   30 ++++++++++++++++++++++++++++++
+ 1 files changed, 30 insertions(+), 0 deletions(-)
  create mode 100644 Slim/Utils/OS/Custom.pm
 
 diff --git a/Slim/Utils/OS/Custom.pm b/Slim/Utils/OS/Custom.pm
 new file mode 100644
-index 0000000..04a9690
+index 0000000..0e08d81
 --- /dev/null
 +++ b/Slim/Utils/OS/Custom.pm
-@@ -0,0 +1,138 @@
-+
-+
+@@ -0,0 +1,30 @@
 +package Slim::Utils::OS::Custom;
 +
-+use strict;
-+use base qw(Slim::Utils::OS::Linux);
++# Logitech Media Server Copyright 2001-2011 Logitech.
++# This program is free software; you can redistribute it and/or
++# modify it under the terms of the GNU General Public License,
++# version 2.
 +
-+# Due to name change, we'll base upon Linux instead of debian, and implements all useful stuff again
-+# to avoid having to rename everything to squeezeboxserver we'll just ignore upstream for the moment
++use strict;
++use base qw(Slim::Utils::OS::Debian);
 +
 +sub initDetails {
 +	my $class = shift;
 +
 +	$class->{osDetails} = $class->SUPER::initDetails();
-+	$class->{osDetails}->{name} = "BUBBA|TWO";
++	$class->{osDetails}->{name} = "Excito Server";
 +
 +	return $class->{osDetails};
 +}
@@ -38,120 +36,12 @@ index 0000000..04a9690
 +sub initPrefs {
 +	my ($class, $prefs) = @_;
 +
-+	{
-+		our ( $dbuser, $dbpass, $dbtype, $dbname, $dbserver, $dbport );
-+
-+		use lib '/etc/squeezecenter';
-+		require 'debian-db.pm';
-+
-+		$prefs->{dbusername}		= $dbuser;
-+		$prefs->{dbpassword}		= $dbpass;
-+		$prefs->{dbsource}			= "dbi\:$dbtype\:database=$dbname;hostname=$dbserver;port=$dbport";
-+	}
-+
-+	$prefs->{dbtype} = "MySQL";
-+
 +	$prefs->{scannerPriority}   = 20;
 +	$prefs->{resampleArtwork}   = 0;
 +	$prefs->{disableStatistics} = 1;
 +	$prefs->{playlistdir}		= '/home/storage/music';
 +	$prefs->{audiodir}			= '/home/storage/music';
 +}
-+
-+
-+sub initDetails {
-+	my $class = shift;
-+
-+	$class->{osDetails} = $class->SUPER::initDetails();
-+
-+	# package specific addition to @INC to cater for plugin locations
-+	$class->{osDetails}->{isDebian} = 1 ;
-+
-+	unshift @INC, '/usr/share/squeezecenter';
-+
-+	return $class->{osDetails};
-+}
-+
-+=head2 dirsFor( $dir )
-+
-+Return OS Specific directories.
-+
-+Argument $dir is a string to indicate which of the Squeezebox Server directories we
-+need information for.
-+
-+=cut
-+
-+sub dirsFor {
-+	my ($class, $dir) = @_;
-+
-+	my @dirs = ();
-+
-+	if ($dir =~ /^(?:oldprefs|updates|scprefs)$/) {
-+
-+		push @dirs, $class->SUPER::dirsFor($dir);
-+
-+	} elsif ($dir =~ /^(?:Firmware|Graphics|HTML|IR|MySQL|SQL|lib|Bin)$/) {
-+
-+		push @dirs, "/usr/share/squeezecenter/$dir";
-+
-+	} elsif ($dir eq 'Plugins') {
-+
-+		push @dirs, $class->SUPER::dirsFor($dir);
-+		push @dirs, "/usr/share/perl5/Slim/Plugin", "/usr/share/squeezecenter/Plugins";
-+
-+	} elsif ($dir =~ /^(?:strings|revision)$/) {
-+
-+		push @dirs, "/usr/share/squeezecenter";
-+
-+	} elsif ($dir eq 'libpath') {
-+
-+		push @dirs, "/usr/share/squeezecenter";
-+
-+	# Because we use the system MySQL, we need to point to the right
-+	# directory for the errmsg. files. Default to english.
-+	} elsif ($dir eq 'mysql-language') {
-+
-+		push @dirs, "/usr/share/mysql/english";
-+
-+	} elsif ($dir =~ /^(?:types|convert)$/) {
-+
-+		push @dirs, "/etc/squeezecenter";
-+
-+	} elsif ($dir =~ /^(?:prefs)$/) {
-+
-+		push @dirs, $::prefsdir || "/var/lib/squeezecenter/prefs";
-+
-+	} elsif ($dir eq 'log') {
-+
-+		push @dirs, $::logdir || "/var/log/squeezecenter";
-+
-+	} elsif ($dir eq 'cache') {
-+
-+		push @dirs, $::cachedir || "/var/lib/squeezecenter/cache";
-+
-+	} elsif ($dir =~ /^(?:music|playlists)$/) {
-+
-+		push @dirs, '';
-+
-+	} else {
-+		push @dirs, $class->SUPER::dirsFor($dir);
-+	}
-+
-+	return wantarray() ? @dirs : $dirs[0];
-+}
-+
-+# Bug 9488, always decode on Ubuntu/Debian
-+sub decodeExternalHelperPath {
-+	return Slim::Utils::Unicode::utf8decode_locale($_[1]);
-+}
-+sub migratePrefsFolder {
-+	# just dont!
-+}
-+
-+sub scanner {
-+	return '/usr/sbin/squeezecenter-scanner';
-+}
-+
 +
 +1;
 -- 

@@ -1,0 +1,8 @@
+/etc/default
+/etc/squeezeboxserver
+/var/log/squeezeboxserver
+/var/lib/squeezeboxserver/prefs
+/var/lib/squeezeboxserver/cache
+/usr/share/squeezeboxserver
+/usr/sbin
+/usr/share/perl5/Slim/Plugin

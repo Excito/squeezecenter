@@ -1,13 +1,13 @@
-# Defaults for Squeezecenter initscript
-# sourced by /etc/init.d/squeezecenter
-# installed at /etc/default/squeezecenter by the maintainer scripts
+# Defaults for Logitech Media Server initscript
+# sourced by /etc/init.d/squeezeboxserver
+# installed at /etc/default/squeezeboxserver by the maintainer scripts
 
 #
 # This is a POSIX shell fragment
 #
 
-# User to run SqueezeCenter as
-SLIMUSER=squeezecenter
+# User to run Logitech Media Server as
+SLIMUSER=squeezeboxserver
 
 #Locations of preferences, cache and logs
 PREFSDIR=/var/lib/$SLIMUSER/prefs

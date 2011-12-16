@@ -1,9 +1,0 @@
-/etc/default
-/etc/squeezecenter
-/var/log/squeezecenter
-/var/lib/squeezecenter/prefs
-/var/lib/squeezecenter/cache
-/usr/share/squeezecenter
-/usr/sbin
-/usr/share/perl5/Slim/Plugin
-/usr/share/dbconfig-common

@@ -1,0 +1,17 @@
+#!/bin/sh
+# prerm script
+
+set -e
+. /usr/share/debconf/confmodule
+
+if [ -x "/etc/init.d/squeezeboxserver" ]; then
+        if [ -x "`which invoke-rc.d 2>/dev/null`" ]; then
+                invoke-rc.d squeezeboxserver stop || exit $?
+        else
+                /etc/init.d/squeezeboxserver stop || exit $?
+        fi
+fi
+
+#DEBHELPER#
+
+exit 0

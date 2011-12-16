@@ -1,0 +1,12 @@
+Slim 					/usr/share/perl5
+lib 					/usr/share/squeezeboxserver
+Bin 					/usr/share/squeezeboxserver
+CPAN 					/usr/share/squeezeboxserver
+Graphics				/usr/share/squeezeboxserver
+IR						/usr/share/squeezeboxserver
+SQL						/usr/share/squeezeboxserver
+strings.txt				/usr/share/squeezeboxserver
+MySQL					/usr/share/squeezeboxserver
+HTML					/usr/share/squeezeboxserver
+Firmware				/usr/share/squeezeboxserver
+*.conf					/etc/squeezeboxserver
