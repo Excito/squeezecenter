@@ -1,8 +1,8 @@
 package Slim::Player::StreamingController;
 
-# $Id: StreamingController.pm 32552 2011-06-24 13:52:40Z ayoung $
+# $Id: StreamingController.pm 33680 2011-11-10 09:55:01Z ayoung $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -869,6 +869,7 @@ sub nextsong {
 			$prefs->get('reshuffleOnRepeat')) {
 			
 			Slim::Player::Playlist::reshuffle($client, 1);
+			$client->currentPlaylistUpdateTime(Time::HiRes::time()); # bug 17643
 		}
 		$nextsong = 0;
 	}
@@ -1254,6 +1255,56 @@ sub _Stream {				# play -> Buffering, Streaming
 	# bug 10438
 	$self->resetFrameData();
 	
+	my $proxy;
+	if (main::SLIM_SERVICE) {
+		# Player-supplied proxy streaming (bug 17692)
+		if (   scalar @{$self->{'players'}} > 1
+			&& $songStreamController->isDirect() )
+		{
+			my $use;
+			if ($song->currentTrackHandler()->can('usePlayerProxyStreaming')) {
+				# The API for usePlayerProxyStreaming() allows the following return values:
+				#	0 => do not use player-supplier proxy streaming
+				#	1 => use player-supplier proxy streaming if possible
+				#	2 => player-supplier proxy streaming is optional
+				#
+				# Currently, option 2 is treated equivalently to option 0. 
+				# The trade-off is between potential overload of the WAN, supplying multiple
+				# copies of the same remote stream, and overload of the (proxy) player's 
+				# network link (and its capability to service it).
+				$use = $song->currentTrackHandler()->usePlayerProxyStreaming($song);
+			} elsif (!$song->duration) {
+				$use = 1;
+			} else {
+				$use = 0;
+			}
+			
+			if ($use == 1) {
+				my @candidates;
+				foreach (@{$self->{'players'}}) {
+					# find players which supports proxying.
+					if ($_->proxyAddress()) {
+						push @candidates, [$_, ($_->signalStrength || 200) * 1000
+												+ (($_->deviceid == 9 && $_->model eq 'fab4') ? 10 : 0)];
+					}
+				}
+				if (@candidates) {
+					# Prefer wired over wireless
+					# Prefer best signal-strength if wireless
+					# Prefer Fab4 over everything else if more than one wired (or same signal-strength)
+					my $p = (sort {$b->[1] <=> $a->[1]} @candidates)[0]->[0];
+					$proxy = $p->proxyAddress();
+					$songStreamController->playerProxyStreaming($p);
+				}
+			}
+		}
+		if ($proxy) {
+			main::INFOLOG && $synclog->info('Will use player-supplied proxy streaming via ', $songStreamController->playerProxyStreaming()->id);
+		} else {
+			$songStreamController->playerProxyStreaming(undef);
+		}
+	}
+	
 	foreach my $player (@{$self->{'players'}}) {
 		if ($setVolume) {
 			# Bug 10310: Make sure volume is synced if necessary
@@ -1274,7 +1325,7 @@ sub _Stream {				# play -> Buffering, Streaming
 			$song->currentTrackHandler()->onStream($player, $song);
 		}
 		
-		$startedPlayers += $player->play( { 
+		my %params = ( 
 			'paused'      => $paused, 
 			'format'      => $song->streamformat(), 
 			'controller'  => $songStreamController,
@@ -1284,7 +1335,19 @@ sub _Stream {				# play -> Buffering, Streaming
 			'seekdata'    => $seekdata,
 			'fadeIn'      => $myFadeIn,
 			# we never set the 'loop' parameter
-		} );
+		);
+		
+		if (main::SLIM_SERVICE) {
+			if ($proxy) {
+				if ($songStreamController->playerProxyStreaming() == $player) {
+					$params{'slaveStreams'} = scalar @{$self->{'players'}} - 1;
+				} else {
+					$params{'proxyStream'} = $proxy;
+				}
+			}
+		}
+
+		$startedPlayers += $player->play( \%params );
 		
 		$reportsTrackStart ||= $player->reportsTrackStart();
 	}	
@@ -1375,7 +1438,6 @@ sub _Start {		# start -> Playing
 
 		_Playing(@_);
 	} else {
-		# TODO maybe try synchronized resume
 		_Resume(@_);
 	}
 }
@@ -1459,7 +1521,7 @@ sub _syncStart {
 
 	my $startAt =
 	  Time::HiRes::time() +
-	  ( $playerStartDelay + ( $prefs->get('syncStartDelay') || 100 ) ) / 1000;
+	  ( $playerStartDelay + ( $prefs->get('syncStartDelay') || 200 ) ) / 1000;
 
 	foreach $player ( @{ $self->{'players'} } ) {
 		$player->startAt(
@@ -1572,14 +1634,33 @@ sub _JumpOrResume {			# resume -> Streaming, Playing
 
 sub _Resume {				# resume -> Playing
 	my ($self, $event, $params) = @_;
+	
+	my $song        = playingSong($self);
+	my $pausedAt    = ($self->{'resumeTime'} || 0) - ($song ? ($song->startOffset() || 0) : 0);
+	my $startAtBase = Time::HiRes::time() + ($prefs->get('syncStartDelay') || 200) / 1000;
 
 	_setPlayingState($self, PLAYING);
 	foreach my $player (@{$self->{'players'}})	{
 		# set volume to 0 to make sure fade works properly
 		$player->volume(0,1);
-		$player->resume();
+		if (@{$self->{'players'}} > 1 ) {
+			my ($playPoint, $delay);
+			my $startAt = $startAtBase;
+			if ( ($playPoint = $player->playPoint)
+				&& defined $playPoint->[2]
+				&& ($delay = ($playPoint->[2] - $pausedAt)) >= 0)
+			{
+				$startAt += $delay;
+			}
+			main::INFOLOG && $synclog->is_info && $synclog->info($player->id, ": startAt=$startAt");
+			$player->resume($startAt);
+		} else {
+			$player->resume();
+		}
 		$player->fade_volume($self->{'fadeIn'} ? $self->{'fadeIn'} : FADEVOLUME);
 	}
+	
+	$self->{'nextCheckSyncTime'} = $startAtBase + 2;
 
 	Slim::Control::Request::notifyFromArray( $self->master(), ['playlist', 'pause', 0] );
 	
@@ -1908,6 +1989,22 @@ sub unsync {
 	if (@{$self->{'allPlayers'}} < 2) {return;}
 	
 	main::INFOLOG && $synclog->info($self->{'masterId'} . " unsync " . $player->id()); # bt();
+	
+	my $restartTime;
+	if (main::SLIM_SERVICE) {
+		# Check if the player that is being unsynced is the master proxy streaming one
+		if (!$self->isStopped() && $self->{'songStreamController'} && @{$self->{'players'}} > 1) {
+			my $proxy = $self->{'songStreamController'}->playerProxyStreaming();
+			if ($proxy && $proxy == $player) {
+				if ($self->isPlaying()) {
+					$restartTime = playingSongElapsed($self);
+				} elsif ($self->isPaused() && $self->playingSong()) {
+					# make sure that the streaming is disconnected, so that any unpause will be by _JumpToTime
+					_pauseStreaming($self, $self->playingSong());
+				}
+			}
+		}
+	}
 		
 	# remove player from the lists
 	my $i = 0;
@@ -1962,6 +2059,11 @@ sub unsync {
 		$synclog->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
 		$synclog->info($self->{'masterId'} . " active players are: " . join(',', map { $_->id } @{$self->{'players'}}));
 	}
+	
+	if (defined $restartTime) {
+		main::INFOLOG && $log->info($self->{'masterId'} . " restart play");
+		_JumpToTime($self, undef, {newtime => $restartTime, restartIfNoSeek => 1});
+	}
 }
 
 sub playerActive {
@@ -1997,19 +2099,35 @@ sub playerActive {
 	# Choose new master
 	_newMaster($self);
 	
-	if (main::INFOLOG && $log->is_info) {
-		$log->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
-		$log->info($self->{'masterId'} . " active players are: " . join(',', map { $_->id } @{$self->{'players'}}));
+	if (main::INFOLOG && $synclog->is_info) {
+		$synclog->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
+		$synclog->info($self->{'masterId'} . " active players are: " . join(',', map { $_->id } @{$self->{'players'}}));
 	}
 	
 	if (isPlaying($self)) {
-		main::INFOLOG && $log->info($self->{'masterId'} . " restart play");
+		main::INFOLOG && $synclog->info($self->{'masterId'} . " restart play");
 		_JumpToTime($self, undef, {newtime => playingSongElapsed($self), restartIfNoSeek => 1});
 	}
 }
 
 sub playerInactive {
 	my ($self, $player) = @_;
+	
+	my $restartTime;
+	if (main::SLIM_SERVICE) {
+		# Check if the player that is going inactive is the master proxy streaming one
+		if (!$self->isStopped() && $self->{'songStreamController'} && @{$self->{'players'}} > 1) {
+			my $proxy = $self->{'songStreamController'}->playerProxyStreaming();
+			if ($proxy && $proxy == $player) {
+				if ($self->isPlaying()) {
+					$restartTime = playingSongElapsed($self);
+				} elsif ($self->isPaused() && $self->playingSong()) {
+					# make sure that the streaming is disconnected, so that any unpause will be by _JumpToTime
+					_pauseStreaming($self, $self->playingSong());
+				}
+			}
+		}
+	}
 	
 	# remove player from the list
 	my $i = 0;
@@ -2040,9 +2158,14 @@ sub playerInactive {
 		_newMaster($self);
 	}
 
-	if (main::INFOLOG && $log->is_info) {
-		$log->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
-		$log->info($self->{'masterId'} . " active players are: " . join(',', map { $_->id } @{$self->{'players'}}));	
+	if (main::INFOLOG && $synclog->is_info) {
+		$synclog->info($self->{'masterId'} . " sync group now has: " . join(',', map { $_->id } @{$self->{'allPlayers'}}));
+		$synclog->info($self->{'masterId'} . " active players are: " . join(',', map { $_->id } @{$self->{'players'}}));	
+	}
+	
+	if (defined $restartTime) {
+		main::INFOLOG && $synclog->info($self->{'masterId'} . " restart play");
+		_JumpToTime($self, undef, {newtime => $restartTime, restartIfNoSeek => 1});
 	}
 }
 

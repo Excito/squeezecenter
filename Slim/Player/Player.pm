@@ -1,6 +1,6 @@
 package Slim::Player::Player;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -10,7 +10,7 @@ package Slim::Player::Player;
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# $Id: Player.pm 32504 2011-06-07 12:16:25Z agrundman $
+# $Id: Player.pm 33672 2011-11-09 10:51:09Z ayoung $
 #
 
 use strict;
@@ -1086,7 +1086,7 @@ sub rebuffer {
 }
 
 sub buffering {
-	my ($client, $bufferThreshold) = @_;
+	my ($client, $bufferThreshold, $outputThreshold) = @_;
 	
 	my $song = $client->streamingSong();
 	my $url = $song->currentTrack()->url;
@@ -1103,7 +1103,7 @@ sub buffering {
 		$client,
 		Time::HiRes::time() + 0.125,
 		\&_buffering,
-		{song => $song, threshold => $bufferThreshold, title => $title, cover => $cover}
+		{song => $song, threshold => $bufferThreshold, outputThreshold => $outputThreshold, title => $title, cover => $cover}
 	);
 }
 

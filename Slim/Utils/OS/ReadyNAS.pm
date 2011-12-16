@@ -1,6 +1,6 @@
 package Slim::Utils::OS::ReadyNAS;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -26,8 +26,6 @@ sub initDetails {
 sub initPrefs {
 	my ($class, $prefs) = @_;
 	
-	$prefs->{dbsource} = 'dbi:mysql:database=slimserver';
-	
 	# if this is a sparc based ReadyNAS, do some performance tweaks
 	if ($class->{osDetails}->{osArch} =~ /sparc/) {	
 		$prefs->{scannerPriority}   = 20;
@@ -52,10 +50,20 @@ sub dirsFor {
 
 	my @dirs;
 
-	if ($dir =~ /^(?:music|playlists)$/) {
+	if ($dir =~ /^(?:music|videos|pictures|playlists)$/) {
 
 		# let's do some optimistic tests
-		my $path = catdir('/', 'media', 'Music');
+		my $path;
+		
+		if ($dir =~ /(?:music|playlists)/) {
+			$path = catdir('/', 'media', 'Music');
+		}
+		elsif ($dir eq 'videos') {
+			$path = catdir('/', 'media', 'Videos');
+		}
+		elsif ($dir eq 'pictures') {
+			$path = catdir('/', 'media', 'Pictures');
+		}
 		
 		unless ($path && -r $path) {
 			$path = $class->SUPER::dirsFor($dir);
@@ -68,6 +76,15 @@ sub dirsFor {
 	}
 
 	return wantarray() ? @dirs : $dirs[0];
+}
+
+
+# log rotation on ReadyNAS seems to be broken - let's take care of this
+sub logRotate {
+	my $class   = shift;
+	my $dir     = shift || $class->dirsFor('log');
+
+    Slim::Utils::OS->logRotate($dir);
 }
 
 
@@ -95,10 +112,5 @@ sub ignoredItems {
 		'lost+found'=> 1,
 	);
 }
-
-#sub scanner {
-#	return the path to the C based scanner
-#	return '/usr/sbin/sc-scanner';
-#}
 
 1;

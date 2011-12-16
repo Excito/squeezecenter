@@ -1,8 +1,8 @@
 package Slim::Schema::Storage;
 
-# $Id: Storage.pm 33065 2011-08-12 15:40:26Z mherger $
+# $Id: Storage.pm 33379 2011-09-09 11:34:33Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -54,7 +54,7 @@ sub throw_exception {
 	my ($self, $msg) = @_;
 
 	# Try and bring up the database if we can't connect.
-	if ($msg =~ /Connection failed/) {
+	if ($msg =~ /Connection failed/ && $sqlHelperClass =~ /MySQL/i) {
 
 		my $lockFile = File::Spec->catdir(preferences('server')->get('librarycachedir'), 'mysql.startup');
 
@@ -113,9 +113,12 @@ sub throw_exception {
 
 			return $self->_dbh;
 		}
-		
-	}
 
+	} elsif ($msg =~ /SQLite.*no such table: sqlite_stat1/i) {
+		# no need to croak on a new restart from scratch, users think it's a bad thing
+		return;
+	}
+	
 	logBacktrace($msg);
 
 	# Need to propagate the real error so that DBIx::Class::Storage will

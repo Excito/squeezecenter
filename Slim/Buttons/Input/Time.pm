@@ -1,8 +1,8 @@
 package Slim::Buttons::Input::Time;
 
-# $Id: Time.pm 29134 2009-11-02 23:01:20Z kdf $
+# $Id: Time.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -31,7 +31,7 @@ Slim::Buttons::Common::pushMode($client, 'INPUT.Time', \%params);
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Input::Time> is a reusable Squeezebox Server module to create a standard UI
+L<Slim::Buttons::Input::Time> is a reusable Logitech Media Server module to create a standard UI
 for entering Time formatted strings.  This is a slimmed down variation of Input::Text 
 with custom handling for limiting characters based on the timeFormat server preference
 and typical formatting of time strings. Callers include Slim::Buttons::AlarmCLock

@@ -1,8 +1,8 @@
 package Slim::Formats::Playlists::CUE;
 
-# $Id: CUE.pm 33070 2011-08-12 16:33:32Z agrundman $
+# $Id: CUE.pm 33477 2011-09-19 13:34:15Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -46,6 +46,9 @@ sub parse {
 
 		return;
 	}
+	
+	# Bug 11289, strip BOM from first line
+	$lines->[0] = Slim::Utils::Unicode::stripBOM($lines->[0]);
 
 	for my $line (@$lines) {
 

@@ -1,8 +1,8 @@
 package Slim::Hardware::mas3507d;
 
-# $Id: mas3507d.pm 26931 2009-06-07 03:53:36Z michael $
+# $Id: mas3507d.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.

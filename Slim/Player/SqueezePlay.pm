@@ -1,6 +1,6 @@
 package Slim::Player::SqueezePlay;
 
-# Squeezebox Server Copyright (c) 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -45,6 +45,7 @@ BEGIN {
 		hasPreAmp
 		hasDisableDac
 		spDirectHandlers
+		proxyAddress
 	));
 }
 
@@ -66,6 +67,7 @@ sub new {
 		hasPreAmp               => 0,
 		hasDisableDac           => 0,
 		spDirectHandlers        => undef,
+		proxyAddress            => undef,
 	);
 
 	return $client;
@@ -86,6 +88,7 @@ my %CapabilitiesMap = (
 	HasDisableDac           => 'hasDisableDac',
 	SyncgroupID             => undef,
 	Spdirect                => 'spDirectHandlers',
+	Proxy                   => 'proxyAddress',
 
 	# deprecated
 	model                   => '_model',
@@ -238,6 +241,13 @@ sub skipAhead {
 	
 	return $ret;
 }
+
+sub forceReady {
+	my $client = shift;
+	
+	$client->readyToStream(1);
+}
+
 1;
 
 __END__

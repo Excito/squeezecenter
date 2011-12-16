@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2009 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -26,6 +26,8 @@ use constant DEBUGLOG     => ( grep { /--nodebuglog/ } @ARGV ) ? 0 : 1;
 use constant INFOLOG      => ( grep { /--noinfolog/ } @ARGV ) ? 0 : 1;
 use constant STATISTICS   => ( grep { /--nostatistics/ } @ARGV ) ? 0 : 1;
 use constant SB1SLIMP3SYNC=> 0;
+use constant IMAGE        => ( grep { /--noimage/ } @ARGV ) ? 0 : 1;
+use constant VIDEO        => ( grep { /--novideo/ } @ARGV ) ? 0 : 1;
 use constant WEBUI        => 0;
 use constant ISWINDOWS    => ( $^O =~ /^m?s?win/i ) ? 1 : 0;
 use constant ISMAC        => ( $^O =~ /darwin/i ) ? 1 : 0;
@@ -40,7 +42,7 @@ BEGIN {
 	use Slim::bootstrap;
 	use Slim::Utils::OSDetect;
 
-	Slim::bootstrap->loadModules([qw(version Time::HiRes DBI HTML::Parser XML::Parser::Expat YAML::Syck)], []);
+	Slim::bootstrap->loadModules([qw(version Time::HiRes DBI HTML::Parser XML::Parser::Expat YAML::XS)], []);
 	
 	# By default, tell Audio::Scan not to get artwork to save memory
 	# Where needed, this is locally changed to 0.
@@ -71,7 +73,6 @@ use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Music::Import;
 use Slim::Music::Info;
-use Slim::Music::MusicFolderScan;
 use Slim::Music::PlaylistFolderScan;
 use Slim::Player::ProtocolHandlers;
 use Slim::Utils::Misc;
@@ -80,13 +81,14 @@ use Slim::Utils::PluginManager;
 use Slim::Utils::Progress;
 use Slim::Utils::Scanner;
 use Slim::Utils::Strings qw(string);
+use Slim::Media::MediaFolderScan;
 
 if ( INFOLOG || DEBUGLOG ) {
     require Data::Dump;
 	require Slim::Utils::PerlRunTime;
 }
 
-our $VERSION     = '7.6.1';
+our $VERSION     = '7.7.1';
 our $REVISION    = undef;
 our $BUILDDATE   = undef;
 
@@ -101,7 +103,7 @@ die $@ if $@;
 sub main {
 
 	our ($rescan, $playlists, $wipe, $force, $cleanup, $prefsFile, $priority);
-	our ($quiet, $dbtype, $logfile, $logdir, $logconf, $debug, $help, $nodebuglog, $noinfolog, $nostatistics);
+	our ($quiet, $dbtype, $logfile, $logdir, $logconf, $debug, $help, $nodebuglog, $noinfolog, $nostatistics, $noimages, $novideo);
 
 	our $LogTimestamp = 1;
 	
@@ -120,6 +122,8 @@ sub main {
 		'prefsfile=s'  => \$prefsFile,
 		'pidfile=s'    => \$pidfile,
 		# prefsdir parsed by Slim::Utils::Prefs
+		'noimage'      => \$noimages,
+		'novideo'      => \$novideo,
 		'nodebuglog'   => \$nodebuglog,
 		'noinfolog'    => \$noinfolog,
 		'nostatistics' => \$nostatistics,
@@ -193,7 +197,7 @@ sub main {
 	
 	($REVISION, $BUILDDATE) = Slim::Utils::Misc::parseRevision();
 
-	$log->error("Starting Squeezebox Server scanner (v$VERSION, r$REVISION, $BUILDDATE) perl $]");
+	$log->error("Starting Logitech Media Server scanner (v$VERSION, r$REVISION, $BUILDDATE) perl $]");
 
 	# Bring up strings, database, etc.
 	initializeFrameworks($log);
@@ -214,7 +218,7 @@ sub main {
 	}
 	
 	if ( $sqlHelperClass ) {
-		main::INFOLOG && $log->info("Squeezebox Server SQL init...");
+		main::INFOLOG && $log->info("Server SQL init...");
 		$sqlHelperClass->init();
 	}
 
@@ -251,8 +255,8 @@ sub main {
 
 	} else {
 
+		Slim::Media::MediaFolderScan->init;
 		Slim::Music::PlaylistFolderScan->init;
-		Slim::Music::MusicFolderScan->init;
 	}
 	
 	# Load any plugins that define import modules
@@ -262,7 +266,7 @@ sub main {
 
 	checkDataSource();
 
-	main::INFOLOG && $log->info("Squeezebox Server Scanner done init...\n");
+	main::INFOLOG && $log->info("Scanner done init...\n");
 	
 	# Perform pre-scan steps specific to the database type, i.e. SQLite needs to copy to a new file
 	$sqlHelperClass->beforeScan();
@@ -371,23 +375,23 @@ sub main {
 sub initializeFrameworks {
 	my $log = shift;
 
-	main::INFOLOG && $log->info("Squeezebox Server OSDetect init...");
+	main::INFOLOG && $log->info("Server OSDetect init...");
 
 	Slim::Utils::OSDetect::init();
 	Slim::Utils::OSDetect::getOS->initSearchPath();
 
-	# initialize Squeezebox Server subsystems
-	main::INFOLOG && $log->info("Squeezebox Server settings init...");
+	# initialize Server subsystems
+	main::INFOLOG && $log->info("Server settings init...");
 
 	Slim::Utils::Prefs::init();
 
 	Slim::Utils::Prefs::makeCacheDir();	
 
-	main::INFOLOG && $log->info("Squeezebox Server strings init...");
+	main::INFOLOG && $log->info("Server strings init...");
 
 	Slim::Utils::Strings::init(catdir($Bin,'strings.txt'), "EN");
 
-	main::INFOLOG && $log->info("Squeezebox Server Info init...");
+	main::INFOLOG && $log->info("Server Info init...");
 
 	Slim::Music::Info::init();
 
@@ -420,6 +424,8 @@ Command line options:
 	--logfile      Send all debugging messages to the specified logfile.
 	--logdir       Specify folder location for log file
 	--logconfig    Specify pre-defined logging configuration file
+	--noimage      Disable scanning for images.
+	--novideo      Disable scanning for videos.
 	--nodebuglog   Disable all debug-level logging (compiled out).
 	--noinfolog    Disable all debug-level & info-level logging (compiled out).
 	--nostatistics Disable the TracksPersistent table used to keep to statistics across rescans (compiled out).
@@ -464,12 +470,17 @@ sub cleanup {
 }
 
 sub checkDataSource {
-	my $audiodir = Slim::Utils::Misc::getAudioDir();
+	my $mediadirs = Slim::Utils::Misc::getMediaDirs();
+	my $modified = 0;
 
-	if (defined $audiodir && $audiodir =~ m|[/\\]$|) {
-		$audiodir =~ s|[/\\]$||;
-		$prefs->set('audiodir',$audiodir);
+	foreach my $audiodir (@$mediadirs) {
+		if (defined $audiodir && $audiodir =~ m|[/\\]$|) {
+			$audiodir =~ s|[/\\]$||;
+			$modified++;
+		}
 	}
+
+	$prefs->set('mediadirs', $mediadirs) if $modified;
 
 	return if !Slim::Schema::hasLibrary();
 	

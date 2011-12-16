@@ -1,8 +1,8 @@
 package Slim::Utils::Strings;
 
-# $Id: Strings.pm 33035 2011-08-10 19:19:27Z mherger $
+# $Id: Strings.pm 33047 2011-08-11 11:16:13Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.

@@ -1,6 +1,6 @@
 package Slim::Plugin::Sounds::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 22939 2008-08-28 16:42:33Z andy $
+# $Id: ProtocolHandler.pm 33680 2011-11-10 09:55:01Z ayoung $
 
 # Handler for forcing loop mode
 
@@ -21,6 +21,8 @@ sub shouldLoop { 1 }
 
 # Some sounds are small, use a small buffer threshold
 sub bufferThreshold { 10 }
+
+sub usePlayerProxyStreaming { 0 } # 1 => do not use player-proxy-streaming
 
 sub canSeek { 0 }
 

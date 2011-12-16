@@ -1,6 +1,6 @@
 package Slim::Buttons::XMLBrowser;
 
-# $Id: XMLBrowser.pm 33000 2011-08-05 16:01:23Z adrian $
+# $Id: XMLBrowser.pm 33553 2011-10-03 13:54:50Z agrundman $
 
 # Copyright 2005-2009 Logitech.
 
@@ -330,7 +330,7 @@ sub gotRSS {
 		!($feed->{'xmlns:slim'} && !$feed->{'description'})) {
 
 		my %desc = (
-			'name'       => '{XML_FEED_DESCRIPTION}',
+			'title'      => '{XML_FEED_DESCRIPTION}',
 			'value'      => 'description',
 			'onRight'    => sub {
 				my $client = shift;
@@ -580,6 +580,13 @@ sub gotOPML {
 							# Get the new menu, pass a callback to support async refreshing
 							$refresh->( $client, sub {
 								my $refreshed = shift;
+								
+								if (ref $refreshed ne 'HASH') {
+									$log->error('Cannot refresh menu; did not get HASH from refresh callback');
+									Slim::Buttons::Common::popMode($client);
+									$client->update;
+									return;
+								}
 								
 								# Get the INPUT.Choice mode and replace a few things
 								my $choice = $client->modeParameterStack->[-1];

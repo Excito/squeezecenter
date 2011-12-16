@@ -1,8 +1,8 @@
 package Slim::Utils::Scanner::Local::AIO;
 
-# $Id: AIO.pm 32969 2011-08-04 08:19:51Z mherger $
+# $Id: AIO.pm 33447 2011-09-14 13:54:57Z agrundman $
 #
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, version 2.
 
@@ -121,7 +121,7 @@ sub find {
 			$childgrp->add( aio_stat( $file, sub {
 				$todo--;
 				
-				$_[0] && die "stat of $file failed: $!";
+				$_[0] && return;
 
 				if ( -d _ ) {
 					if ( Slim::Utils::Misc::folderFilter( $file, 0, $types ) ) {

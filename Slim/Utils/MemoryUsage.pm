@@ -1,9 +1,9 @@
 package Slim::Utils::MemoryUsage;
 
-# $Id: MemoryUsage.pm 28920 2009-10-19 15:33:57Z andy $ 
+# $Id: MemoryUsage.pm 32887 2011-07-26 21:44:25Z agrundman $ 
 #
 # This module is a merging of B::TerseSize and Apache::Status 
-# put together to work with Squeezebox Server by Dan Sully
+# put together to work with Logitech Media Server by Dan Sully
 #
 # These are not the droids you're looking for.
 #

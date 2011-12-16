@@ -1,8 +1,8 @@
 package Slim::Utils::Scanner;
 
-# $Id: Scanner.pm 32352 2011-04-26 15:00:17Z agrundman $
+# $Id: Scanner.pm 33682 2011-11-10 14:34:51Z agrundman $
 #
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, version 2.
 
@@ -148,14 +148,14 @@ sub findFilesMatching {
 			$url  = Slim::Utils::OS::Win32->fileURLFromShortcut($url) || next;
 			$file = Slim::Utils::Misc::pathFromFileURL($url);
 
-			my $audiodir = Slim::Utils::Misc::getAudioDir();
+			my $mediadirs = Slim::Utils::Misc::getMediaDirs();
 
 			# Bug: 2485:
 			# Use Path::Class to determine if the file points to a
 			# directory above us - if so, that's a loop and we need to break it.
-			if ( dir($file)->subsumes($topDir) || ($audiodir && dir($file)->subsumes($audiodir)) ) {
+			if ( dir($file)->subsumes($topDir) || ($mediadirs && grep { dir($file)->subsumes($_) } @$mediadirs) ) {
 
-				logWarning("Found an infinite loop! Breaking out: $file -> $topDir");
+				logWarning("Found an infinite loop! Breaking out.");
 				next;
 			}
 
@@ -321,7 +321,7 @@ sub scanDirectory {
 	$progress->total( scalar @{$files} ) if $progress;
 
 	# If we're starting with a clean db - don't bother with searching for a track
-	my $method   = $::wipe ? 'newTrack' : 'updateOrCreate';
+	my $method   = $::wipe ? '_newTrack' : 'updateOrCreate';
 
 	for my $file (@{$files}) {
 		

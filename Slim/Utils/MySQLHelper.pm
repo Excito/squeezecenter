@@ -1,6 +1,6 @@
 package Slim::Utils::MySQLHelper;
 
-# $Id: MySQLHelper.pm 31490 2010-11-03 18:11:34Z agrundman $
+# $Id: MySQLHelper.pm 32887 2011-07-26 21:44:25Z agrundman $
 
 =head1 NAME
 
@@ -554,7 +554,7 @@ sub dbh {
 
 =head2 createDatabase( $dbh )
 
-Creates the initial Squeezebox Server database in MySQL.
+Creates the initial Logitech Media Server database in MySQL.
 
 'CREATE DATABASE slimserver'
 
@@ -642,7 +642,7 @@ sub pragma { }
 
 =head2 cleanup()
 
-Shut down MySQL when Squeezebox Server is shut down.
+Shut down MySQL when the server is shut down.
 
 =cut
 

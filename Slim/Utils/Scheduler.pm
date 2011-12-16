@@ -1,8 +1,8 @@
 package Slim::Utils::Scheduler;
 
-# $Id: Scheduler.pm 30446 2010-03-31 12:11:29Z agrundman $
+# $Id: Scheduler.pm 33432 2011-09-13 19:58:09Z agrundman $
 #
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -42,6 +42,7 @@ use Slim::Utils::Misc;
 my $curtask = 0;            # the next task to run
 my @background_tasks = ();  # circular list of references to arrays (sub ptrs with args)
 my $lastpass = 0;
+my $paused = 0;
 
 my $log = logger('server.scheduler');
 
@@ -131,6 +132,11 @@ sub remove_task {
 sub run_tasks {
 	my $task_count = scalar @background_tasks || return 0;
 	
+	# Do not run if paused, return 0 to avoid spinning the main loop
+	if ($paused) {
+		return 0;
+	}
+	
 	my $isDebug = main::DEBUGLOG && $log->is_debug;
 	
 	my $now = AnyEvent->now;
@@ -183,8 +189,8 @@ sub run_tasks {
 	
 		# Break out if we've reached the block limit or have no more tasks
 		# Note $now will remain the same across multiple calls
-		if ( !$task_count || ( AnyEvent->time - $now >= BLOCK_LIMIT ) ) {
-		    main::DEBUGLOG && $isDebug && $log->debug("Scheduler block limit reached (" . (AnyEvent->time - $now) . ")");
+		if ( !$task_count || $paused || ( AnyEvent->time - $now >= BLOCK_LIMIT ) ) {
+		    main::DEBUGLOG && $isDebug && $log->debug("Scheduler block limit reached (" . (AnyEvent->time - $now) . ") or scheduler was paused");
 			last;
 		}
 		
@@ -192,6 +198,26 @@ sub run_tasks {
 	}
 
 	return $task_count;
+}
+
+=head2 pause()
+
+Pause any additional tasks from being called.
+
+=cut
+
+sub pause {
+	$paused = 1;
+}
+
+=head2 unpause()
+
+Continue running the active task(s).
+
+=cut
+
+sub unpause {
+	$paused = 0;
 }
 
 1;

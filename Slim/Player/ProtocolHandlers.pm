@@ -1,8 +1,8 @@
 package Slim::Player::ProtocolHandlers;
 
-# $Id: ProtocolHandlers.pm 32811 2011-07-22 10:45:35Z mherger $
+# $Id: ProtocolHandlers.pm 33150 2011-08-22 16:47:25Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -40,12 +40,14 @@ my %iconHandlers = ();
 sub isValidHandler {
 	my ($class, $protocol) = @_;
 
-	if ($protocolHandlers{$protocol}) {
-		return 1;
-	}
-
-	if (exists $protocolHandlers{$protocol}) {
-		return 0;
+	if (defined $protocol) {
+		if ($protocolHandlers{$protocol}) {
+			return 1;
+		}
+	
+		if (exists $protocolHandlers{$protocol}) {
+			return 0;
+		}
 	}
 
 	return undef;

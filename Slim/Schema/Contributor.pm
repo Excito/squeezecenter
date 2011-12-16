@@ -1,6 +1,6 @@
 package Slim::Schema::Contributor;
 
-# $Id: Contributor.pm 33077 2011-08-14 23:53:04Z agrundman $
+# $Id: Contributor.pm 33078 2011-08-14 23:53:34Z agrundman $
 
 use strict;
 use base 'Slim::Schema::DBI';

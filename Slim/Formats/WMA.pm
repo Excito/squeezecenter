@@ -1,8 +1,8 @@
 package Slim::Formats::WMA;
 
-# $Id: WMA.pm 32462 2011-05-24 14:39:52Z agrundman $
+# $Id: WMA.pm 33405 2011-09-10 15:35:09Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -53,7 +53,7 @@ sub getTag {
 	
 	return unless $info->{song_length_ms};
 
-	# Map tags onto Squeezebox Server's preferred.
+	# Map tags onto Logitech Media Server's preferred.
 	while ( my ($old, $new) = each %tagMapping ) {
 		if ( exists $tags->{$old} ) {
 			$tags->{$new} = delete $tags->{$old};
@@ -63,15 +63,16 @@ sub getTag {
 	# Add additional info
 	my $stream = $info->{streams}->[0];
 	
-	$tags->{SIZE}	    = $info->{file_size};
-	$tags->{SECS}	    = $info->{song_length_ms} / 1000;
-	$tags->{RATE}	    = $stream->{samplerate};
-	$tags->{SAMPLESIZE} = $stream->{bits_per_sample};
-	$tags->{BITRATE}    = $info->{max_bitrate};
-	$tags->{DRM}        = $stream->{encrypted};
-	$tags->{CHANNELS}   = $stream->{channels};
-	$tags->{LOSSLESS}   = $info->{lossless};
-	$tags->{STEREO}     = $tags->{CHANNELS} == 2 ? 1 : 0;
+	$tags->{SIZE}	      = $info->{file_size};
+	$tags->{SECS}	      = $info->{song_length_ms} / 1000;
+	$tags->{RATE}	      = $stream->{samplerate};
+	$tags->{SAMPLESIZE}   = $stream->{bits_per_sample};
+	$tags->{BITRATE}      = $info->{max_bitrate};
+	$tags->{DRM}          = $stream->{encrypted};
+	$tags->{CHANNELS}     = $stream->{channels};
+	$tags->{LOSSLESS}     = $info->{lossless};
+	$tags->{STEREO}       = $tags->{CHANNELS} == 2 ? 1 : 0;
+	$tags->{DLNA_PROFILE} = $info->{dlna_profile} || undef;
 	
 	if ( $tags->{IsVBR} ) {
 		$tags->{VBR_SCALE} = 1;

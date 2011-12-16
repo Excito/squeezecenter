@@ -1,8 +1,8 @@
 package Slim::Utils::Timers;
 
-# $Id: Timers.pm 32244 2011-04-07 20:50:08Z adrian $
+# $Id: Timers.pm 33349 2011-09-08 06:45:53Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -226,6 +226,19 @@ sub firePendingTimer {
 	}
 	
 	return;
+}
+
+=head2 timeChanged()
+
+Notify this subsystem that the system clock has been changed
+
+=cut
+
+sub timeChanged {
+	EV::now_update;
+	
+	# We could possibly consider going through the list of times adjusting
+	# when they should fire but it is probably not worth it.
 }
 
 sub _makeTimer {

@@ -1,6 +1,6 @@
 package Slim::Utils::SQLiteHelper;
 
-# $Id: SQLiteHelper.pm 33066 2011-08-12 15:51:01Z agrundman $
+# $Id: SQLiteHelper.pm 33446 2011-09-14 13:52:08Z mherger $
 
 =head1 NAME
 
@@ -403,6 +403,19 @@ sub updateProgress {
 	if ( $res->is_success ) {
 		if ( $res->content =~ /abort/ ) {
 			logWarning('Server aborted scan, shutting down');
+			Slim::Utils::Progress->clear;
+			
+			# let the user know we aborted the scan
+			my $progress = Slim::Utils::Progress->new( { 
+				type  => 'importer',
+				name  => 'failure',
+				total => 1,
+				every => 1, 
+			} );
+			$progress->update('SCAN_ABORTED');
+			
+			Slim::Music::Import->setIsScanning(0);
+			
 			exit;
 		}
 		else {
@@ -422,7 +435,7 @@ sub updateProgress {
 
 =head2 cleanup()
 
-Shut down when Squeezebox Server is shut down.
+Shut down when Logitech Media Server is shut down.
 
 =cut
 
@@ -475,15 +488,13 @@ sub _notifyFromScanner {
 	my $log = logger('scan.scanner');
 	
 	main::INFOLOG && $log->is_info && $log->info("Notify from scanner: $msg");
-	
+
 	# If user aborted the scan, return an abort message
 	if ( Slim::Music::Import->hasAborted ) {
 		$request->addResult( abort => 1 );
 		$request->setStatusDone();
-		
-		Slim::Music::Import->setAborted(0);
-		Slim::Music::Import->clearProgressInfo();
-		
+
+		Slim::Music::Import->setAborted(0);		
 		return;
 	}
 	
@@ -491,44 +502,16 @@ sub _notifyFromScanner {
 		# Scanner has started
 		$SCANNING = 1;
 		
-		if ( $prefs->get('autorescan') ) {
+		if ( Slim::Utils::OSDetect::getOS->canAutoRescan && $prefs->get('autorescan') ) {
+			require Slim::Utils::AutoRescan;
 			Slim::Utils::AutoRescan->shutdown;
 		}
-		
-		Slim::Utils::Progress->clear;
 		
 		Slim::Music::Import->setIsScanning('SETUP_WIPEDB');
 		
 		# XXX if scanner doesn't report in with regular progress within a set time period
 		# assume scanner is dead.  This is hard to do, as scanner may block for an indefinite
 		# amount of time with slow network filesystems, or a large amount of files.
-	}
-	elsif ( $msg =~ /^progress:(.+?)\|\|(.+?)\|\|(.+?)\|\|(.*?)\|\|(.*?)\|\|(.+)?/ ) {
-		if ( $SCANNING  && Slim::Schema::hasLibrary() ) {
-			# update progress
-			my ($start, $type, $name, $done, $total, $finish) = ($1, $2, $3, $4, $5, $6);
-		
-			$done  = 1 if !defined $done;
-			$total = 1 if !defined $total;
-			
-			my $progress = Slim::Schema->rs('Progress')->find_or_create( {
-				type => $type,
-				name => $name,
-			} );
-		
-			$progress->set_columns( {
-				start  => $start,
-				total  => $total,
-				done   => $done,
-				active => $finish ? 0 : 1,
-			} );
-		
-			if ( $finish ) {
-				$progress->finish( $finish );
-			}
-		
-			$progress->update;
-		}
 	}
 	elsif ( $msg eq 'end' ) {
 		if ( $SCANNING ) {
@@ -542,8 +525,6 @@ sub _notifyFromScanner {
 		
 		if ( $SCANNING ) {		
 			$SCANNING = 0;
-			
-			Slim::Music::Import->setIsScanning(0);
 		}
 		else {
 			# XXX handle players with track objects that are now outdated?
@@ -554,14 +535,12 @@ sub _notifyFromScanner {
 			
 			# Close ArtworkCache to zero out WAL file, it'll be reopened when needed
 			Slim::Utils::ArtworkCache->new->close;
-		
-			Slim::Music::Import->setIsScanning(0);
-			
-			# Clear caches, like the vaObj, etc after scanning has been finished.
-			Slim::Schema->wipeCaches;
-
-			Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
 		}
+
+		Slim::Music::Import->setIsScanning(0);
+			
+		# Clear caches, like the vaObj, etc after scanning has been finished.
+		Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
 	}
 	
 	$request->setStatusDone();

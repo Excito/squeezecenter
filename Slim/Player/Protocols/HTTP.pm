@@ -1,8 +1,8 @@
 package Slim::Player::Protocols::HTTP;
 
-# $Id: HTTP.pm 32442 2011-05-20 05:05:17Z mherger $
+# $Id: HTTP.pm 33671 2011-11-09 10:47:34Z ayoung $
 
-# Squeezebox Server Copyright 2001-2009 Logitech, Vidur Apparao.
+# Logitech Media Server Copyright 2001-2011 Logitech, Vidur Apparao.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.  
@@ -336,6 +336,11 @@ sub parseDirectHeaders {
 	
 	foreach my $header (@headers) {
 	
+		# Tidy up header to make no stray nulls or \n have been left by caller.
+		$header =~ s/[\0]*$//;
+		$header =~ s/\r/\n/g;
+		$header =~ s/\n\n/\n/g;
+
 		$isDebug && $directlog->debug("header-ds: $header");
 
 		if ($header =~ /^(?:ic[ey]-name|x-audiocast-name):\s*(.+)/i) {
@@ -344,7 +349,8 @@ sub parseDirectHeaders {
 		}
 		
 		elsif ($header =~ /^(?:icy-br|x-audiocast-bitrate):\s*(.+)/i) {
-			$bitrate = $1 * 1000;
+			$bitrate = $1;
+			$bitrate *= 1000 if $bitrate < 1000;
 		}
 	
 		elsif ($header =~ /^icy-metaint:\s*(.+)/i) {

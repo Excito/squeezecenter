@@ -1,11 +1,11 @@
 package Slim::Display::Lib::Fonts;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 #
-# $Id: Fonts.pm 31872 2011-02-02 07:07:07Z ayoung $
+# $Id: Fonts.pm 32887 2011-07-26 21:44:25Z agrundman $
 #
 
 =head1 NAME

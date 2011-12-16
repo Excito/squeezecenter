@@ -1,8 +1,8 @@
 package Slim::Web::Settings::Server::Basic;
 
-# $Id: Basic.pm 30446 2010-03-31 12:11:29Z agrundman $
+# $Id: Basic.pm 33589 2011-10-10 14:18:12Z mherger $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -24,22 +24,15 @@ sub page {
 }
 
 sub prefs {
-	return ($prefs, qw(language audiodir playlistdir libraryname) );
+	return ($prefs, qw(language playlistdir libraryname) );
 }
-
-# FIXME - add importers back as these are in different namespaces... perhaps they should be in the server namespace...
-
-#for my $importer (qw(iTunes MusicMagic)) {
-
-#	if (exists $Slim::Music::Import::Importers{"Slim::Plugin::".$importer."::Plugin"}) {
-#		push @prefs, lc($importer);
-#	}
-#}
 
 sub handler {
 	my ($class, $client, $paramRef) = @_;
-
-	# prefs setting handled by SUPER::handler
+	
+	# tell the server not to trigger a rescan immediately, but let it queue up requests
+	# this is neede to prevent multiple scans to be triggered by change handlers for paths etc.
+	Slim::Music::Import->doQueueScanTasks(1);
 
 	if ($paramRef->{'pref_rescan'}) {
 
@@ -54,7 +47,7 @@ sub handler {
 			$rescanType = [qw(rescan playlists)];
 		}
 
-		for my $pref (qw(audiodir playlistdir)) {
+		for my $pref (qw(playlistdir)) {
 
 			my (undef, $ok) = $prefs->set($pref, $paramRef->{"pref_$pref"});
 
@@ -90,10 +83,77 @@ sub handler {
 				$client->currentPlaylistChangeTime(Time::HiRes::time());
 			}
 		}
+		
+		# handle paths
+		my @paths;
+		my %oldPaths = map { $_ => 1 } @{ $prefs->get('mediadirs') || [] };
+
+		my $ignoreFolders = {
+			audio => [],
+			video => [],
+			image => [],
+		};
+
+		my $singleDirScan;
+		for (my $i = 0; defined $paramRef->{"pref_mediadirs$i"}; $i++) {
+			if (my $path = $paramRef->{"pref_mediadirs$i"}) {
+				delete $oldPaths{$path};
+				push @paths, $path;
+
+				if ($paramRef->{"pref_rescan_mediadir$i"}) {
+					$singleDirScan = Slim::Utils::Misc::fileURLFromPath($path);
+				}
+				
+				push @{ $ignoreFolders->{audio} }, $path if !$paramRef->{"pref_ignoreInAudioScan$i"};
+				push @{ $ignoreFolders->{video} }, $path if !$paramRef->{"pref_ignoreInVideoScan$i"};
+				push @{ $ignoreFolders->{image} }, $path if !$paramRef->{"pref_ignoreInImageScan$i"};
+			}
+		}
+		
+		$prefs->set('ignoreInAudioScan', $ignoreFolders->{audio});
+		$prefs->set('ignoreInVideoScan', $ignoreFolders->{video});
+		$prefs->set('ignoreInImageScan', $ignoreFolders->{image});
+
+		my $oldCount = scalar @{ $prefs->get('mediadirs') || [] };
+		
+		if ( keys %oldPaths || !$oldCount || scalar @paths != $oldCount ) {
+			$prefs->set('mediadirs', \@paths);
+		}
+		# only run single folder scan if the paths haven't changed (which would trigger a rescan anyway)
+		elsif ( $singleDirScan ) {
+			Slim::Control::Request::executeRequest( undef, [ 'rescan', 'full', $singleDirScan ] );
+		}
 	}
 
 	$paramRef->{'newVersion'}  = $::newVersion;
 	$paramRef->{'languageoptions'} = Slim::Utils::Strings::languageOptions();
+	
+	my $ignoreFolders = {
+		audio => { map { $_, 1 } @{ Slim::Utils::Misc::getDirsPref('ignoreInAudioScan') } },
+		video => { map { $_, 1 } @{ Slim::Utils::Misc::getDirsPref('ignoreInVideoScan') } },
+		image => { map { $_, 1 } @{ Slim::Utils::Misc::getDirsPref('ignoreInImageScan') } },
+	};
+	
+	$paramRef->{mediadirs} = [];
+	foreach ( @{ Slim::Utils::Misc::getMediaDirs() } ) {
+		push @{ $paramRef->{mediadirs} }, {
+			path  => $_,
+			audio => $ignoreFolders->{audio}->{$_},
+			video => $ignoreFolders->{video}->{$_},
+			image => $ignoreFolders->{image}->{$_},
+		}
+	}
+
+	# add an empty input field for an additional mediadir input field
+	push @{$paramRef->{mediadirs}}, {
+		path  => '',
+	};
+
+	$paramRef->{'noimage'} = 1 if !main::IMAGE;
+	$paramRef->{'novideo'} = 1 if !main::VIDEO;
+
+	Slim::Music::Import->doQueueScanTasks(0);
+	Slim::Music::Import->nextScanTask();
 
 	return $class->SUPER::handler($client, $paramRef);
 }

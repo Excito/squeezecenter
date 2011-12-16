@@ -1,6 +1,6 @@
 package Slim::Utils::Prefs::Base;
 
-# $Id: Base.pm 32247 2011-04-08 06:11:04Z ayoung $
+# $Id: Base.pm 33559 2011-10-05 09:50:52Z mherger $
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -252,7 +252,12 @@ sub set {
 		}
 
 		if (main::ISWINDOWS && $root->{'filepathPrefs'}->{ $pref }) {
-			$new = Win32::GetANSIPathName($new);
+			if ( ref $new eq 'ARRAY' ) {
+				$new = [ map { Win32::GetANSIPathName($_) } @{ $new } ]
+			}
+			else {
+				$new = Win32::GetANSIPathName($new);
+			}
 		}
 
 		$class->{'prefs'}->{ $pref } = $new;
@@ -296,7 +301,7 @@ sub set {
 						$log->debug('executing on change function ' . Slim::Utils::PerlRunTime::realNameForCodeRef($func) );
 					}
 				
-					$func->($pref, $new, $obj);
+					$func->($pref, $new, $obj, $old);
 				}
 			}
 		}

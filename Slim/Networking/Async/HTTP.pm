@@ -1,8 +1,8 @@
 package Slim::Networking::Async::HTTP;
 
-# $Id: HTTP.pm 31354 2010-09-17 13:08:57Z agrundman $
+# $Id: HTTP.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2003-2009 Logitech.
+# Logitech Media Server Copyright 2003-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.

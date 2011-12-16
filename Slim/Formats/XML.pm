@@ -1,6 +1,6 @@
 package Slim::Formats::XML;
 
-# $Id: XML.pm 32799 2011-07-21 12:44:26Z mherger $
+# $Id: XML.pm 32974 2011-08-04 10:14:36Z mherger $
 
 # Copyright 2006-2009 Logitech
 
@@ -575,6 +575,11 @@ sub parseOPML {
 	# Optional item to indicate if the list is sorted
 	if ( $xml->{sorted} ) {
 		$opml->{sorted} = $xml->{sorted};
+	}
+	
+	# respect cache time as returned by the data source
+	if ( defined $head->{cachetime} ) {
+		$opml->{cachetime} = $head->{cachetime} + 0;
 	}
 	
 	# Optional windowId to support nextWindow

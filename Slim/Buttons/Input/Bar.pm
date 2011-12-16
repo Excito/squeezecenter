@@ -1,8 +1,8 @@
 package Slim::Buttons::Input::Bar;
 
-# $Id: Bar.pm 27975 2009-08-01 03:28:30Z andy $
+# $Id: Bar.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -19,7 +19,7 @@ Slim::Buttons::Common::pushMode($client, 'INPUT.Bar', $params);
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Home> is a Squeezebox Server module for creating and
+L<Slim::Buttons::Home> is a Logitech Media Server module for creating and
 navigating a configurable multilevel menu structure.
 
 Avilable Parameters and their defaults:

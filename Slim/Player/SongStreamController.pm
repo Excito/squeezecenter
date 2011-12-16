@@ -1,8 +1,8 @@
 package Slim::Player::SongStreamController;
 
-# $Id: SongStreamController.pm 30446 2010-03-31 12:11:29Z agrundman $
+# $Id: SongStreamController.pm 33680 2011-11-10 09:55:01Z ayoung $
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -77,5 +77,10 @@ sub track {
 	return shift->{'song'}->currentTrack();
 }
 
+sub playerProxyStreaming {
+	my $self = shift;
+	$self->{'playerProxyStreaming'} = shift if @_;
+	return $self->{'playerProxyStreaming'};
+}
 
 1;

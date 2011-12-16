@@ -394,7 +394,7 @@ sub _cliQuery_done {
 			# Add search query to crumb list
 			if ( $subFeed->{type} && $subFeed->{type} eq 'search' && defined $search ) {
 				# Escape periods in the search string
-				@crumbIndex[-1] .= '_' . uri_escape_utf8( $search, "^A-Za-z0-9" );
+				$crumbIndex[-1] .= '_' . uri_escape_utf8( $search, "^A-Za-z0-9" );
 			}
 			
 			# Change URL if there is a play attribute and it's the last item
@@ -1326,9 +1326,13 @@ sub _cliQuery_done {
 						$hash{name}  = $name          if defined $name;
 						$hash{type}  = $item->{type}  if defined $item->{type};
 						$hash{title} = $item->{title} if defined $item->{title};
-						$hash{url}   = $item->{url}   if $want_url && defined $item->{url};
 						$hash{image} = $item->{image} if defined $item->{image};
-	
+
+						# add url entries if requested unless they are coderefs as this breaks serialisation
+						if ($want_url && defined $item->{url} && (!ref $item->{url} || ref $item->{url} ne 'CODE')) {
+							$hash{url} = $item->{url};
+						}	
+
 						$hash{isaudio} = defined(hasAudio($item)) + 0;
 						
 						# Bug 7684, set hasitems to 1 if any of the following are true:

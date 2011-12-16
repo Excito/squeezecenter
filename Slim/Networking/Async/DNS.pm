@@ -1,8 +1,8 @@
 package Slim::Networking::Async::DNS;
 
-# $Id: DNS.pm 32227 2011-04-05 01:53:04Z agrundman $
+# $Id: DNS.pm 32887 2011-07-26 21:44:25Z agrundman $
 
-# Squeezebox Server Copyright 2003-2009 Logitech.
+# Logitech Media Server Copyright 2003-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.

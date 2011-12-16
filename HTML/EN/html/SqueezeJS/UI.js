@@ -837,11 +837,17 @@ SqueezeJS.UI.Highlight.prototype = {
 
 	onSelectorClicked : function(ev, target){
 		target = Ext.get(target);
+		
 		if (target.hasClass('browseItemDetail') || target.hasClass('playlistSongDetail'))
 			target = Ext.get(target.findParentNode('div'));
-
-		var el = target.child('a.browseItemLink');
-		if (el && el.dom.href) {
+		
+		else if (target.dom.localName = 'img' && !target.findParentNode('span.browsedbControls', 3) && !target.findParentNode('div.playlistControls', 3) 
+				&& (target.findParentNode('div.thumbArtwork', 5) || target.findParentNode('div.itemWithCover', 5)))
+			target = Ext.get(target.findParentNode('div'));
+			
+		var el;
+		
+		if ( (el = target.child('a.browseItemLink')) && el.dom.href ) {
 			if (el.dom.target) {
 				try {
 					if (parent.frames[el.dom.target]) {
@@ -851,11 +857,6 @@ SqueezeJS.UI.Highlight.prototype = {
 					else if (frames[el.dom.target]) {
 						parent.frames[el.dom.target].location.href = el.dom.href;
 					}
-
-					// can't always open a new window as eg. settings will cause a CSRF warning
-					// just enforce clicking the exact link instead of the highlighter in these cases
-//					else
-//						window.open(el.dom.href, el.dom.target);
 				}
 				catch(e) {
 					location.href = el.dom.href;
@@ -864,6 +865,23 @@ SqueezeJS.UI.Highlight.prototype = {
 			else {
 				location.href = el.dom.href;
 			}
+		}
+		
+		else if ( target.hasClass('slideImage') || (el = target.child('a.slideImage')) ) {
+			if (target.hasClass('slideImage'))
+				el = Ext.get(target);
+
+			// we need different selectors depending on the artwork browse mode chosen
+			var selector = 'div.browseItemDetail a.slideImage';                  // small artwork
+			if (SqueezeJS.getCookie( 'Squeezebox-albumView') == 1)
+				selector = 'div.artworkText a.slideImage';                       // large artwork
+			else if (SqueezeJS.getCookie( 'Squeezebox-albumView') == 2)
+				selector = 'a.slideImage';                                       // text only
+
+			if (Ext.ux.Lightbox)
+				Ext.ux.Lightbox.open(el.dom, selector, true, window);
+			else if (parent.Ext.ux.Lightbox)
+				parent.Ext.ux.Lightbox.open(el.dom, selector, true, window);
 		}
 	}
 }
@@ -1915,7 +1933,7 @@ SqueezeJS.UI.Playlist = Ext.extend(SqueezeJS.UI.Component, {
 });
 
 
-if (Ext.slider) {
+if (Ext.slider && Ext.slider.SingleSlider) {
 	
 	SqueezeJS.UI.SliderInput = Ext.extend(Ext.slider.SingleSlider, {
 		tpl: new Ext.Template('<span></span>'),
@@ -2083,7 +2101,6 @@ SqueezeJS.UI.ScannerInfo = Ext.extend(Ext.Component, {
 	},
 
 	hideNow : function(){
-		console.log('hide');
 		this.progressEl.fadeOut();
 	}
 });
@@ -2173,14 +2190,14 @@ SqueezeJS.UI.ScannerInfoExtended = function(){
 			}
 
 			if (result.message && result['total_time']) {
-				Ext.get('message').update(result.message + '<br>' + SqueezeJS.string('total_time') + '&nbsp;' + result.total_time);
+				Ext.get('message').update(decodeURIComponent(result.message) + '<br>' + SqueezeJS.string('total_time') + '&nbsp;' + result.total_time);
 				
 				if (Ext.get('abortscanlink'))
 					Ext.get('abortscanlink').hide();
 			}
 
 			else
-				Ext.get('message').update(result.message);
+				Ext.get('message').update(decodeURIComponent(result.message));
 
 			progressTimer.delay(5000)
 		}

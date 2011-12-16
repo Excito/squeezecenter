@@ -2,7 +2,7 @@ package Slim::Control::Commands;
 
 # $Id: Commands.pm 5121 2005-11-09 17:07:36Z dsully $
 #
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -20,7 +20,7 @@ Slim::Control::Commands
 
 =head1 DESCRIPTION
 
-Implements most Squeezebox Server commands and is designed to be exclusively called
+Implements most Logitech Media Server commands and is designed to be exclusively called
 through Request.pm and the mechanisms it defines.
 
 =cut
@@ -42,6 +42,10 @@ use Slim::Utils::OSDetect;
 
 if ( !main::SLIM_SERVICE ) {
 	require Slim::Utils::Scanner::Local;
+	
+	if (main::IMAGE || main::VIDEO) {
+		require Slim::Utils::Scanner::LMS;
+	}
 }
 
 my $log = logger('control.command');
@@ -276,7 +280,7 @@ sub clientConnectCommand {
 			$host = 2;
 		}
 		elsif ( $host eq '0' ) {
-			# Squeezebox Server (used on SN)
+			# Logitech Media Server (used on SN)
 		}
 		else {
 			$host = Slim::Utils::Network::intip($host);
@@ -2458,32 +2462,131 @@ sub rescanCommand {
 		return;
 	}
 
-	# get our parameters
-	my $playlistsOnly = $request->getParam('_playlists') || 0;
-	
-	# if we're scanning allready, don't do it twice
-	if (!Slim::Music::Import->stillScanning()) {
-		
-		if ( $prefs->get('autorescan') ) {
-			Slim::Utils::AutoRescan->shutdown;
-		}
-		
-		my $dir = Slim::Utils::Misc::getAudioDir();
+	# if scan is running or we're told to queue up requests, return quickly
+	if ( Slim::Music::Import->stillScanning() || Slim::Music::Import->doQueueScanTasks ) {
+		Slim::Music::Import->queueScanTask($request);
+		$request->setStatusDone();
+		return;
+	}
 
+	# get our parameters
+	my $originalMode;
+	my $mode = $originalMode = $request->getParam('_mode') || 'full';
+	my $singledir = $request->getParam('_singledir');
+	
+	if ($singledir) {
+		$singledir = Slim::Utils::Misc::pathFromFileURL($singledir);
+	}
+	
+	# Bug 17358, if any plugin importers are enabled such as iTunes/MusicIP, run an old-style external rescan
+	# XXX Rewrite iTunes and MusicIP to support async rescan
+	my $importers = Slim::Music::Import->importers();
+	while ( my ($class, $config) = each %{$importers} ) {
+		if ( $class =~ /Plugin/ && $config->{use} ) {
+			$mode = 'external';
+		}
+	}
+	
+	if ( $mode eq 'external' ) {
+		# The old way of rescanning using scanner.pl
 		my %args = (
-			types    => 'list|audio',
-			scanName => 'directory',
-			progress => 1,
+			cleanup => 1,
 		);
 
-		if ($playlistsOnly) {
-			$dir = Slim::Utils::Misc::getPlaylistDir();
-			$args{types} = 'list';
+		if ($originalMode eq 'playlists') {
+			$args{playlists} = 1;
 		}
-
-		Slim::Utils::Progress->clear();
+		else {
+			$args{rescan} = 1;
+		}		
 		
-		Slim::Utils::Scanner::Local->rescan( $dir, \%args );
+		$args{singledir} = $singledir if $singledir;
+
+		Slim::Music::Import->launchScan(\%args);
+	}
+	else {
+		# In-process scan   
+	
+		my @dirs = @{ Slim::Utils::Misc::getMediaDirs() };
+		# if we're scanning already, don't do it twice
+		if (scalar @dirs) {
+		
+			if ( Slim::Utils::OSDetect::getOS->canAutoRescan && $prefs->get('autorescan') ) {
+				require Slim::Utils::AutoRescan;
+				Slim::Utils::AutoRescan->shutdown;
+			}
+		
+			Slim::Utils::Progress->clear();
+		
+			# we only want to scan folders for video/pictures
+			my %seen = (); # to avoid duplicates
+			@dirs = grep { !$seen{$_}++ } @{ Slim::Utils::Misc::getVideoDirs() }, @{ Slim::Utils::Misc::getImageDirs() };
+			
+			if ($singledir) {
+				@dirs = grep { /$singledir/ } @dirs;
+			}
+
+			if ((main::IMAGE || main::VIDEO) && $mode ne 'playlists') {
+				# XXX - we need a better way to handle the async mode, eg. passing the exception list together with the folder list to Media::Scan
+				my $lms;
+				$lms = sub {
+					if (scalar @dirs) {
+						Slim::Utils::Scanner::LMS->rescan( shift @dirs, {
+							scanName   => 'directory',
+							progress   => 1,
+							onFinished => sub {
+								# XXX - delay call to self for a second, or we segfault
+								Slim::Utils::Timers::setTimer(undef, time() + 1, $lms);
+							},
+						} );
+					}
+				};
+				
+				# Audio scan is run first, when done, the LMS scanner is run
+				my $audio;
+				$audio = sub {
+					my $audiodirs = Slim::Utils::Misc::getAudioDirs();
+					
+					if ($singledir) {
+						$audiodirs = [ grep { /$singledir/ } @{$audiodirs} ];
+					}
+					
+					# XXX until libmediascan supports audio, run the audio scanner now
+					Slim::Utils::Scanner::Local->rescan( $audiodirs, {
+						types      => 'list|audio',
+						scanName   => 'directory',
+						progress   => 1,
+						onFinished => $lms,
+					} );
+				};
+			
+				$audio->();
+			}
+			elsif ($mode eq 'playlists') {
+				my $playlistdir = Slim::Utils::Misc::getPlaylistDir();
+				
+				# XXX until libmediascan supports audio, run the audio scanner now
+				Slim::Utils::Scanner::Local->rescan( $playlistdir, {
+					types    => 'list',
+					scanName => 'playlist',
+					progress => 1,
+				} );
+			}
+			else {
+				my $audiodirs = Slim::Utils::Misc::getAudioDirs();
+				
+				if ($singledir) {
+					$audiodirs = [ grep { /$singledir/ } @{$audiodirs} ];
+				}
+				
+				# XXX until libmediascan supports audio, run the audio scanner now
+				Slim::Utils::Scanner::Local->rescan( $audiodirs, {
+					types    => 'list|audio',
+					scanName => 'directory',
+					progress => 1,
+				} );
+			}
+		}
 	}
 
 	$request->setStatusDone();
@@ -2827,10 +2930,12 @@ sub wipecacheCommand {
 		return;
 	}
 
-	# no parameters
+	if ( Slim::Music::Import->stillScanning() || Slim::Music::Import->doQueueScanTasks ) {
+		Slim::Music::Import->queueScanTask($request);
+	}
 	
-	# if we're scanning allready, don't do it twice
-	if (!Slim::Music::Import->stillScanning()) {
+	# if we're scanning already, don't do it twice
+	else {
 
 		# Clear all the active clients's playlists
 		for my $client (Slim::Player::Client::clients()) {
@@ -2838,7 +2943,7 @@ sub wipecacheCommand {
 			$client->execute([qw(playlist clear)]);
 		}
 		
-		if ( $prefs->get('autorescan') ) {
+		if ( Slim::Utils::OSDetect::getOS->canAutoRescan && $prefs->get('autorescan') ) {
 			require Slim::Utils::AutoRescan;
 			Slim::Utils::AutoRescan->shutdown;
 		}
@@ -2847,7 +2952,9 @@ sub wipecacheCommand {
 		
 		if ( Slim::Utils::OSDetect::isSqueezeOS() ) {
 			# Wipe/rescan in-process on SqueezeOS
-			my $dir = Slim::Utils::Misc::getAudioDir();
+
+			# XXX - for the time being we're going to assume that the embedded server will only handle one folder
+			my $dir = Slim::Utils::Misc::getAudioDirs()->[0];
 			
 			my %args = (
 				types    => 'list|audio',

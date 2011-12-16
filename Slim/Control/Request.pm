@@ -1,11 +1,11 @@
 package Slim::Control::Request;
 
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# This class implements a generic request mechanism for Squeezebox Server.
+# This class implements a generic request mechanism for Logitech Media Server.
 # More documentation is provided below the table of commands & queries
 
 =head1 NAME
@@ -14,7 +14,7 @@ Slim::Control::Request
 
 =head1 DESCRIPTION
 
-This class implements a generic request mechanism for Squeezebox Server.
+This class implements a generic request mechanism for Logitech Media Server.
 
 The general mechansim is to create a Request object and execute it. There is
 an option of specifying a callback function, to be called once the request is
@@ -62,6 +62,9 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
  N    titles          <startindex>                <numitems>                  <tagged parameters>
  N    years           <startindex>                <numitems>                  <tagged parameters>
  N    musicfolder     <startindex>                <numitems>                  <tagged parameters>
+
+ N    videos          <startindex>                <numitems>                  <tagged parameters>
+ N    video_titles    <startindex>                <numitems>                  <tagged parameters>
  
  N    playlists       <startindex>                <numitems>                  <tagged parameters>
  N    playlists       tracks                      <startindex>                <numitems>       <tagged parameters>
@@ -347,7 +350,7 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
 =head2 Adding a command
 
  To add a command to the dispatch table, use the addDispatch method. If the
- method is part of Squeezebox Server itself, please add it to the init method below
+ method is part of the server itself, please add it to the init method below
  and update the comment table at the top of the document. 
  In a plugin, call the method from your initPlugin subroutine.
 
@@ -486,7 +489,6 @@ sub init {
 	addDispatch(['connect',        '_where'],                                                          [1, 0, 0, \&Slim::Control::Commands::clientConnectCommand]);
 	addDispatch(['connected',      '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::connectedQuery]);
 	addDispatch(['contextmenu',    '_index',         '_quantity'],                                     [1, 1, 1, \&Slim::Control::Queries::contextMenuQuery]);
-	addDispatch(['mixermenu',      '_index',         '_quantity'],                                     [1, 1, 1, \&Slim::Control::Queries::mixerMenuQuery]);
 	addDispatch(['current_title',  '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::cursonginfoQuery]);
 	addDispatch(['debug',          '_debugflag',     '?'],                                             [0, 1, 0, \&Slim::Control::Queries::debugQuery]);
 	addDispatch(['debug',          '_debugflag',     '_newvalue'],                                     [0, 0, 0, \&Slim::Control::Commands::debugCommand]);
@@ -522,7 +524,9 @@ sub init {
 	addDispatch(['mixer',          'volume',         '?'],                                             [1, 1, 0, \&Slim::Control::Queries::mixerQuery]);
 	addDispatch(['mixer',          'volume',         '_newvalue'],                                     [1, 0, 1, \&Slim::Control::Commands::mixerCommand]);
 	addDispatch(['mode',           '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::modeQuery]);
+	# musicfolder is only here for backwards compatibility - it's calling mediafolder internally
 	addDispatch(['musicfolder',    '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::musicfolderQuery]);
+	addDispatch(['mediafolder',    '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::mediafolderQuery]);
 	addDispatch(['name',           '_newvalue'],                                                       [1, 0, 0, \&Slim::Control::Commands::nameCommand]);
 	addDispatch(['name',           '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::nameQuery]);
 	addDispatch(['path',           '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::cursonginfoQuery]);
@@ -601,7 +605,7 @@ sub init {
 	addDispatch(['pref',           '_prefname',      '_newvalue'],                                     [0, 0, 1, \&Slim::Control::Commands::prefCommand]);
 	addDispatch(['remote',         '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::cursonginfoQuery]);
 	addDispatch(['rescan',         '?'],                                                               [0, 1, 0, \&Slim::Control::Queries::rescanQuery]);
-	addDispatch(['rescan',         '_playlists'],                                                      [0, 0, 0, \&Slim::Control::Commands::rescanCommand]);
+	addDispatch(['rescan',         '_mode',          '_singledir'],                                    [0, 0, 0, \&Slim::Control::Commands::rescanCommand]);
 	addDispatch(['rescanprogress'],                                                                    [0, 1, 1, \&Slim::Control::Queries::rescanprogressQuery]);
 	addDispatch(['restartserver'],                                                                     [0, 0, 0, \&Slim::Control::Commands::stopServer]);
 	addDispatch(['search',         '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::searchQuery]);
@@ -630,6 +634,8 @@ sub init {
 	addDispatch(['artwork',        '_artworkid'],                                                      [0, 0, 0, \&Slim::Control::Queries::showArtwork]);
 	addDispatch(['rating',         '_item',          '?'],                                             [0, 1, 0, \&Slim::Control::Commands::ratingCommand]);
 	addDispatch(['rating',         '_item',          '_rating'],                                       [0, 0, 0, \&Slim::Control::Commands::ratingCommand]);
+	addDispatch(['video_titles',   '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::videoTitlesQuery]);
+	addDispatch(['image_titles',   '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::imageTitlesQuery]);
 
 # NOTIFICATIONS
 	addDispatch(['client',         'disconnect'],                                                      [1, 0, 0, undef]);
@@ -672,7 +678,7 @@ sub init {
 
 	return if !main::WEBUI;
 
-	# Normal Squeezebox Server commands can be accessed with URLs like
+	# Normal Logitech Media Server commands can be accessed with URLs like
 	#   http://localhost:9000/status.html?p0=pause&player=00%3A00%3A00%3A00%3A00%3A00
 	# Use the protectCommand() API to prevent CSRF attacks on commands -- including commands
 	# not intended for use via the web interface!
@@ -1043,7 +1049,7 @@ sub new {
 		# extract any remaining params
 		for (;$i < scalar @$requestLineRef; $i++) {
 			
-			if ($found->[3] && $requestLineRef->[$i] =~ /([^:]+):(.*)/) {
+			if ($found->[3] && $requestLineRef->[$i] && $requestLineRef->[$i] =~ /([^:]+):(.*)/) {
 				
 				# tagged params
 				$params{$1} = $2;
@@ -1337,7 +1343,7 @@ my %statusMap = (
 	102 => 'Bad params!',
 	103 => 'Missing client!',
 	104 => 'Unknown in dispatch table',
-	105 => 'Bad Squeezebox Server config',
+	105 => 'Bad Logitech Media Server config',
 );
 
 # validate the Request, make sure we are dispatchable

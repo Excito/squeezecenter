@@ -55,7 +55,7 @@ sub progress {
 				'bar'  => $bar,
 				'time' => sprintf("%02d:%02d:%02d", $hrs, $mins, $sec),
 			};
-	
+			
 			foreach ($p->columns) {
 				$item->{obj}->{$_} = $p->$_();
 			}

@@ -1,6 +1,6 @@
 package Slim::Plugin::LastFM::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 31101 2010-07-23 08:26:26Z mherger $
+# $Id: ProtocolHandler.pm 33680 2011-11-10 09:55:01Z ayoung $
 
 # Handler for lastfm:// URLs
 
@@ -52,6 +52,8 @@ sub isAudioURL () { 1 }
 
 # Don't allow looping if the tracks are short
 sub shouldLoop () { 0 }
+
+sub usePlayerProxyStreaming { 1 } # 1 => player-proxy-streaming necessary for sync
 
 sub canSeek { 0 }
 sub getSeekDataByPosition { undef }
@@ -317,7 +319,7 @@ sub getMetadataFor {
 	my ( $class, $client, $url, $forceCurrent ) = @_;
 	
 	my $song = $forceCurrent ? $client->streamingSong() : $client->playingSong();
-	return unless $song;
+	return {} unless $song;
 	
 	my $icon = $class->getIcon();
 	my $name = $client->string('PLUGIN_LFM_MODULE_NAME');

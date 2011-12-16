@@ -565,7 +565,7 @@ sub _registerBaseNodes {
 			feed         => \&_bmf,
 			icon         => 'html/images/musicfolder.png',
 			homeMenuText => 'BROWSE_MUSIC_FOLDER',
-			condition    => sub {return Slim::Schema::hasLibrary && Slim::Utils::Misc::getAudioDir();},
+			condition    => sub {return Slim::Schema::hasLibrary && scalar @{ Slim::Utils::Misc::getAudioDirs() };},
 			id           => 'myMusicMusicFolder',
 			weight       => 70,
 		},
@@ -1073,6 +1073,10 @@ sub _artists {
 							command     => ['playlistcontrol'],
 							fixedParams => {cmd => 'insert', %$params},
 						},
+						remove => {
+							command     => ['playlistcontrol'],
+							fixedParams => {cmd => 'delete', %$params},
+						},
 					},					
 				} ];
 			}
@@ -1106,6 +1110,7 @@ sub _artists {
 					play   => {command => [BROWSELIBRARY, 'playlist', 'play'],   fixedParams => \%params},
 					add    => {command => [BROWSELIBRARY, 'playlist', 'add'],    fixedParams => \%params},
 					insert => {command => [BROWSELIBRARY, 'playlist', 'insert'], fixedParams => \%params},
+					remove => {command => [BROWSELIBRARY, 'playlist', 'delete'], fixedParams => \%params},
 				);
 
 				$extra = [ {
@@ -1144,6 +1149,10 @@ sub _artists {
 					command     => ['playlistcontrol'],
 					fixedParams => {cmd => 'insert', %$params},
 				},
+				remove => {
+					command     => ['playlistcontrol'],
+					fixedParams => {cmd => 'delete', %$params},
+				},
 			);
 			$actions{'playall'} = $actions{'play'};
 			$actions{'addall'} = $actions{'add'};
@@ -1157,8 +1166,14 @@ sub _artists {
 sub _genres {
 	my ($client, $callback, $args, $pt) = @_;
 	my @searchTags = $pt->{'searchTags'} ? @{$pt->{'searchTags'}} : ();
-	
-	_generic($client, $callback, $args, 'genres', \@searchTags,
+	my $search     = $pt->{'search'};
+
+	if (!$search && !scalar @searchTags && $args->{'search'}) {
+		$search = $args->{'search'};
+	}
+		
+	_generic($client, $callback, $args, 'genres', 
+		[@searchTags, ($search ? 'search:' . $search : undef)],
 		sub {
 			my $results = shift;
 			my $items = $results->{'genres_loop'};
@@ -1408,6 +1423,7 @@ sub _albums {
 					play   => {command => [BROWSELIBRARY, 'playlist', 'play'],   fixedParams => \%params},
 					add    => {command => [BROWSELIBRARY, 'playlist', 'add'],    fixedParams => \%params},
 					insert => {command => [BROWSELIBRARY, 'playlist', 'insert'], fixedParams => \%params},
+					remove => {command => [BROWSELIBRARY, 'playlist', 'delete'], fixedParams => \%params},
 				);
 
 				$extra = [ {
@@ -1554,6 +1570,10 @@ sub _tracks {
 					command     => ['playlistcontrol'],
 					fixedParams => {cmd => 'insert'},
 				},
+				remove => {
+					command     => ['playlistcontrol'],
+					fixedParams => {cmd => 'delete'},
+				},
 			);
 			$actions{'items'} = $actions{'info'};	# XXX, not sure about this, probably harmless but unnecessary
 
@@ -1623,6 +1643,7 @@ sub _tracks {
 			}
 			
 			my $albumMetadata;
+			my $albumInfo;
 			my $image;
 			if ($getMetadata) {
 				my ($albumId) = grep {/album_id:/} @searchTags;
@@ -1632,9 +1653,17 @@ sub _tracks {
 				$albumMetadata = $feed->{'items'} if $feed;
 				
 				$image = 'music/' . $album->artwork . '/cover' if $album && $album->artwork;
+
+				$albumInfo = { 
+					info => { 
+						command =>   ['albuminfo', 'items'], 
+						variables => [ 'album_id', 'id' ],
+					},
+				};
 			}
 
-			return {items => $items, actions => \%actions, sorted => 0, albumData => $albumMetadata, cover => $image}, $extra;
+			return {items => $items, actions => \%actions, sorted => 0, albumData => $albumMetadata, albumInfo => $albumInfo, 
+					cover => $image}, $extra;
 		},
 	);
 }

@@ -1,8 +1,8 @@
 package Slim::Utils::Scanner::Remote;
 
-# $Id: Remote.pm 32799 2011-07-21 12:44:26Z mherger $
+# $Id: Remote.pm 33519 2011-09-26 13:19:43Z agrundman $
 #
-# Squeezebox Server Copyright 2001-2009 Logitech.
+# Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, version 2.
 
@@ -356,8 +356,11 @@ sub readRemoteHeaders {
 	
 	# Bug 3396, some m4a audio is incorrectly served as audio/mpeg.
 	# In this case, prefer the file extension to the content-type
-	if ( $url =~ /(m4a|aac)$/i && $type eq 'mp3' ) {
-		$type = 'mov';
+	if ( $url =~ /aac$/i && ($type eq 'mp3' || $type eq 'txt') ) {
+		$type = 'aac';
+	}
+	elsif ( $url =~ /(?:m4a|mp4)$/i && ($type eq 'mp3' || $type eq 'txt') ) {
+		$type = 'mp4';
 	}
 
 	# bug 15491 - some radio services are too lazy to correctly configure their servers
