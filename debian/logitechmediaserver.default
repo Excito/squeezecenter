@@ -1,6 +1,6 @@
 # Defaults for Logitech Media Server initscript
-# sourced by /etc/init.d/squeezeboxserver
-# installed at /etc/default/squeezeboxserver by the maintainer scripts
+# sourced by /etc/init.d/logitechmediaserver
+# installed at /etc/default/logitechmediaserver by the maintainer scripts
 
 #
 # This is a POSIX shell fragment

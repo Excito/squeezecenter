@@ -4,11 +4,11 @@
 set -e
 . /usr/share/debconf/confmodule
 
-if [ -x "/etc/init.d/squeezeboxserver" ]; then
+if [ -x "/etc/init.d/logitechmediaserver" ]; then
         if [ -x "`which invoke-rc.d 2>/dev/null`" ]; then
-                invoke-rc.d squeezeboxserver stop || exit $?
+                invoke-rc.d logitechmediaserver stop || exit $?
         else
-                /etc/init.d/squeezeboxserver stop || exit $?
+                /etc/init.d/logitechmediaserver stop || exit $?
         fi
 fi
 

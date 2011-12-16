@@ -79,12 +79,12 @@ esac
 
 #DEBHELPER#
 
-if [ -x "/etc/init.d/squeezeboxserver" ] && [ -e /etc/rc2.d/S??squeezeboxserver ]; then
-        update-rc.d squeezeboxserver defaults >/dev/null
+if [ -x "/etc/init.d/logitechmediaserver" ] && [ -e /etc/rc2.d/S??logitechmediaserver ]; then
+        update-rc.d logitechmediaserver defaults >/dev/null
         if [ -x "`which invoke-rc.d 2>/dev/null`" ]; then
-                invoke-rc.d squeezeboxserver start || exit $?
+                invoke-rc.d logitechmediaserver start || exit $?
         else
-                /etc/init.d/squeezeboxserver start || exit $?
+                /etc/init.d/logitechmediaserver start || exit $?
         fi
 fi
 

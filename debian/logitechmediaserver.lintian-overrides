@@ -9,9 +9,15 @@ logitechmediaserver: binary-or-shlib-defines-rpath
 logitechmediaserver: unstripped-binary-or-object
 logitechmediaserver: statically-linked-binary
 logitechmediaserver: embedded-library
+logitechmediaserver: embedded-libjpeg
+logitechmediaserver: embedded-libpng
+logitechmediaserver: embedded-zlib
+logitechmediaserver: embedded-javascript-library
 
 logitechmediaserver: copyright-file-contains-full-gpl-license
 logitechmediaserver: copyright-should-refer-to-common-license-file-for-lgpl
 logitechmediaserver: binary-without-manpage
 
 logitechmediaserver: wrong-path-for-interpreter
+
+logitechmediaserver: bad-distribution-in-changes-file
