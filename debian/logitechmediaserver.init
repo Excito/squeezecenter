@@ -40,7 +40,7 @@ if [ -r /etc/default/$NAME ]; then
 elif [ -r /etc/default/$OLDNAME ]; then
 	. /etc/default/$OLDNAME
 fi
-§
+
 # Load the VERBOSE setting and other rcS variables
 [ -f /etc/default/rcS ] && . /etc/default/rcS
 

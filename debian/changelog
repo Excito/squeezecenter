@@ -1,3 +1,9 @@
+logitechmediaserver (7.7.1.dfsg1-5) vincent hugo; urgency=low
+
+  * syntax error in init file
+
+ -- Carl Fürstenberg <carl@excito.com>  Tue, 20 Dec 2011 17:20:17 +0100
+
 logitechmediaserver (7.7.1.dfsg1-4) vincent hugo; urgency=low
 
   * use exec instead of name in start-stop-daemon
