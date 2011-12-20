@@ -16,15 +16,17 @@
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DESC="Logitech Media Server"
-NAME=squeezeboxserver
-DAEMON=/usr/sbin/$NAME-server
-DAEMON_SAFE=/usr/sbin/${NAME}_safe
+OLDNAME=squeezeboxserver
+NAME=logitechmediaserver
+DAEMON=/usr/sbin/$OLDNAME
+DAEMON_SAFE=/usr/sbin/${OLDNAME}_safe
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
-SLIMUSER=$NAME
-PREFSDIR=/var/lib/$NAME/prefs
-LOGDIR=/var/log/$NAME/
-CACHEDIR=/var/lib/$NAME/cache
+SLIMUSER=$OLDNAME
+PREFSDIR=/var/lib/$OLDNAME/prefs
+LOGDIR=/var/log/$OLDNAME/
+CACHEDIR=/var/lib/$OLDNAME/cache
+CHARSET=utf8
 SLIMOPTIONS=
 RUN=no
 
@@ -32,14 +34,18 @@ RUN=no
 # Exit if the package is not installed
 [ -x "$DAEMON" ] || exit 0
 
-# Read configuration variable file if it is present
-[ -r /etc/default/$NAME ] && . /etc/default/$NAME
-
+# Read config file if it is present.
+if [ -r /etc/default/$NAME ]; then
+	. /etc/default/$NAME
+elif [ -r /etc/default/$OLDNAME ]; then
+	. /etc/default/$OLDNAME
+fi
+§
 # Load the VERBOSE setting and other rcS variables
 [ -f /etc/default/rcS ] && . /etc/default/rcS
 
 
-DAEMON_ARGS="--prefsdir $PREFSDIR --logdir $LOGDIR --cachedir $CACHEDIR $SLIMOPTIONS"
+DAEMON_ARGS="--prefsdir $PREFSDIR --logdir $LOGDIR --cachedir $CACHEDIR --charset=$CHARSET $SLIMOPTIONS"
 
 
 # Define LSB log_* functions.
@@ -109,7 +115,7 @@ do_reload() {
 	# restarting (for example, when it is sent a SIGHUP),
 	# then implement that here.
 	#
-	start-stop-daemon --stop --signal 1 --quiet --pidfile $PIDFILE --name $NAME
+	start-stop-daemon --stop --signal 1 --quiet --pidfile $PIDFILE --name $OLDNAME
 	return 0
 }
 
@@ -131,14 +137,14 @@ case "$1" in
 	esac
 	;;
   status)
-       status_of_proc "$DAEMON" "$NAME" && exit 0 || exit $?
+       status_of_proc "$DAEMON" "$OLDNAME" && exit 0 || exit $?
        ;;	
   #reload|force-reload)
 	#
 	# If do_reload() is not implemented then leave this commented out
 	# and leave 'force-reload' as an alias for 'restart'.
 	#
-	#log_daemon_msg "Reloading $DESC" "$NAME"
+	#log_daemon_msg "Reloading $DESC" "$OLDNAME"
 	#do_reload
 	#log_end_msg $?
 	#;;
@@ -147,7 +153,7 @@ case "$1" in
 	# If the "reload" option is implemented then remove the
 	# 'force-reload' alias
 	#
-	log_daemon_msg "Restarting $DESC" "$NAME"
+	log_daemon_msg "Restarting $DESC" "$OLDNAME"
 	do_stop
 	case "$?" in
 	  0|1)
