@@ -1,3 +1,9 @@
+logitechmediaserver (7.7.1.dfsg1-6) vincent hugo; urgency=low
+
+  * remove the check for exec or name on term in init file
+
+ -- Carl Fürstenberg <carl@excito.com>  Tue, 20 Dec 2011 17:46:38 +0100
+
 logitechmediaserver (7.7.1.dfsg1-5) vincent hugo; urgency=low
 
   * syntax error in init file
