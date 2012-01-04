@@ -1,0 +1,23 @@
+From: =?UTF-8?q?Carl=20F=C3=BCrstenberg?= <carl@excito.com>
+Date: Wed, 4 Jan 2012 16:46:34 +0100
+Subject: Disable upnp due to the fact we are using minidlna
+
+---
+ Slim/Utils/OS/Custom.pm |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/Slim/Utils/OS/Custom.pm b/Slim/Utils/OS/Custom.pm
+index c133ec3..80881b4 100644
+--- a/Slim/Utils/OS/Custom.pm
++++ b/Slim/Utils/OS/Custom.pm
+@@ -27,6 +27,9 @@ sub initPrefs {
+     $prefs->{mediadirs}			= [
+         '/home/storage/music',
+     ];
++
++    # Disable upnp as we are using minidlna for that instead
++    $prefs->{noupnp}            = 1;
+ }
+ 
+ 1;
+-- 

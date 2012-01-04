@@ -4,16 +4,16 @@ Subject: Custom OS detection
 
 Adding custom OS detection for the Excito server platforms
 ---
- Slim/Utils/OS/Custom.pm |   30 ++++++++++++++++++++++++++++++
- 1 files changed, 30 insertions(+), 0 deletions(-)
+ Slim/Utils/OS/Custom.pm |   32 ++++++++++++++++++++++++++++++++
+ 1 files changed, 32 insertions(+), 0 deletions(-)
  create mode 100644 Slim/Utils/OS/Custom.pm
 
 diff --git a/Slim/Utils/OS/Custom.pm b/Slim/Utils/OS/Custom.pm
 new file mode 100644
-index 0000000..0e08d81
+index 0000000..c133ec3
 --- /dev/null
 +++ b/Slim/Utils/OS/Custom.pm
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,32 @@
 +package Slim::Utils::OS::Custom;
 +
 +# Logitech Media Server Copyright 2001-2011 Logitech.
@@ -34,13 +34,15 @@ index 0000000..0e08d81
 +}
 +
 +sub initPrefs {
-+	my ($class, $prefs) = @_;
++    my ($class, $prefs) = @_;
 +
-+	$prefs->{scannerPriority}   = 20;
-+	$prefs->{resampleArtwork}   = 0;
-+	$prefs->{disableStatistics} = 1;
-+	$prefs->{playlistdir}		= '/home/storage/music';
-+	$prefs->{audiodir}			= '/home/storage/music';
++    $prefs->{scannerPriority}   = 20;
++    $prefs->{resampleArtwork}   = 0;
++    $prefs->{disableStatistics} = 1;
++    $prefs->{playlistdir}		= '/home/storage/music';
++    $prefs->{mediadirs}			= [
++        '/home/storage/music',
++    ];
 +}
 +
 +1;
