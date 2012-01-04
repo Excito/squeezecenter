@@ -1,3 +1,9 @@
+logitechmediaserver (7.7.1.dfsg1-7) vincent hugo; urgency=low
+
+  * update patches for search path and upnp
+
+ -- Carl Fürstenberg <carl@excito.com>  Wed, 04 Jan 2012 16:48:43 +0100
+
 logitechmediaserver (7.7.1.dfsg1-6) vincent hugo; urgency=low
 
   * remove the check for exec or name on term in init file
