@@ -15,4 +15,4 @@ LOGDIR=/var/log/$SLIMUSER/
 CACHEDIR=/var/lib/$SLIMUSER/cache
 
 # Additional options that are passed to the daemon.
-SLIMOPTIONS=""
+SLIMOPTIONS="--noupnp"

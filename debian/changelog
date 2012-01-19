@@ -1,3 +1,9 @@
+logitechmediaserver (7.7.1.dfsg1-8) hugo vincent; urgency=low
+
+  * add --noupnp to defaults (Closes: #1848)
+
+ -- Carl Fürstenberg <carl@excito.com>  Thu, 19 Jan 2012 14:57:16 +0100
+
 logitechmediaserver (7.7.1.dfsg1-7) vincent hugo; urgency=low
 
   * update patches for search path and upnp
